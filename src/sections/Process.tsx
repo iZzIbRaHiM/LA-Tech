@@ -73,10 +73,15 @@ export default function Process() {
         if (content) {
           gsap.fromTo(
             content,
-            { opacity: 0, x: fromX },
+            { 
+              opacity: 0, 
+              x: isMobile ? 0 : fromX,
+              y: isMobile ? 40 : 0
+            },
             {
               opacity: 1,
               x: 0,
+              y: 0,
               duration: 1,
               ease: 'power3.out',
               scrollTrigger: {
