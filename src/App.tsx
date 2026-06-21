@@ -7,6 +7,7 @@ import TrustedBy from '@/sections/TrustedBy';
 import Process from '@/sections/Process';
 import Contact from '@/sections/Contact';
 import Footer from '@/sections/Footer';
+import { Analytics } from '@vercel/analytics/react';
 
 // Noise texture overlay component
 function NoiseOverlay() {
@@ -49,6 +50,7 @@ export default function App() {
         <Contact />
       </main>
       <Footer />
+      <Analytics />
     </div>
   );
 }
