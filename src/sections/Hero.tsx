@@ -297,7 +297,7 @@ export default function Hero() {
               opacity: 0,
             }}
           >
-            We build systems that scale
+            We engineer high-performance systems and enterprise software built to scale.
           </p>
 
           <a
