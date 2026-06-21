@@ -11,6 +11,8 @@ export default function Contact() {
   const subtextRef = useRef<HTMLParagraphElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(false);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -70,9 +72,28 @@ export default function Contact() {
     return () => ctx.revert();
   }, [reducedMotion]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    setError(false);
+    try {
+      const response = await fetch('https://formspree.io/f/maqgwkaa', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+        },
+        body: new FormData(e.currentTarget),
+      });
+      if (response.ok) {
+        setSubmitted(true);
+      } else {
+        setError(true);
+      }
+    } catch (err) {
+      setError(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -134,6 +155,7 @@ export default function Contact() {
             <div className="form-field" style={{ opacity: 0 }}>
               <input
                 type="text"
+                name="name"
                 placeholder="YOUR NAME"
                 required
                 className="w-full bg-transparent text-[#000000] font-display font-bold uppercase border-b-2 border-[#000000] outline-none placeholder:text-[#000000] placeholder:opacity-30"
@@ -149,6 +171,7 @@ export default function Contact() {
             <div className="form-field" style={{ opacity: 0 }}>
               <input
                 type="email"
+                name="email"
                 placeholder="YOUR EMAIL"
                 required
                 className="w-full bg-transparent text-[#000000] font-display font-bold uppercase border-b-2 border-[#000000] outline-none placeholder:text-[#000000] placeholder:opacity-30"
@@ -163,6 +186,7 @@ export default function Contact() {
 
             <div className="form-field" style={{ opacity: 0 }}>
               <textarea
+                name="message"
                 placeholder="TELL US ABOUT YOUR PROJECT"
                 required
                 className="w-full bg-transparent text-[#000000] font-display font-bold uppercase border-b-2 border-[#000000] outline-none placeholder:text-[#000000] placeholder:opacity-30 resize-none"
@@ -178,7 +202,8 @@ export default function Contact() {
             <div className="form-field" style={{ opacity: 0 }}>
               <button
                 type="submit"
-                className="w-full font-display font-bold uppercase bg-[#000000] text-[#DFE104] hover:bg-[#09090B] transition-colors duration-300"
+                disabled={submitting}
+                className="w-full font-display font-bold uppercase bg-[#000000] text-[#DFE104] hover:bg-[#09090B] transition-colors duration-300 disabled:opacity-50"
                 style={{
                   height: '64px',
                   fontSize: 'clamp(1rem, 1.5vw, 1.25rem)',
@@ -186,8 +211,13 @@ export default function Contact() {
                   borderRadius: '0',
                 }}
               >
-                Send Message
+                {submitting ? 'Sending...' : 'Send Message'}
               </button>
+              {error && (
+                <p className="text-[#000000] font-display font-bold uppercase text-xs sm:text-sm mt-3 text-center bg-white/20 p-2 border border-black/30 backdrop-blur-sm">
+                  Error sending message. Please try again.
+                </p>
+              )}
             </div>
           </form>
         )}
