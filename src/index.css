@@ -35,6 +35,8 @@
     background-color: #09090B;
     color: #FAFAFA;
     overflow-x: hidden;
+    width: 100%;
+    position: relative;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -46,5 +48,7 @@
 
   html {
     scroll-behavior: auto;
+    overflow-x: hidden;
+    width: 100%;
   }
 }
