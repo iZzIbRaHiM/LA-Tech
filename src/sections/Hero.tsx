@@ -297,7 +297,7 @@ export default function Hero() {
               opacity: 0,
             }}
           >
-            We build custom software that transforms how businesses operate — from process automation to enterprise platforms.
+            We build systems that scale
           </p>
 
           <a
