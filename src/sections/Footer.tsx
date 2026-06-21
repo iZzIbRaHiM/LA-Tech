@@ -129,8 +129,10 @@ export default function Footer() {
       <div
         className="flex flex-col md:flex-row items-center justify-between border-t border-[#3F3F46]"
         style={{
-          height: '64px',
-          padding: '0 clamp(1.5rem, 5vw, 6rem)',
+          height: 'auto',
+          minHeight: '64px',
+          padding: '1.5rem clamp(1.5rem, 5vw, 6rem)',
+          gap: '1rem',
         }}
       >
         <span

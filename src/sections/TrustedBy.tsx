@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useTexture } from '@react-three/drei';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -135,6 +135,22 @@ function OrbitalRing({ reducedMotion }: { reducedMotion: boolean }) {
   );
 }
 
+function ResponsiveCamera() {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    const aspect = size.width / size.height;
+    if (aspect < 1) {
+      // Portrait (mobile/tablet)
+      camera.position.z = 6 / aspect;
+    } else {
+      // Landscape (desktop)
+      camera.position.z = 6;
+    }
+    camera.updateProjectionMatrix();
+  }, [size, camera]);
+  return null;
+}
+
 export default function TrustedBy() {
   const sectionRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -218,6 +234,7 @@ export default function TrustedBy() {
             gl.setClearColor('#09090B');
           }}
         >
+          <ResponsiveCamera />
           <OrbitalRing reducedMotion={reducedMotion} />
         </Canvas>
       </div>

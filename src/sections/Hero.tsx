@@ -261,7 +261,7 @@ export default function Hero() {
           ref={title1Ref}
           className="font-display font-bold uppercase text-[#FAFAFA]"
           style={{
-            fontSize: 'clamp(4rem, 14vw, 16rem)',
+            fontSize: 'clamp(3rem, 14vw, 16rem)',
             letterSpacing: '-0.02em',
             lineHeight: 0.85,
             opacity: 0,
@@ -275,7 +275,7 @@ export default function Hero() {
           ref={title2Ref}
           className="font-display font-bold uppercase text-[#FAFAFA] text-right"
           style={{
-            fontSize: 'clamp(4rem, 14vw, 16rem)',
+            fontSize: 'clamp(3rem, 14vw, 16rem)',
             letterSpacing: '-0.02em',
             lineHeight: 0.85,
             opacity: 0,

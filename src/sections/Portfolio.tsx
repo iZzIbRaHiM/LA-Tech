@@ -25,22 +25,27 @@ function getCardDimensions() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   
+  let cardWidth = 400;
   if (w < 768) {
-    // Mobile: landscape aspect ratio 2.0 (wider & shorter)
-    return { cardWidth: 320, cardHeight: 160 };
+    // Mobile: 75% of screen width, max 280px
+    cardWidth = Math.min(w * 0.75, 280);
   } else if (w < 1024) {
-    // Tablet
-    return { cardWidth: 480, cardHeight: 240 };
+    // Tablet: 55% of screen width, max 420px
+    cardWidth = Math.min(w * 0.55, 420);
   } else {
     // Desktop - scale based on height to prevent vertical overflow
     if (h < 750) {
-      return { cardWidth: 540, cardHeight: 270 };
+      cardWidth = Math.min(w * 0.4, 480);
     } else if (h < 900) {
-      return { cardWidth: 600, cardHeight: 300 };
+      cardWidth = Math.min(w * 0.45, 600);
     } else {
-      return { cardWidth: 660, cardHeight: 330 };
+      cardWidth = Math.min(w * 0.45, 660);
     }
   }
+  
+  // Aspect ratio is exactly 2.0 (wider & shorter)
+  const cardHeight = Math.round(cardWidth / 2);
+  return { cardWidth: Math.round(cardWidth), cardHeight };
 }
 
 export default function Portfolio() {

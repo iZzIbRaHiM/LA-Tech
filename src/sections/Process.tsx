@@ -1,9 +1,10 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 
 gsap.registerPlugin(ScrollTrigger);
+
 
 const steps = [
   {
@@ -33,6 +34,14 @@ export default function Process() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!sectionRef.current || !headingRef.current || !stepsRef.current) return;
@@ -154,8 +163,8 @@ export default function Process() {
             <div
               className="step-content relative z-10"
               style={{
-                maxWidth: i % 2 === 0 ? '60%' : '60%',
-                marginLeft: i % 2 === 0 ? '0' : 'auto',
+                maxWidth: isMobile ? '100%' : '60%',
+                marginLeft: isMobile ? '0' : (i % 2 === 0 ? '0' : 'auto'),
                 opacity: 0,
               }}
             >
