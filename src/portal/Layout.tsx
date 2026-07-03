@@ -9,8 +9,20 @@ import {
   Bell,
   Search,
   LogOut,
+  Clock,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   CommandDialog,
@@ -52,6 +64,22 @@ export default function Layout() {
     projects: Array<{ id: number; name: string; status: string }>;
   }>({ tasks: [], projects: [] });
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwForm, setPwForm] = useState({ current: '', next: '' });
+
+  const changePassword = async () => {
+    try {
+      await api('/auth/change-password', {
+        method: 'POST',
+        body: { currentPassword: pwForm.current, newPassword: pwForm.next },
+      });
+      setPwOpen(false);
+      setPwForm({ current: '', next: '' });
+      toast.success('Password changed');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -65,12 +93,12 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
-    if (!debounced.trim()) {
-      setResults({ tasks: [], projects: [] });
-      return;
-    }
+    if (!debounced.trim()) return;
     api<typeof results>(`/search?q=${encodeURIComponent(debounced)}`).then(setResults).catch(() => {});
   }, [debounced]);
+
+  // Stale results are filtered at render instead of cleared in the effect.
+  const shownResults = debounced.trim() ? results : { tasks: [], projects: [] };
 
   const loadNotifications = useCallback(() => {
     api<{ notifications: Notification[] }>('/notifications')
@@ -87,6 +115,7 @@ export default function Layout() {
     { to: '/portal/departments', label: 'Departments', icon: Users },
     { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
+    { to: '/portal/attendance', label: 'Attendance', icon: Clock },
     ...(user?.isCeo ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
   ];
 
@@ -121,9 +150,19 @@ export default function Layout() {
             <div className="text-sm truncate">{user?.name}</div>
             <div className="text-xs text-[#A1A1AA] capitalize">{user?.role}</div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => logout()} title="Sign out">
-            <LogOut size={15} />
-          </Button>
+          <div className="flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPwOpen(true)}
+              title="Change password"
+            >
+              <KeyRound size={15} />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => logout()} title="Sign out">
+              <LogOut size={15} />
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -183,9 +222,9 @@ export default function Layout() {
         <CommandInput placeholder="Search tasks and projects…" value={query} onValueChange={setQuery} />
         <CommandList>
           <CommandEmpty>No results.</CommandEmpty>
-          {results.tasks.length > 0 && (
+          {shownResults.tasks.length > 0 && (
             <CommandGroup heading="Tasks">
-              {results.tasks.map((t) => (
+              {shownResults.tasks.map((t) => (
                 <CommandItem
                   key={`t${t.id}`}
                   onSelect={() => {
@@ -199,9 +238,9 @@ export default function Layout() {
               ))}
             </CommandGroup>
           )}
-          {results.projects.length > 0 && (
+          {shownResults.projects.length > 0 && (
             <CommandGroup heading="Projects">
-              {results.projects.map((p) => (
+              {shownResults.projects.map((p) => (
                 <CommandItem
                   key={`p${p.id}`}
                   onSelect={() => {
@@ -217,6 +256,38 @@ export default function Layout() {
           )}
         </CommandList>
       </CommandDialog>
+
+      {/* Change password */}
+      <Dialog open={pwOpen} onOpenChange={setPwOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Current password</Label>
+              <Input
+                type="password"
+                value={pwForm.current}
+                onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>New password (8+ characters)</Label>
+              <Input
+                type="password"
+                value={pwForm.next}
+                onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={changePassword} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+              Update password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

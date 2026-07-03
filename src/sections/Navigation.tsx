@@ -73,6 +73,16 @@ export default function Navigation() {
               </a>
             ))}
             <a
+              href="/portal"
+              className="font-display font-medium uppercase text-[#A1A1AA] hover:text-[#DFE104] transition-colors duration-200"
+              style={{
+                fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              Portal
+            </a>
+            <a
               href="#contact"
               onClick={(e) => handleNavClick(e, '#contact')}
               className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] hover:scale-105 active:scale-95 transition-all duration-200"

@@ -113,6 +113,19 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Attendance: one open record (check_out IS NULL) per user at a time.
+-- validation_status is set by the user's department head (or the CEO).
+CREATE TABLE IF NOT EXISTS attendance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  check_in TEXT NOT NULL DEFAULT (datetime('now')),
+  check_out TEXT,
+  validation_status TEXT NOT NULL DEFAULT 'pending' CHECK (validation_status IN ('pending','approved','rejected')),
+  validated_by INTEGER REFERENCES users(id),
+  validated_at TEXT,
+  note TEXT NOT NULL DEFAULT ''
+);
 `);
 
 const CEO_EMAIL = process.env.CEO_EMAIL || 'ceo@latechs.org';

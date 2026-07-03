@@ -25,8 +25,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-[#FAFAFA] flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen bg-[#09090B] text-[#FAFAFA] flex items-center justify-center p-6 overflow-hidden">
+      {/* Higgsfield-generated 3D network backdrop (same asset as the marketing hero fallback) */}
+      <img
+        src="/images/hero-network-fallback.png"
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none"
+      />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: 'radial-gradient(70% 60% at 50% 50%, rgba(9,9,11,0.55) 0%, rgba(9,9,11,0.92) 100%)' }}
+      />
+      <div className="relative w-full max-w-sm border border-[#1f1f23] bg-[#0c0c0f]/80 backdrop-blur-sm p-8">
         <div className="font-display font-bold uppercase text-2xl mb-1">
           LATech <span className="text-[#DFE104]">Portal</span>
         </div>

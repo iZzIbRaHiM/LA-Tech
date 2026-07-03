@@ -9,6 +9,7 @@ import Tasks from './pages/Tasks';
 import TaskDetail from './pages/TaskDetail';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
+import Attendance from './pages/Attendance';
 import { FinanceOverview, FinanceLedger } from './pages/Finance';
 
 function Gate() {
@@ -30,6 +31,7 @@ function Gate() {
         <Route path="tasks/:id" element={<TaskDetail />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />} />
+        <Route path="attendance" element={<Attendance />} />
         {/* Finance routes render only for the CEO; the API enforces it regardless. */}
         {user.isCeo && <Route path="finance" element={<FinanceOverview />} />}
         {user.isCeo && <Route path="finance/:projectId" element={<FinanceLedger />} />}
