@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
+import Attachments from '../Attachments';
 import { api, type Task, type Department } from '../api';
 
 interface Comment {
@@ -150,7 +151,12 @@ export default function TaskDetail() {
         <span className="self-center text-[#71717A]">created by {task.creator_name}</span>
       </div>
 
-      {task.description && <p className="text-sm text-[#D4D4D8] whitespace-pre-wrap mb-8">{task.description}</p>}
+      {task.description && <p className="text-sm text-[#D4D4D8] whitespace-pre-wrap mb-6">{task.description}</p>}
+
+      <section className="mb-8">
+        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-2">Attachments</h2>
+        <Attachments entityType="task" entityId={task.id} />
+      </section>
 
       <section className="mb-8">
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">

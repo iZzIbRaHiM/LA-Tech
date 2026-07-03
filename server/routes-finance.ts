@@ -1,14 +1,15 @@
 import { Router } from 'express';
 import { db, logActivity } from './db';
-import { requireAuth, requireCeo } from './auth';
+import { requireAuth, requireFinance } from './auth';
 
-// PRD §4.4 / §6 invariant: finance is CEO-only at the API layer, regardless of
-// project visibility. requireCeo guards every /finance path structurally —
-// there is no non-CEO code path into finance data. Path-scoped because the
-// routers share one /api mount: an unscoped use() here would also intercept
-// unrelated routes mounted after this router (e.g. /search, /notifications).
+// PRD §4.4 / §6 invariant: finance is CEO-only at the API layer — plus any
+// explicit finance delegates the CEO has granted (requireFinance). The guard
+// covers every /finance path structurally: there is no other code path into
+// finance data. Path-scoped because the routers share one /api mount: an
+// unscoped use() here would also intercept unrelated routes mounted after
+// this router (e.g. /search, /notifications).
 export const financeRouter = Router();
-financeRouter.use('/finance', requireAuth, requireCeo);
+financeRouter.use('/finance', requireAuth, requireFinance);
 
 financeRouter.get('/finance/overview', (_req, res) => {
   const perProject = db

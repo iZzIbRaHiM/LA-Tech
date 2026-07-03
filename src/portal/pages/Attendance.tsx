@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, Clock } from 'lucide-react';
+import { LogIn, LogOut, Check, X, Clock, Download, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -81,6 +81,24 @@ export default function Attendance() {
 
   const isValidator = user?.isCeo || user?.role === 'head';
   const pendingTeam = team.filter((t) => t.check_out && t.validation_status === 'pending');
+
+  // CEO monthly report
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [report, setReport] = useState<
+    Array<{ user_id: number; name: string; department: string | null; days_present: number; total_minutes: number; approved: number; pending: number; rejected: number }>
+  >([]);
+  useEffect(() => {
+    if (!user?.isCeo) return;
+    api<{ rows: typeof report }>(`/reports/attendance?month=${reportMonth}`)
+      .then((r) => setReport(r.rows))
+      .catch(() => {});
+  }, [user, reportMonth, own, team]);
+
+  const shiftReportMonth = (delta: number) => {
+    const [y, m] = reportMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setReportMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
 
   return (
     <div className="p-8 max-w-4xl">
@@ -164,6 +182,60 @@ export default function Attendance() {
                         <X size={14} />
                       </Button>
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </section>
+      )}
+
+      {/* CEO monthly report */}
+      {user?.isCeo && (
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide flex items-center gap-1.5">
+              <BarChart3 size={13} /> Monthly report — {reportMonth}
+            </h2>
+            <div className="flex gap-1">
+              <Button variant="outline" size="sm" onClick={() => shiftReportMonth(-1)}>
+                ←
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => shiftReportMonth(1)}>
+                →
+              </Button>
+              <a href={`/api/reports/attendance.csv?month=${reportMonth}`}>
+                <Button variant="outline" size="sm">
+                  <Download size={13} className="mr-1" /> CSV
+                </Button>
+              </a>
+            </div>
+          </div>
+          {report.length === 0 ? (
+            <p className="text-sm text-[#71717A]">No completed attendance records this month.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead className="text-right">Days</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
+                  <TableHead className="text-right">Approved</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="text-right">Rejected</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {report.map((r) => (
+                  <TableRow key={r.user_id}>
+                    <TableCell>{r.name}</TableCell>
+                    <TableCell className="text-[#A1A1AA]">{r.department ?? '—'}</TableCell>
+                    <TableCell className="text-right">{r.days_present}</TableCell>
+                    <TableCell className="text-right">{(r.total_minutes / 60).toFixed(1)}</TableCell>
+                    <TableCell className="text-right text-emerald-400">{r.approved}</TableCell>
+                    <TableCell className="text-right text-[#A1A1AA]">{r.pending}</TableCell>
+                    <TableCell className="text-right text-red-400">{r.rejected}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

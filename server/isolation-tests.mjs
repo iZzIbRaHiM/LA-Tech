@@ -211,6 +211,82 @@ async function main() {
   const ceoValidates = await req('ceo', 'POST', `/attendance/${headRec.id}/validate`, { status: 'approved' });
   check("CEO CAN validate a head's record", ceoValidates.status === 200, `got ${ceoValidates.status}`);
 
+  console.log('\n== Leave decision boundaries ==');
+  const leaveId = (
+    await must('amember', 'POST', '/leave', { type: 'vacation', startDate: '2026-08-01', endDate: '2026-08-05' })
+  ).id;
+  const leaveSelf = await req('amember', 'POST', `/leave/${leaveId}/decide`, { status: 'approved' });
+  check('amember DENIED deciding own leave', denied(leaveSelf), `got ${leaveSelf.status}`);
+  const leaveCross = await req('bhead', 'POST', `/leave/${leaveId}/decide`, { status: 'approved' });
+  check("bhead DENIED deciding another department's leave", denied(leaveCross), `got ${leaveCross.status}`);
+  const leaveOk = await req('ahead', 'POST', `/leave/${leaveId}/decide`, { status: 'approved' });
+  check('ahead CAN decide own-dept member leave', leaveOk.status === 200, `got ${leaveOk.status}`);
+  const bLeave = await req('bhead', 'GET', '/leave');
+  const bLeaveLeak = (bLeave.json?.team ?? []).some((l) => l.user_id === aMember);
+  check("bhead's leave view excludes dept-A requests", !bLeaveLeak, `leak=${bLeaveLeak}`);
+
+  console.log('\n== Attachment ACLs follow the owning entity ==');
+  const finEntry = (
+    await must('ceo', 'POST', `/finance/projects/${project}/entries`, { type: 'expense', amount: 42 })
+  ).id;
+  const finAttach = await fetch(`${BASE}/attachments?entity_type=finance&entity_id=${finEntry}&filename=receipt.txt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.ceo },
+    body: 'receipt-data',
+  });
+  check('CEO CAN attach to finance entry', finAttach.status === 200, `got ${finAttach.status}`);
+  const finAttachId = (await finAttach.json()).id;
+  const memberFinList = await req('amember', 'GET', `/attachments?entity_type=finance&entity_id=${finEntry}`);
+  check('amember DENIED listing finance attachments', denied(memberFinList), `got ${memberFinList.status}`);
+  const memberFinDl = await req('amember', 'GET', `/attachments/${finAttachId}/download`);
+  check('amember DENIED downloading finance attachment', denied(memberFinDl), `got ${memberFinDl.status}`);
+  const bheadTaskAttach = await fetch(
+    `${BASE}/attachments?entity_type=task&entity_id=${deptTask}&filename=x.txt`,
+    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.bhead }, body: 'x' }
+  );
+  check("bhead DENIED attaching to dept-A task", bheadTaskAttach.status === 404, `got ${bheadTaskAttach.status}`);
+
+  console.log('\n== Reports and audit are CEO-only ==');
+  for (const [who, path] of [
+    ['ahead', '/reports/attendance'],
+    ['bhead', '/reports/attendance.csv'],
+    ['amember', '/audit'],
+    ['ahead', '/audit'],
+  ]) {
+    const r = await req(who, 'GET', path);
+    check(`${who} DENIED ${path}`, denied(r), `got ${r.status}`);
+  }
+  const ceoReport = await req('ceo', 'GET', '/reports/attendance');
+  check('CEO CAN read attendance report', ceoReport.status === 200, `got ${ceoReport.status}`);
+  const ceoAudit = await req('ceo', 'GET', '/audit');
+  check('CEO CAN read audit log', ceoAudit.status === 200, `got ${ceoAudit.status}`);
+
+  console.log('\n== Milestones follow project visibility ==');
+  const msId = (await must('ceo', 'POST', `/projects/${project}/milestones`, { title: `Iso milestone ${TS}` })).id;
+  const bheadMs = await req('bhead', 'GET', `/projects/${project}/milestones`);
+  check('bhead DENIED milestones of hidden project', denied(bheadMs), `got ${bheadMs.status}`);
+  const aheadMsCreate = await req('ahead', 'POST', `/projects/${project}/milestones`, { title: 'rogue' });
+  check('ahead DENIED creating milestones (CEO-only)', denied(aheadMsCreate), `got ${aheadMsCreate.status}`);
+  const aheadMsToggle = await req('ahead', 'PATCH', `/milestones/${msId}`, { completed: true });
+  check('ahead (granted dept head) CAN complete milestone', aheadMsToggle.status === 200, `got ${aheadMsToggle.status}`);
+  const bheadMsToggle = await req('bhead', 'PATCH', `/milestones/${msId}`, { completed: false });
+  check('bhead DENIED toggling hidden-project milestone', denied(bheadMsToggle), `got ${bheadMsToggle.status}`);
+
+  console.log('\n== Finance delegate grant/revoke ==');
+  const memberGrant = await req('ahead', 'POST', `/users/${bHead}/finance-access`, { grant: true });
+  check('ahead DENIED granting finance access', denied(memberGrant), `got ${memberGrant.status}`);
+  await must('ceo', 'POST', `/users/${bHead}/finance-access`, { grant: true });
+  const delegateRead = await req('bhead', 'GET', '/finance/overview');
+  check('bhead (delegate) CAN read finance after grant', delegateRead.status === 200, `got ${delegateRead.status}`);
+  const delegateWrite = await req('bhead', 'POST', `/finance/projects/${project}/entries`, {
+    type: 'income',
+    amount: 5,
+  });
+  check('bhead (delegate) CAN write finance after grant', delegateWrite.status === 200, `got ${delegateWrite.status}`);
+  await must('ceo', 'POST', `/users/${bHead}/finance-access`, { grant: false });
+  const revokedRead = await req('bhead', 'GET', '/finance/overview');
+  check('bhead DENIED finance after revoke', denied(revokedRead), `got ${revokedRead.status}`);
+
   console.log('\n== Positive controls (grants that SHOULD work) ==');
   const sub = await req('ahead', 'POST', '/tasks', {
     title: `Iso sub-task ${TS}`,

@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { sendEmail } from './email';
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -126,7 +127,57 @@ CREATE TABLE IF NOT EXISTS attendance (
   validated_at TEXT,
   note TEXT NOT NULL DEFAULT ''
 );
+
+-- Leave requests: decided by the requester's department head (or the CEO);
+-- heads' own requests are decided by the CEO. Same authority model as attendance.
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  type TEXT NOT NULL DEFAULT 'vacation' CHECK (type IN ('vacation','sick','personal','other')),
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  decided_by INTEGER REFERENCES users(id),
+  decided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Attachments live on disk (server/uploads); access is checked against the
+-- owning entity's permissions on every download — no public static serving.
+CREATE TABLE IF NOT EXISTS attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('task','finance')),
+  entity_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  size INTEGER NOT NULL DEFAULT 0,
+  uploaded_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  title TEXT NOT NULL,
+  due_date TEXT,
+  completed_at TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
+
+// Column migrations for databases created before these features existed.
+for (const stmt of [
+  "ALTER TABLE users ADD COLUMN finance_access INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE tasks ADD COLUMN due_notified INTEGER NOT NULL DEFAULT 0",
+]) {
+  try {
+    db.exec(stmt);
+  } catch {
+    /* column already exists */
+  }
+}
 
 const CEO_EMAIL = process.env.CEO_EMAIL || 'ceo@latechs.org';
 const CEO_PASSWORD = process.env.CEO_PASSWORD || 'ChangeMe123!';
@@ -161,4 +212,7 @@ export function notify(userId: number, type: string, message: string, link = '')
     message,
     link
   );
+  // Mirror every in-app notification to email (no-op until RESEND_API_KEY is set).
+  const user = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
+  if (user) sendEmail(user.email, `LA Tech Portal — ${message}`, message, link);
 }

@@ -10,6 +10,7 @@ export interface SessionUser {
   name: string;
   email: string;
   isCeo: boolean;
+  financeAccess: boolean;
   departmentId: number | null;
   role: 'ceo' | 'head' | 'member' | 'unassigned';
 }
@@ -28,12 +29,20 @@ declare global {
 export function loadSessionUser(userId: number): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.is_ceo, m.department_id, m.role AS mrole
+      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, m.department_id, m.role AS mrole
        FROM users u LEFT JOIN memberships m ON m.user_id = u.id
        WHERE u.id = ?`
     )
     .get(userId) as
-    | { id: number; name: string; email: string; is_ceo: number; department_id: number | null; mrole: string | null }
+    | {
+        id: number;
+        name: string;
+        email: string;
+        is_ceo: number;
+        finance_access: number;
+        department_id: number | null;
+        mrole: string | null;
+      }
     | undefined;
   if (!row) return null;
   return {
@@ -41,6 +50,7 @@ export function loadSessionUser(userId: number): SessionUser | null {
     name: row.name,
     email: row.email,
     isCeo: !!row.is_ceo,
+    financeAccess: !!row.finance_access,
     departmentId: row.department_id,
     role: row.is_ceo ? 'ceo' : row.mrole === 'head' ? 'head' : row.mrole === 'member' ? 'member' : 'unassigned',
   };
@@ -75,6 +85,18 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 export function requireCeo(req: Request, res: Response, next: NextFunction) {
   if (!req.user?.isCeo) return res.status(403).json({ error: 'CEO only' });
+  next();
+}
+
+// Finance delegate role (PRD §4.4 anticipated this): the CEO can grant a
+// specific user read/write finance access without making them CEO. All
+// finance mutations remain audit-logged with the actor.
+export function hasFinanceAccess(user: SessionUser): boolean {
+  return user.isCeo || user.financeAccess;
+}
+
+export function requireFinance(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !hasFinanceAccess(req.user)) return res.status(403).json({ error: 'Finance access only' });
   next();
 }
 

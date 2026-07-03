@@ -20,6 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import Attachments from '../Attachments';
 import { api } from '../api';
 
 interface ProjectFinance {
@@ -226,7 +227,10 @@ export function FinanceLedger() {
                 {fmt(e.amount)}
               </TableCell>
               <TableCell>{e.category}</TableCell>
-              <TableCell className="text-[#A1A1AA]">{e.note}</TableCell>
+              <TableCell className="text-[#A1A1AA]">
+                {e.note}
+                <Attachments entityType="finance" entityId={e.id} compact />
+              </TableCell>
               <TableCell className="text-[#A1A1AA]">{e.created_by_name}</TableCell>
               <TableCell>
                 <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>

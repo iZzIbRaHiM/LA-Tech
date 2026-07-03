@@ -10,6 +10,8 @@ import TaskDetail from './pages/TaskDetail';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import Attendance from './pages/Attendance';
+import Leave from './pages/Leave';
+import Audit from './pages/Audit';
 import { FinanceOverview, FinanceLedger } from './pages/Finance';
 
 function Gate() {
@@ -32,9 +34,11 @@ function Gate() {
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />} />
         <Route path="attendance" element={<Attendance />} />
-        {/* Finance routes render only for the CEO; the API enforces it regardless. */}
-        {user.isCeo && <Route path="finance" element={<FinanceOverview />} />}
-        {user.isCeo && <Route path="finance/:projectId" element={<FinanceLedger />} />}
+        <Route path="leave" element={<Leave />} />
+        {/* Role-gated routes render conditionally; the API enforces access regardless. */}
+        {(user.isCeo || user.financeAccess) && <Route path="finance" element={<FinanceOverview />} />}
+        {(user.isCeo || user.financeAccess) && <Route path="finance/:projectId" element={<FinanceLedger />} />}
+        {user.isCeo && <Route path="audit" element={<Audit />} />}
         <Route path="*" element={<Navigate to="/portal" replace />} />
       </Route>
     </Routes>

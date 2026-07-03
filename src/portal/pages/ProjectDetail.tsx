@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Eye, Wallet } from 'lucide-react';
+import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, type Project, type Task, type Department } from '../api';
+
+interface Milestone {
+  id: number;
+  title: string;
+  due_date: string | null;
+  completed_at: string | null;
+}
 
 export default function ProjectDetail() {
   const { id } = useParams();
@@ -15,6 +24,8 @@ export default function ProjectDetail() {
   const [visibility, setVisibility] = useState<Array<{ id: number; name: string }>>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [notFound, setNotFound] = useState(false);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [msForm, setMsForm] = useState({ title: '', dueDate: '' });
 
   const load = useCallback(() => {
     api<{ project: Project; tasks: Task[]; visibility?: Array<{ id: number; name: string }> }>(`/projects/${id}`)
@@ -24,6 +35,9 @@ export default function ProjectDetail() {
         setVisibility(r.visibility ?? []);
       })
       .catch(() => setNotFound(true));
+    api<{ milestones: Milestone[] }>(`/projects/${id}/milestones`)
+      .then((r) => setMilestones(r.milestones))
+      .catch(() => {});
   }, [id]);
   useEffect(load, [load]);
 
@@ -98,6 +112,88 @@ export default function ProjectDetail() {
           </Link>
         </>
       )}
+
+      {/* Milestones timeline */}
+      <section className="mb-8">
+        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+          <Flag size={13} /> Milestones
+        </h2>
+        <div className="border-l border-[#1f1f23] ml-1.5 pl-5 space-y-3">
+          {milestones.map((m) => (
+            <div key={m.id} className="relative flex items-center gap-3 group">
+              <span
+                className={`absolute -left-[26px] w-2.5 h-2.5 rounded-full ${
+                  m.completed_at ? 'bg-[#DFE104]' : 'bg-[#333] border border-[#555]'
+                }`}
+              />
+              <Checkbox
+                checked={!!m.completed_at}
+                disabled={!(user?.isCeo || user?.role === 'head')}
+                onCheckedChange={async (c) => {
+                  try {
+                    await api(`/milestones/${m.id}`, { method: 'PATCH', body: { completed: !!c } });
+                    load();
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : 'Failed');
+                  }
+                }}
+              />
+              <span className={`text-sm ${m.completed_at ? 'line-through text-[#71717A]' : ''}`}>{m.title}</span>
+              {m.due_date && <span className="text-xs text-[#71717A]">due {m.due_date}</span>}
+              {user?.isCeo && (
+                <button
+                  className="opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-400 transition-opacity"
+                  onClick={async () => {
+                    try {
+                      await api(`/milestones/${m.id}`, { method: 'DELETE' });
+                      load();
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'Failed');
+                    }
+                  }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
+          ))}
+          {milestones.length === 0 && <p className="text-sm text-[#71717A]">No milestones yet.</p>}
+        </div>
+        {user?.isCeo && (
+          <div className="flex gap-2 mt-4 max-w-md">
+            <Input
+              placeholder="Milestone title"
+              value={msForm.title}
+              onChange={(e) => setMsForm({ ...msForm, title: e.target.value })}
+              className="flex-1"
+            />
+            <Input
+              type="date"
+              value={msForm.dueDate}
+              onChange={(e) => setMsForm({ ...msForm, dueDate: e.target.value })}
+              className="w-36"
+            />
+            <Button
+              onClick={async () => {
+                if (!msForm.title.trim()) return;
+                try {
+                  await api(`/projects/${project.id}/milestones`, {
+                    method: 'POST',
+                    body: { title: msForm.title, dueDate: msForm.dueDate || null },
+                  });
+                  setMsForm({ title: '', dueDate: '' });
+                  load();
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Failed');
+                }
+              }}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
+            >
+              <Plus size={14} />
+            </Button>
+          </div>
+        )}
+      </section>
 
       <section>
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">

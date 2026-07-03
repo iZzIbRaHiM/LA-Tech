@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Crown, UserMinus } from 'lucide-react';
+import { Plus, Crown, UserMinus, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,6 +59,16 @@ export default function Departments() {
       await api(`/departments/${deptId}/head`, { method: 'POST', body: { userId } });
       load();
       toast.success('Department head assigned');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const toggleFinance = async (userId: number, grant: boolean) => {
+    try {
+      await api(`/users/${userId}/finance-access`, { method: 'POST', body: { grant } });
+      load();
+      toast.success(grant ? 'Finance access granted' : 'Finance access revoked');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     }
@@ -128,6 +138,9 @@ export default function Departments() {
                       <span>{m.name}</span>
                       <span className="text-[#71717A] ml-2">{m.email}</span>
                       {m.role === 'head' && <span className="text-[#DFE104] ml-2 text-xs">HEAD</span>}
+                      {m.finance_access ? (
+                        <span className="text-emerald-400 ml-2 text-xs">FINANCE</span>
+                      ) : null}
                     </div>
                     {user?.isCeo && (
                       <div className="flex gap-1">
@@ -141,6 +154,15 @@ export default function Departments() {
                             <Crown size={13} />
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title={m.finance_access ? 'Revoke finance access' : 'Grant finance access'}
+                          className={m.finance_access ? 'text-emerald-400' : ''}
+                          onClick={() => toggleFinance(m.id, !m.finance_access)}
+                        >
+                          <Wallet size={13} />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

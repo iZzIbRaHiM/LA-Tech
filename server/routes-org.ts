@@ -63,7 +63,7 @@ orgRouter.get('/departments', requireAuth, (req, res) => {
     if (!isOwn) return { ...d, members: null };
     const members = db
       .prepare(
-        `SELECT u.id, u.name, u.email, m.role FROM memberships m
+        `SELECT u.id, u.name, u.email, u.finance_access, m.role FROM memberships m
          JOIN users u ON u.id = m.user_id WHERE m.department_id = ?`
       )
       .all(d.id);
@@ -179,9 +179,31 @@ orgRouter.post('/departments/:id/head', requireAuth, requireCeo, (req, res) => {
 orgRouter.get('/users', requireAuth, requireCeo, (_req, res) => {
   const users = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.is_ceo, m.department_id, m.role
+      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, m.department_id, m.role
        FROM users u LEFT JOIN memberships m ON m.user_id = u.id ORDER BY u.name`
     )
     .all();
   res.json({ users });
+});
+
+// Finance delegate: CEO grants/revokes scoped finance access (PRD §4.4's
+// anticipated future role). Changes take effect on the next request because
+// roles are loaded per-request, never stored in the token.
+orgRouter.post('/users/:id/finance-access', requireAuth, requireCeo, (req, res) => {
+  const userId = Number(req.params.id);
+  const target = db.prepare('SELECT id, is_ceo FROM users WHERE id = ?').get(userId) as
+    | { id: number; is_ceo: number }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_ceo) return res.status(400).json({ error: 'CEO already has finance access' });
+  const grant = req.body?.grant === true;
+  db.prepare('UPDATE users SET finance_access = ? WHERE id = ?').run(grant ? 1 : 0, userId);
+  logActivity(req.user!.id, 'finance', userId, grant ? 'delegate_granted' : 'delegate_revoked', { userId });
+  notify(
+    userId,
+    'finance',
+    grant ? 'You have been granted finance access' : 'Your finance access was revoked',
+    grant ? '/portal/finance' : ''
+  );
+  res.json({ ok: true });
 });

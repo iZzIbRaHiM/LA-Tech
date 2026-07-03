@@ -28,3 +28,4 @@ server/data/
 
 # Local dev tooling
 .claude/
+server/uploads/

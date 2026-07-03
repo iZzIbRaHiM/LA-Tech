@@ -11,6 +11,8 @@ import {
   LogOut,
   Clock,
   KeyRound,
+  CalendarDays,
+  ScrollText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,7 +118,9 @@ export default function Layout() {
     { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
     { to: '/portal/attendance', label: 'Attendance', icon: Clock },
-    ...(user?.isCeo ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
+    { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
+    ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
+    ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
   ];
 
   return (

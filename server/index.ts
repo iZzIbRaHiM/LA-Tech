@@ -9,6 +9,9 @@ import { tasksRouter } from './routes-tasks';
 import { projectsRouter } from './routes-projects';
 import { financeRouter } from './routes-finance';
 import { attendanceRouter } from './routes-attendance';
+import { leaveRouter } from './routes-leave';
+import { attachmentsRouter } from './routes-attachments';
+import { extrasRouter, sendDueReminders } from './routes-extras';
 import { miscRouter } from './routes-misc';
 
 const app = express();
@@ -20,6 +23,9 @@ app.use('/api', tasksRouter);
 app.use('/api', projectsRouter);
 app.use('/api', financeRouter);
 app.use('/api', attendanceRouter);
+app.use('/api', leaveRouter);
+app.use('/api', attachmentsRouter);
+app.use('/api', extrasRouter);
 app.use('/api', miscRouter);
 
 // Production: serve the built frontend from this same process, with an SPA
@@ -45,6 +51,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 seedCeo();
+
+// Due-date reminders: once at boot, then hourly.
+sendDueReminders();
+setInterval(sendDueReminders, 60 * 60 * 1000);
 
 const PORT = Number(process.env.PORT_API || 5184);
 app.listen(PORT, () => console.log(`[portal-api] listening on http://localhost:${PORT}`));

@@ -34,6 +34,7 @@ export interface SessionUser {
   name: string;
   email: string;
   isCeo: boolean;
+  financeAccess: boolean;
   departmentId: number | null;
   role: 'ceo' | 'head' | 'member' | 'unassigned';
 }
@@ -43,7 +44,7 @@ export interface Department {
   name: string;
   head_user_id: number | null;
   head_name: string | null;
-  members: Array<{ id: number; name: string; email: string; role: string }> | null;
+  members: Array<{ id: number; name: string; email: string; role: string; finance_access?: number }> | null;
 }
 
 export interface Task {
