@@ -16,10 +16,13 @@ const PW = 'IsoTest123!';
 
 const sessions = {};
 
+// All mutating requests must carry the CSRF custom header (see index.ts).
+const CSRF = { 'X-Requested-With': 'latech-portal' };
+
 async function login(name, email, password) {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CSRF },
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) throw new Error(`Login failed for ${email}: ${res.status}`);
@@ -29,7 +32,7 @@ async function login(name, email, password) {
 async function req(as, method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Cookie: sessions[as] },
+    headers: { 'Content-Type': 'application/json', Cookie: sessions[as], ...CSRF },
     body: body ? JSON.stringify(body) : undefined,
   });
   let json = null;
@@ -217,7 +220,7 @@ async function main() {
   ).id;
   const finAttach = await fetch(`${BASE}/attachments?entity_type=finance&entity_id=${finEntry}&filename=receipt.txt`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.ceo },
+    headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.ceo, ...CSRF },
     body: 'receipt-data',
   });
   check('CEO CAN attach to finance entry', finAttach.status === 200, `got ${finAttach.status}`);
@@ -228,7 +231,7 @@ async function main() {
   check('amember DENIED downloading finance attachment', denied(memberFinDl), `got ${memberFinDl.status}`);
   const bheadTaskAttach = await fetch(
     `${BASE}/attachments?entity_type=task&entity_id=${deptTask}&filename=x.txt`,
-    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.bhead }, body: 'x' }
+    { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', Cookie: sessions.bhead, ...CSRF }, body: 'x' }
   );
   check("bhead DENIED attaching to dept-A task", bheadTaskAttach.status === 404, `got ${bheadTaskAttach.status}`);
 
@@ -300,7 +303,7 @@ async function main() {
   check('victim session dead after deactivation', victimAfter.status === 401, `got ${victimAfter.status}`);
   const victimLogin = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CSRF },
     body: JSON.stringify({ email: `iso.victim.${TS}@latechs.org`, password: PW }),
   });
   check('deactivated user DENIED login', victimLogin.status === 401, `got ${victimLogin.status}`);
@@ -313,13 +316,13 @@ async function main() {
   for (let i = 0; i < 10; i++) {
     await fetch(`${BASE}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CSRF },
       body: JSON.stringify({ email: `iso.brute.${TS}@latechs.org`, password: 'wrong' }),
     });
   }
   const brute = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...CSRF },
     body: JSON.stringify({ email: `iso.brute.${TS}@latechs.org`, password: 'wrong' }),
   });
   check('login rate-limited after repeated failures', brute.status === 429, `got ${brute.status}`);
@@ -341,6 +344,46 @@ async function main() {
     parentTaskId: 999999,
   });
   check('sub-task with nonexistent parent rejected', crossParent.status === 404, `got ${crossParent.status}`);
+
+  console.log('\n== Security layer: CSRF + session revocation + headers ==');
+  // Mutations without the custom header are rejected before any handler runs.
+  const noCsrf = await fetch(`${BASE}/departments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessions.ceo },
+    body: JSON.stringify({ name: 'csrf-test' }),
+  });
+  check('mutation without CSRF header rejected (even authenticated)', noCsrf.status === 403, `got ${noCsrf.status}`);
+  const getOk = await req('ceo', 'GET', '/departments');
+  check('GETs work without CSRF header requirements breaking them', getOk.status === 200, `got ${getOk.status}`);
+  // Security headers present on API responses.
+  const headerProbe = await fetch(`${BASE}/auth/me`, { headers: { Cookie: sessions.ceo } });
+  check(
+    'security headers present (nosniff + frame deny)',
+    headerProbe.headers.get('x-content-type-options') === 'nosniff' &&
+      headerProbe.headers.get('x-frame-options') === 'DENY',
+    `got ${headerProbe.headers.get('x-content-type-options')}/${headerProbe.headers.get('x-frame-options')}`
+  );
+  // Password change revokes other sessions (token versioning).
+  const rotator = (
+    await must('ceo', 'POST', '/users', { name: 'Iso Rotator', email: `iso.rotator.${TS}@latechs.org`, password: PW })
+  ).id;
+  void rotator;
+  await login('rotator1', `iso.rotator.${TS}@latechs.org`, PW);
+  await login('rotator2', `iso.rotator.${TS}@latechs.org`, PW); // second device
+  const r1Before = await req('rotator1', 'GET', '/auth/me');
+  check('first session valid before password change', r1Before.status === 200, `got ${r1Before.status}`);
+  const changeRes = await fetch(`${BASE}/auth/change-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: sessions.rotator2, ...CSRF },
+    body: JSON.stringify({ currentPassword: PW, newPassword: `${PW}-new` }),
+  });
+  check('password change succeeds', changeRes.status === 200, `got ${changeRes.status}`);
+  // The changing device gets a fresh cookie and stays signed in.
+  sessions.rotator2 = changeRes.headers.get('set-cookie')?.split(';')[0] ?? sessions.rotator2;
+  const r1After = await req('rotator1', 'GET', '/auth/me');
+  check('other session revoked after password change', r1After.status === 401, `got ${r1After.status}`);
+  const r2After = await req('rotator2', 'GET', '/auth/me');
+  check('changing device stays signed in', r2After.status === 200, `got ${r2After.status}`);
 
   console.log('\n== Positive controls (grants that SHOULD work) ==');
   const sub = await req('ahead', 'POST', '/tasks', {

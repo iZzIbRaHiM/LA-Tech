@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db';
-import { requireAuth, type SessionUser } from './auth';
+import { requireAuth } from './auth';
+import { canValidateAttendance } from './policy';
 
 export const attendanceRouter = Router();
 
@@ -13,18 +14,6 @@ interface AttendanceRow {
   validated_by: number | null;
   validated_at: string | null;
   note: string;
-}
-
-// Validation authority: the CEO validates anyone; a head validates members of
-// their own department, but never their own records (those go to the CEO).
-function canValidate(actor: SessionUser, record: AttendanceRow): boolean {
-  if (record.user_id === actor.id) return false;
-  if (actor.isCeo) return true;
-  if (actor.role !== 'head') return false;
-  const sameDept = db
-    .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
-    .get(record.user_id, actor.departmentId);
-  return !!sameDept;
 }
 
 attendanceRouter.get('/attendance/status', requireAuth, (req, res) => {
@@ -103,7 +92,7 @@ attendanceRouter.post('/attendance/:id/validate', requireAuth, (req, res) => {
     | AttendanceRow
     | undefined;
   if (!record) return res.status(404).json({ error: 'Not found' });
-  if (!canValidate(user, record)) return res.status(403).json({ error: 'Not authorized to validate this record' });
+  if (!canValidateAttendance(user, record)) return res.status(403).json({ error: 'Not authorized to validate this record' });
   if (!record.check_out) return res.status(409).json({ error: 'Cannot validate an open check-in' });
 
   const { status } = req.body ?? {};

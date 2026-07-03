@@ -15,8 +15,32 @@ import { extrasRouter, sendDueReminders } from './routes-extras';
 import { miscRouter } from './routes-misc';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
+
+// Security headers on every response.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
+// CSRF: browsers can't attach custom headers cross-origin without a CORS
+// preflight this server never approves, so requiring one on every mutation
+// (belt) on top of sameSite=lax cookies (braces) shuts down cross-site
+// request forgery. GETs stay header-free so plain links (CSV exports,
+// attachment downloads) keep working.
+app.use('/api', (req, res, next) => {
+  if (req.method !== 'GET' && req.headers['x-requested-with'] !== 'latech-portal') {
+    return res.status(403).json({ error: 'Missing request header' });
+  }
+  next();
+});
 
 app.use('/api', orgRouter);
 app.use('/api', tasksRouter);

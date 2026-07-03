@@ -1,8 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from './db';
+import { hasFinanceAccess } from './policy';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'latech-portal-dev-secret';
+const JWT_ISSUER = 'latech-portal';
 const COOKIE_NAME = 'portal_session';
 
 export interface SessionUser {
@@ -63,8 +65,25 @@ export function loadSessionUser(userId: number): SessionUser | null {
   };
 }
 
+function currentTokenVersion(userId: number): number {
+  const row = db.prepare('SELECT token_version FROM users WHERE id = ?').get(userId) as
+    | { token_version: number }
+    | undefined;
+  return row?.token_version ?? 0;
+}
+
+// Session revocation: bumping the version invalidates every JWT issued
+// before the bump. Used on password change/reset and deactivation.
+export function bumpTokenVersion(userId: number) {
+  db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(userId);
+}
+
 export function issueSession(res: Response, userId: number) {
-  const token = jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ sub: userId, ver: currentTokenVersion(userId) }, JWT_SECRET, {
+    algorithm: 'HS256',
+    issuer: JWT_ISSUER,
+    expiresIn: '7d',
+  });
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -81,8 +100,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: number };
-    const user = loadSessionUser(Number(payload.sub));
+    // Pin algorithm and issuer so a tampered header can't downgrade
+    // verification or replay a token minted for something else.
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'], issuer: JWT_ISSUER }) as {
+      sub: number;
+      ver?: number;
+    };
+    const userId = Number(payload.sub);
+    if ((payload.ver ?? 0) !== currentTokenVersion(userId)) {
+      return res.status(401).json({ error: 'Session expired — sign in again' });
+    }
+    const user = loadSessionUser(userId);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
     req.user = user;
     next();
@@ -96,27 +124,11 @@ export function requireCeo(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Finance delegate role (PRD §4.4 anticipated this): the CEO can grant a
-// specific user read/write finance access without making them CEO. All
-// finance mutations remain audit-logged with the actor.
-export function hasFinanceAccess(user: SessionUser): boolean {
-  return user.isCeo || user.financeAccess;
-}
-
 export function requireFinance(req: Request, res: Response, next: NextFunction) {
   if (!req.user || !hasFinanceAccess(req.user)) return res.status(403).json({ error: 'Finance access only' });
   next();
 }
 
-// A department is visible on a project only via an allow-list row (PRD §6 invariant).
-export function departmentCanSeeProject(departmentId: number | null, projectId: number): boolean {
-  if (departmentId == null) return false;
-  return !!db
-    .prepare('SELECT 1 FROM project_visibility WHERE project_id = ? AND department_id = ?')
-    .get(projectId, departmentId);
-}
-
-export function userCanSeeProject(user: SessionUser, projectId: number): boolean {
-  if (user.isCeo) return true;
-  return departmentCanSeeProject(user.departmentId, projectId);
-}
+// Re-exported so existing imports keep working; the definitions live in the
+// policy layer (see policy.ts — single source of truth for row scoping).
+export { hasFinanceAccess, userCanSeeProject, departmentCanSeeProject } from './policy';

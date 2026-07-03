@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db, logActivity, notify } from './db';
-import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser } from './auth';
+import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, bumpTokenVersion } from './auth';
 
 export const orgRouter = Router();
 
@@ -40,10 +40,13 @@ orgRouter.post('/auth/login', (req, res) => {
   // the response doesn't reveal which accounts exist or their status.
   if (!row || !row.active || !bcrypt.compareSync(password, row.password_hash)) {
     recordAttempt(key);
+    // Failed attempts on real accounts land in the audit trail.
+    if (row) logActivity(row.id, 'auth', row.id, 'login_failed');
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   loginAttempts.delete(key);
   issueSession(res, row.id);
+  logActivity(row.id, 'auth', row.id, 'login');
   res.json({ user: loadSessionUser(row.id) });
 });
 
@@ -68,9 +71,14 @@ orgRouter.post('/auth/change-password', requireAuth, (req, res) => {
     return res.status(401).json({ error: 'Current password is incorrect' });
   }
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(
-    bcrypt.hashSync(newPassword, 10),
+    bcrypt.hashSync(newPassword, 12),
     req.user!.id
   );
+  // Revoke every other session for this account, then re-issue this one so
+  // the user changing their password stays signed in.
+  bumpTokenVersion(req.user!.id);
+  issueSession(res, req.user!.id);
+  logActivity(req.user!.id, 'auth', req.user!.id, 'password_changed');
   res.json({ ok: true });
 });
 
@@ -243,7 +251,7 @@ orgRouter.post('/users', requireAuth, requireCeo, (req, res) => {
   if (dup) return res.status(409).json({ error: 'A user with this email already exists' });
   const info = db
     .prepare('INSERT INTO users (name, email, password_hash, must_change_password) VALUES (?, ?, ?, 1)')
-    .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 10));
+    .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 12));
   logActivity(req.user!.id, 'user', Number(info.lastInsertRowid), 'created', { email: email.trim() });
   res.json({ id: Number(info.lastInsertRowid) });
 });
@@ -262,9 +270,11 @@ orgRouter.post('/users/:id/reset-password', requireAuth, requireCeo, (req, res) 
     return res.status(400).json({ error: 'Temporary password must be at least 8 characters' });
   }
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(
-    bcrypt.hashSync(String(password), 10),
+    bcrypt.hashSync(String(password), 12),
     userId
   );
+  // A reset means the old credential is no longer trusted — end its sessions.
+  bumpTokenVersion(userId);
   logActivity(req.user!.id, 'user', userId, 'password_reset');
   res.json({ ok: true });
 });
@@ -300,6 +310,7 @@ orgRouter.post('/users/:id/active', requireAuth, requireCeo, (req, res) => {
     }
   }
   db.prepare('UPDATE users SET active = ? WHERE id = ?').run(activate ? 1 : 0, userId);
+  if (!activate) bumpTokenVersion(userId); // belt-and-braces with the active check
   logActivity(req.user!.id, 'user', userId, activate ? 'reactivated' : 'deactivated');
   res.json({ ok: true });
 });

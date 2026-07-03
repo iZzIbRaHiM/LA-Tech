@@ -39,7 +39,12 @@ export default function Attachments({
     try {
       const res = await fetch(
         `/api/attachments?entity_type=${entityType}&entity_id=${entityId}&filename=${encodeURIComponent(file.name)}`,
-        { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/octet-stream' }, body: file }
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/octet-stream', 'X-Requested-With': 'latech-portal' },
+          body: file,
+        }
       );
       if (!res.ok) throw new Error((await res.json())?.error ?? 'Upload failed');
       load();

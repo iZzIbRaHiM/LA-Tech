@@ -172,6 +172,9 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN finance_access INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE tasks ADD COLUMN due_notified INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
+  // Session revocation: JWTs carry this version; bumping it invalidates
+  // every outstanding session for the user.
+  "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0",
 ]) {
   try {
     db.exec(stmt);
@@ -189,7 +192,7 @@ export function seedCeo() {
   db.prepare('INSERT INTO users (name, email, password_hash, is_ceo) VALUES (?, ?, ?, 1)').run(
     'CEO',
     CEO_EMAIL,
-    bcrypt.hashSync(CEO_PASSWORD, 10)
+    bcrypt.hashSync(CEO_PASSWORD, 12)
   );
   console.log(`[seed] CEO account created: ${CEO_EMAIL} / ${CEO_PASSWORD} (change after first login)`);
 }

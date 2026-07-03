@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db';
-import { requireAuth, userCanSeeProject } from './auth';
+import { requireAuth } from './auth';
+import { taskVisibilityWhere, userCanSeeProject } from './policy';
 
 export const tasksRouter = Router();
 
@@ -14,13 +15,7 @@ const TASK_SELECT = `
   LEFT JOIN projects p ON p.id = t.project_id
 `;
 
-// Visibility (PRD §5): CEO all; Head their department's tasks; Employee own assigned only.
-function taskVisibilityWhere(user: NonNullable<Express.Request['user']>): { where: string; params: unknown[] } {
-  if (user.isCeo) return { where: '1=1', params: [] };
-  if (user.role === 'head') return { where: 't.department_id = ?', params: [user.departmentId] };
-  return { where: 't.assigned_to = ?', params: [user.id] };
-}
-
+// Visibility predicates live in policy.ts (the RLS layer).
 tasksRouter.get('/tasks', requireAuth, (req, res) => {
   const { where, params } = taskVisibilityWhere(req.user!);
   const rows = db.prepare(`${TASK_SELECT} WHERE ${where} ORDER BY t.created_at DESC`).all(...params);

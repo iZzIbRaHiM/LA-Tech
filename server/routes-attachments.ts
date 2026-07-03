@@ -5,7 +5,8 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { db, logActivity } from './db';
-import { requireAuth, hasFinanceAccess, type SessionUser } from './auth';
+import { requireAuth } from './auth';
+import { canAccessAttachmentEntity as canAccessEntity } from './policy';
 
 export const attachmentsRouter = Router();
 
@@ -14,27 +15,9 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 
-// Every attachment operation re-checks the OWNING entity's permission —
-// there is no public file serving, so finance receipts stay CEO/delegate-only
-// and task files stay within the task's visibility.
-function canAccessEntity(user: SessionUser, entityType: string, entityId: number): boolean {
-  if (entityType === 'finance') {
-    if (!hasFinanceAccess(user)) return false;
-    return !!db.prepare('SELECT 1 FROM finance_entries WHERE id = ?').get(entityId);
-  }
-  if (entityType === 'task') {
-    const task = db.prepare('SELECT department_id, assigned_to FROM tasks WHERE id = ?').get(entityId) as
-      | { department_id: number; assigned_to: number | null }
-      | undefined;
-    if (!task) return false;
-    return (
-      user.isCeo ||
-      (user.role === 'head' && user.departmentId === task.department_id) ||
-      task.assigned_to === user.id
-    );
-  }
-  return false;
-}
+// Every attachment operation re-checks the OWNING entity's permission via the
+// policy layer — there is no public file serving, so finance receipts stay
+// finance-only and task files stay within the task's visibility.
 
 attachmentsRouter.get('/attachments', requireAuth, (req, res) => {
   const entityType = String(req.query.entity_type ?? '');

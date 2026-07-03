@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db';
-import { requireAuth, type SessionUser } from './auth';
+import { requireAuth } from './auth';
+import { canDecideLeave } from './policy';
 
 export const leaveRouter = Router();
 
@@ -12,17 +13,6 @@ interface LeaveRow {
   end_date: string;
   reason: string;
   status: string;
-}
-
-// Same authority model as attendance: CEO decides anyone's request; a head
-// decides their own department members'; nobody decides their own.
-function canDecide(actor: SessionUser, request: LeaveRow): boolean {
-  if (request.user_id === actor.id) return false;
-  if (actor.isCeo) return true;
-  if (actor.role !== 'head') return false;
-  return !!db
-    .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
-    .get(request.user_id, actor.departmentId);
 }
 
 leaveRouter.post('/leave', requireAuth, (req, res) => {
@@ -87,7 +77,7 @@ leaveRouter.post('/leave/:id/decide', requireAuth, (req, res) => {
     | LeaveRow
     | undefined;
   if (!request) return res.status(404).json({ error: 'Not found' });
-  if (!canDecide(user, request)) return res.status(403).json({ error: 'Not authorized to decide this request' });
+  if (!canDecideLeave(user, request)) return res.status(403).json({ error: 'Not authorized to decide this request' });
   if (request.status !== 'pending') return res.status(409).json({ error: 'Already decided' });
 
   const { status } = req.body ?? {};

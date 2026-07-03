@@ -13,7 +13,12 @@ export async function api<T = unknown>(
   const res = await fetch(`/api${path}`, {
     method: opts.method ?? 'GET',
     credentials: 'include',
-    headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      // CSRF guard: the server rejects mutations without this custom header,
+      // which cross-origin pages cannot attach without a CORS preflight.
+      'X-Requested-With': 'latech-portal',
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (!res.ok) {
