@@ -1,73 +1,56 @@
-# React + TypeScript + Vite
+# LA Tech Solutions — Website + Company Portal
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Marketing site (React 19 + Vite + Tailwind + shadcn/Radix, 3D hero via react-three-fiber) with an internal **company portal** at `/portal`.
 
-Currently, two official plugins are available:
+## Portal features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Roles**: CEO (super admin) → Department Heads → Employees. Roles derive from org placement, not a standalone field.
+- **People** (CEO): create user accounts (email + one-time temp password), reset passwords, deactivate/reactivate (deactivation ends live sessions immediately), grant finance access. Users see a banner until they replace their temp password.
+- **Org management** (CEO): create departments, assign users from the unassigned pool, assign one head per department. Account lifecycle (People) and org placement (Departments) are separate steps.
+- **Auth hardening**: bcrypt password hashes, httpOnly session cookies (secure flag in production), login rate limiting (10 attempts / 15 min per email+IP), deactivated accounts indistinguishable from bad credentials at login.
+- **Tasks**: CEO assigns to departments (auto-assigns the head); heads split work into sub-tasks for their own team only; employees see only their assigned tasks. Board / list / table views, comments, notifications.
+- **Projects** (CEO-only creation): per-department visibility allow-list — departments not granted access cannot see a project exists.
+- **Finance** (CEO-only, enforced at the API layer): per-project ledger (budget / expense / income), portfolio dashboard, CSV export, audit-logged mutations.
+- **Attendance**: everyone checks in/out; department heads validate their team's records, the CEO validates heads.
+- **Search** (Ctrl+K): permission-scoped — never returns results the viewer isn't authorized to see.
 
-## React Compiler
+## Run
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Requires Node 22.5+ (uses the built-in `node:sqlite` — no native builds).
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm install
+pnpm run server   # API on :5184 (seeds CEO account on first run)
+pnpm run dev      # site + portal on :3000 (proxies /api to :5184)
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+First login: `ceo@latechs.org` / `ChangeMe123!` — change it via the key icon in the portal sidebar. Override the seed with `CEO_EMAIL` / `CEO_PASSWORD` env vars; set `JWT_SECRET` in production.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Production
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+pnpm run build    # outputs dist/
+pnpm run server   # serves dist/ + API from one process (SPA fallback included)
+```
+
+The SQLite database lives at `server/data/portal.db` (gitignored).
+
+## Security tests
+
+The permission matrix is enforced server-side and verified by an isolation suite that attempts every forbidden cross-boundary access (non-CEO fetching finance, ungranted department fetching a project, head assigning outside their department, cross-department attendance validation, search leaks):
+
+```bash
+pnpm run server                     # in one terminal
+node server/isolation-tests.mjs    # in another — self-contained, re-runnable
+```
+
+All checks must pass before shipping changes that touch authorization.
+
+## Structure
+
+```
+server/            Express API (auth, org, tasks, projects, finance, attendance)
+src/portal/        Portal frontend (React Router at /portal/*)
+src/sections/      Marketing site sections (Hero has the 3D particle network)
+src/components/ui/ shadcn component library (shared by site + portal)
 ```

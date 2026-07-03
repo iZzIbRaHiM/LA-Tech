@@ -1,157 +1,22 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import HeroScene from './HeroScene';
 
 gsap.registerPlugin(ScrollTrigger);
 
-function generateHeroImage(): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1920;
-  canvas.height = 1080;
-  const ctx = canvas.getContext('2d')!;
-
-  // 1. Fill background
-  ctx.fillStyle = '#09090B';
-  ctx.fillRect(0, 0, 1920, 1080);
-
-  // 2. Grid setup
-  const cols = 40;
-  const rows = 25;
-  const spacingX = 1920 / cols;
-  const spacingY = 1080 / rows;
-
-  // 3. Generate nodes
-  interface Node {
-    x: number;
-    y: number;
-    r: number;
-  }
-  const nodes: Node[] = [];
-
-  for (let i = 0; i < cols; i++) {
-    for (let j = 0; j < rows; j++) {
-      if (Math.random() < 0.25) {
-        const x = i * spacingX + spacingX / 2;
-        const y = j * spacingY + spacingY / 2;
-        const r = 2 + Math.random() * 4;
-        nodes.push({ x, y, r });
-      }
-    }
-  }
-
-  // 4. Draw connections
-  const connectionDist = 150;
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const dx = nodes[i].x - nodes[j].x;
-      const dy = nodes[i].y - nodes[j].y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < connectionDist) {
-        const opacity = 0.15 * (1 - dist / connectionDist);
-        ctx.strokeStyle = `rgba(223, 225, 4, ${opacity})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(nodes[i].x, nodes[i].y);
-        ctx.lineTo(nodes[j].x, nodes[j].y);
-        ctx.stroke();
-      }
-    }
-  }
-
-  // 5. Draw nodes
-  for (const node of nodes) {
-    ctx.fillStyle = `rgba(223, 225, 4, 0.6)`;
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // 6. Data streams (Catmull-Rom splines)
-  function catmullRomToBezier(points: { x: number; y: number }[]): { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] {
-    const result: { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[Math.max(i - 1, 0)];
-      const p1 = points[i];
-      const p2 = points[Math.min(i + 1, points.length - 1)];
-      const p3 = points[Math.min(i + 2, points.length - 1)];
-
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-      result.push({
-        cp1: { x: cp1x, y: cp1y },
-        cp2: { x: cp2x, y: cp2y },
-        end: { x: p2.x, y: p2.y },
-      });
-    }
-    return result;
-  }
-
-  for (let s = 0; s < 10; s++) {
-    const numPoints = 4 + Math.floor(Math.random() * 5);
-    const points: { x: number; y: number }[] = [];
-    for (let p = 0; p < numPoints; p++) {
-      points.push({
-        x: (p / (numPoints - 1)) * 1920,
-        y: Math.random() * 1080,
-      });
-    }
-
-    const segments = catmullRomToBezier(points);
-    ctx.strokeStyle = 'rgba(223, 225, 4, 0.15)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (const seg of segments) {
-      ctx.bezierCurveTo(seg.cp1.x, seg.cp1.y, seg.cp2.x, seg.cp2.y, seg.end.x, seg.end.y);
-    }
-    ctx.stroke();
-
-    // Dots along the path
-    for (let d = 0; d < 6; d++) {
-      const t = d / 5;
-      const idx = Math.min(Math.floor(t * segments.length), segments.length - 1);
-      const seg = segments[idx];
-      const localT = (t * segments.length) - idx;
-      const dotX = (1 - localT) * (1 - localT) * (1 - localT) * points[idx].x +
-        3 * (1 - localT) * (1 - localT) * localT * seg.cp1.x +
-        3 * (1 - localT) * localT * localT * seg.cp2.x +
-        localT * localT * localT * seg.end.x;
-      const dotY = (1 - localT) * (1 - localT) * (1 - localT) * points[idx].y +
-        3 * (1 - localT) * (1 - localT) * localT * seg.cp1.y +
-        3 * (1 - localT) * localT * localT * seg.cp2.y +
-        localT * localT * localT * seg.end.y;
-      ctx.fillStyle = 'rgba(223, 225, 4, 0.5)';
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  return canvas.toDataURL('image/png');
-}
-
 export default function Hero() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
+  const sceneWrapRef = useRef<HTMLDivElement>(null);
   const title1Ref = useRef<HTMLDivElement>(null);
   const title2Ref = useRef<HTMLDivElement>(null);
   const subtitleRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLAnchorElement>(null);
-  const [heroImage, setHeroImage] = useState<string>('');
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    // Generate the hero image
-    const img = generateHeroImage();
-    setHeroImage(img);
-  }, []);
-
-  useEffect(() => {
-    if (!heroImage || !containerRef.current || !imgRef.current) return;
+    if (!containerRef.current || !sceneWrapRef.current) return;
 
     const ctx = gsap.context(() => {
       // Entrance animations
@@ -188,7 +53,7 @@ export default function Hero() {
           start: 'top top',
           end: 'bottom top',
           scrub: true,
-          animation: gsap.to(imgRef.current, {
+          animation: gsap.to(sceneWrapRef.current, {
             scale: 1.3,
             ease: 'none',
           }),
@@ -200,7 +65,7 @@ export default function Hero() {
           start: 'top top',
           end: '50% top',
           scrub: true,
-          animation: gsap.to(imgRef.current, {
+          animation: gsap.to(sceneWrapRef.current, {
             opacity: 0,
             ease: 'none',
           }),
@@ -214,7 +79,7 @@ export default function Hero() {
     }, containerRef);
 
     return () => ctx.revert();
-  }, [heroImage, reducedMotion]);
+  }, [reducedMotion]);
 
   const handleCtaClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -228,24 +93,36 @@ export default function Hero() {
       className="relative overflow-hidden"
       style={{ height: '100vh' }}
     >
-      {/* Procedural Background Image */}
-      {heroImage && (
-        <img
-          ref={imgRef}
-          src={heroImage}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-          style={{
-            filter: 'grayscale(100%) contrast(120%)',
-            mixBlendMode: 'overlay',
-          }}
-        />
-      )}
+      {/* Radial glow backdrop */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(60% 50% at 50% 45%, rgba(223,225,4,0.08) 0%, rgba(9,9,11,0) 70%)',
+        }}
+      />
+
+      {/* 3D Particle Network (static image for reduced-motion visitors) */}
+      <div
+        ref={sceneWrapRef}
+        className="absolute inset-0 pointer-events-none"
+      >
+        {reducedMotion ? (
+          <img
+            src="/images/hero-network-fallback.png"
+            alt=""
+            className="w-full h-full object-cover"
+            style={{ opacity: 0.55 }}
+          />
+        ) : (
+          <HeroScene />
+        )}
+      </div>
 
       {/* Dark Overlay */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ backgroundColor: '#09090B', opacity: 0.6 }}
+        style={{ backgroundColor: '#09090B', opacity: 0.35 }}
       />
 
       {/* Content */}

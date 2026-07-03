@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Portal server local data
+server/data/
+
+# Local dev tooling
+.claude/
+server/uploads/
