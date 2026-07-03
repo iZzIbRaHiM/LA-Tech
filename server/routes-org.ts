@@ -6,15 +6,43 @@ import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser } 
 export const orgRouter = Router();
 
 // ---------- Auth ----------
+// Brute-force guard: sliding 15-minute window per email+IP, in memory.
+// Good enough for a single-process deployment; swap for a shared store if
+// this ever runs behind multiple instances.
+const loginAttempts = new Map<string, number[]>();
+const WINDOW_MS = 15 * 60 * 1000;
+const MAX_ATTEMPTS = 10;
+
+function tooManyAttempts(key: string): boolean {
+  const now = Date.now();
+  const recent = (loginAttempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
+  loginAttempts.set(key, recent);
+  return recent.length >= MAX_ATTEMPTS;
+}
+
+function recordAttempt(key: string) {
+  const list = loginAttempts.get(key) ?? [];
+  list.push(Date.now());
+  loginAttempts.set(key, list);
+}
+
 orgRouter.post('/auth/login', (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const row = db.prepare('SELECT id, password_hash FROM users WHERE email = ?').get(email) as
-    | { id: number; password_hash: string }
+  const key = `${String(email).toLowerCase()}|${req.ip}`;
+  if (tooManyAttempts(key)) {
+    return res.status(429).json({ error: 'Too many attempts — try again in 15 minutes' });
+  }
+  const row = db.prepare('SELECT id, password_hash, active FROM users WHERE email = ?').get(email) as
+    | { id: number; password_hash: string; active: number }
     | undefined;
-  if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+  // Deactivated accounts fail with the same message as bad credentials so
+  // the response doesn't reveal which accounts exist or their status.
+  if (!row || !row.active || !bcrypt.compareSync(password, row.password_hash)) {
+    recordAttempt(key);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+  loginAttempts.delete(key);
   issueSession(res, row.id);
   res.json({ user: loadSessionUser(row.id) });
 });
@@ -75,6 +103,10 @@ orgRouter.get('/departments', requireAuth, (req, res) => {
 orgRouter.post('/departments', requireAuth, requireCeo, (req, res) => {
   const { name } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  const dup = db
+    .prepare('SELECT 1 FROM departments WHERE name = ? COLLATE NOCASE AND archived_at IS NULL')
+    .get(name.trim());
+  if (dup) return res.status(409).json({ error: 'A department with this name already exists' });
   const info = db
     .prepare('INSERT INTO departments (name, created_by) VALUES (?, ?)')
     .run(name.trim(), req.user!.id);
@@ -96,6 +128,14 @@ orgRouter.patch('/departments/:id', requireAuth, requireCeo, (req, res) => {
     if (openTasks.c > 0) {
       return res.status(409).json({ error: `Department has ${openTasks.c} open task(s); reassign or complete them first` });
     }
+    // Archiving with members would strand them in a department that no
+    // longer appears anywhere (memberships would point at a hidden row).
+    const members = db.prepare('SELECT COUNT(*) AS c FROM memberships WHERE department_id = ?').get(id) as {
+      c: number;
+    };
+    if (members.c > 0) {
+      return res.status(409).json({ error: `Department still has ${members.c} member(s); remove them first` });
+    }
     db.prepare("UPDATE departments SET archived_at = datetime('now') WHERE id = ?").run(id);
     logActivity(req.user!.id, 'department', id, 'archived');
   }
@@ -103,27 +143,28 @@ orgRouter.patch('/departments/:id', requireAuth, requireCeo, (req, res) => {
 });
 
 // ---------- Members ----------
+// Assignment only: users are created in the People section, then assigned
+// here from the unassigned pool. Keeps account lifecycle and org placement
+// as two separate, auditable steps.
 orgRouter.post('/departments/:id/members', requireAuth, requireCeo, (req, res) => {
   const departmentId = Number(req.params.id);
-  const { name, email, password, existingUserId } = req.body ?? {};
+  const dept = db.prepare('SELECT id FROM departments WHERE id = ? AND archived_at IS NULL').get(departmentId);
+  if (!dept) return res.status(404).json({ error: 'Department not found' });
 
-  let userId: number;
-  if (existingUserId) {
-    userId = Number(existingUserId);
-    const already = db.prepare('SELECT department_id FROM memberships WHERE user_id = ?').get(userId) as
-      | { department_id: number }
-      | undefined;
-    if (already) return res.status(409).json({ error: 'User already belongs to a department (one department per user in v1)' });
-  } else {
-    if (!name?.trim() || !email?.trim() || !password || String(password).length < 8) {
-      return res.status(400).json({ error: 'Name, email, and a password of 8+ characters required' });
-    }
-    const dup = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim());
-    if (dup) return res.status(409).json({ error: 'A user with this email already exists' });
-    const info = db
-      .prepare('INSERT INTO users (name, email, password_hash, must_change_password) VALUES (?, ?, ?, 1)')
-      .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 10));
-    userId = Number(info.lastInsertRowid);
+  const userId = Number(req.body?.userId ?? req.body?.existingUserId);
+  if (!userId) return res.status(400).json({ error: 'userId required — create the user in People first' });
+
+  const target = db.prepare('SELECT id, is_ceo, active FROM users WHERE id = ?').get(userId) as
+    | { id: number; is_ceo: number; active: number }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_ceo) return res.status(400).json({ error: 'The CEO is not assignable to a department' });
+  if (!target.active) return res.status(400).json({ error: 'User is deactivated' });
+  const already = db.prepare('SELECT department_id FROM memberships WHERE user_id = ?').get(userId) as
+    | { department_id: number }
+    | undefined;
+  if (already) {
+    return res.status(409).json({ error: 'User already belongs to a department (one department per user in v1)' });
   }
 
   db.prepare('INSERT INTO memberships (user_id, department_id, role) VALUES (?, ?, ?)').run(
@@ -176,14 +217,91 @@ orgRouter.post('/departments/:id/head', requireAuth, requireCeo, (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Users (People section — CEO only) ----------
 orgRouter.get('/users', requireAuth, requireCeo, (_req, res) => {
   const users = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, m.department_id, m.role
-       FROM users u LEFT JOIN memberships m ON m.user_id = u.id ORDER BY u.name`
+      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, u.active, u.must_change_password,
+              m.department_id, m.role, d.name AS department_name
+       FROM users u
+       LEFT JOIN memberships m ON m.user_id = u.id
+       LEFT JOIN departments d ON d.id = m.department_id
+       ORDER BY u.active DESC, u.name`
     )
     .all();
   res.json({ users });
+});
+
+orgRouter.post('/users', requireAuth, requireCeo, (req, res) => {
+  const { name, email, password } = req.body ?? {};
+  if (!name?.trim() || !email?.trim()) return res.status(400).json({ error: 'Name and email required' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: 'Invalid email' });
+  if (!password || String(password).length < 8) {
+    return res.status(400).json({ error: 'Temporary password must be at least 8 characters' });
+  }
+  const dup = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim());
+  if (dup) return res.status(409).json({ error: 'A user with this email already exists' });
+  const info = db
+    .prepare('INSERT INTO users (name, email, password_hash, must_change_password) VALUES (?, ?, ?, 1)')
+    .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 10));
+  logActivity(req.user!.id, 'user', Number(info.lastInsertRowid), 'created', { email: email.trim() });
+  res.json({ id: Number(info.lastInsertRowid) });
+});
+
+// Reset password: the only recovery path (no email-based reset by design —
+// this is an internal tool and the CEO hands the temp password over directly).
+orgRouter.post('/users/:id/reset-password', requireAuth, requireCeo, (req, res) => {
+  const userId = Number(req.params.id);
+  const target = db.prepare('SELECT id, is_ceo FROM users WHERE id = ?').get(userId) as
+    | { id: number; is_ceo: number }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_ceo) return res.status(400).json({ error: 'Use change-password for your own account' });
+  const { password } = req.body ?? {};
+  if (!password || String(password).length < 8) {
+    return res.status(400).json({ error: 'Temporary password must be at least 8 characters' });
+  }
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(
+    bcrypt.hashSync(String(password), 10),
+    userId
+  );
+  logActivity(req.user!.id, 'user', userId, 'password_reset');
+  res.json({ ok: true });
+});
+
+// Deactivate/reactivate. Deactivation removes the membership (after the same
+// open-task check as member removal) and kills any live session immediately,
+// since sessions re-resolve the user on every request.
+orgRouter.post('/users/:id/active', requireAuth, requireCeo, (req, res) => {
+  const userId = Number(req.params.id);
+  const target = db.prepare('SELECT id, is_ceo, active FROM users WHERE id = ?').get(userId) as
+    | { id: number; is_ceo: number; active: number }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_ceo) return res.status(400).json({ error: 'The CEO account cannot be deactivated' });
+
+  const activate = req.body?.active === true;
+  if (!activate) {
+    const openTasks = db
+      .prepare("SELECT COUNT(*) AS c FROM tasks WHERE assigned_to = ? AND status != 'done'")
+      .get(userId) as { c: number };
+    if (openTasks.c > 0) {
+      return res.status(409).json({ error: `User has ${openTasks.c} open task(s); reassign them first` });
+    }
+    const membership = db.prepare('SELECT department_id FROM memberships WHERE user_id = ?').get(userId) as
+      | { department_id: number }
+      | undefined;
+    if (membership) {
+      db.prepare('UPDATE departments SET head_user_id = NULL WHERE id = ? AND head_user_id = ?').run(
+        membership.department_id,
+        userId
+      );
+      db.prepare('DELETE FROM memberships WHERE user_id = ?').run(userId);
+    }
+  }
+  db.prepare('UPDATE users SET active = ? WHERE id = ?').run(activate ? 1 : 0, userId);
+  logActivity(req.user!.id, 'user', userId, activate ? 'reactivated' : 'deactivated');
+  res.json({ ok: true });
 });
 
 // Finance delegate: CEO grants/revokes scoped finance access (PRD §4.4's

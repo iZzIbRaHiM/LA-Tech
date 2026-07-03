@@ -37,7 +37,11 @@ tasksRouter.get('/tasks/:id', requireAuth, (req, res) => {
        JOIN users u ON u.id = tc.author_id WHERE tc.task_id = ? ORDER BY tc.created_at`
     )
     .all(Number(req.params.id));
-  const subtasks = db.prepare(`${TASK_SELECT} WHERE t.parent_task_id = ?`).all(Number(req.params.id));
+  // Sub-tasks are scoped by the same visibility predicate as the main list —
+  // an employee viewing their own task must not see teammates' sub-tasks (§5).
+  const subtasks = db
+    .prepare(`${TASK_SELECT} WHERE t.parent_task_id = ? AND ${where}`)
+    .all(Number(req.params.id), ...params);
   res.json({ task, comments, subtasks });
 });
 
@@ -84,6 +88,18 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
   // Linking a project requires the creator to be able to see it.
   if (projectId && !userCanSeeProject(user, Number(projectId))) {
     return res.status(403).json({ error: 'No access to that project' });
+  }
+
+  // A sub-task must hang off a task in the same department — otherwise the
+  // parent's owner could never see it and the hierarchy silently forks.
+  if (parentTaskId) {
+    const parent = db.prepare('SELECT department_id FROM tasks WHERE id = ?').get(Number(parentTaskId)) as
+      | { department_id: number }
+      | undefined;
+    if (!parent) return res.status(404).json({ error: 'Parent task not found' });
+    if (parent.department_id !== targetDept) {
+      return res.status(400).json({ error: 'Sub-task must belong to the same department as its parent' });
+    }
   }
 
   const info = db
@@ -146,7 +162,11 @@ tasksRouter.patch('/tasks/:id', requireAuth, (req, res) => {
   if (status) fields.push(['status', status]);
   if (canManage) {
     if (priority) fields.push(['priority', priority]);
-    if (dueDate !== undefined) fields.push(['due_date', dueDate]);
+    if (dueDate !== undefined) {
+      fields.push(['due_date', dueDate]);
+      // A new due date deserves a new reminder.
+      fields.push(['due_notified', 0]);
+    }
     if (title?.trim()) fields.push(['title', title.trim()]);
     if (description !== undefined) fields.push(['description', description]);
   }

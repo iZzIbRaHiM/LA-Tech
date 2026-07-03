@@ -13,6 +13,7 @@ import {
   KeyRound,
   CalendarDays,
   ScrollText,
+  UserCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,7 +57,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -78,6 +79,7 @@ export default function Layout() {
       setPwOpen(false);
       setPwForm({ current: '', next: '' });
       toast.success('Password changed');
+      refresh(); // clears the temp-password banner
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     }
@@ -114,6 +116,7 @@ export default function Layout() {
 
   const nav = [
     { to: '/portal', label: 'Dashboard', icon: LayoutDashboard, end: true },
+    ...(user?.isCeo ? [{ to: '/portal/people', label: 'People', icon: UserCog }] : []),
     { to: '/portal/departments', label: 'Departments', icon: Users },
     { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
@@ -216,6 +219,21 @@ export default function Layout() {
             </PopoverContent>
           </Popover>
         </header>
+        {/* Temp-password banner: users onboard with a CEO-issued password and
+            must not keep using it — soft-enforced until they change it. */}
+        {user?.mustChangePassword && (
+          <div className="shrink-0 bg-[#DFE104]/10 border-b border-[#DFE104]/30 px-4 py-2 text-sm text-[#DFE104] flex items-center justify-between">
+            <span>You are using a temporary password — set your own to secure your account.</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-[#DFE104]/40 text-[#DFE104] hover:bg-[#DFE104]/10"
+              onClick={() => setPwOpen(true)}
+            >
+              Change password
+            </Button>
+          </div>
+        )}
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

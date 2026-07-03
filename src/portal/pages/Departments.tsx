@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { Plus, Crown, UserMinus, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,21 +12,34 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, type Department } from '../api';
+import type { PortalUser } from './People';
 
 export default function Departments() {
   const { user } = useAuth();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [newDeptName, setNewDeptName] = useState('');
   const [addingTo, setAddingTo] = useState<Department | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [unassigned, setUnassigned] = useState<PortalUser[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
 
   const load = useCallback(() => {
     api<{ departments: Department[] }>('/departments')
       .then((r) => setDepartments(r.departments))
       .catch((e) => toast.error(e.message));
+    // Assignment pool: active, non-CEO users without a department.
+    api<{ users: PortalUser[] }>('/users')
+      .then((r) => setUnassigned(r.users.filter((u) => u.active && !u.is_ceo && u.department_id == null)))
+      .catch(() => {}); // non-CEO viewers can't list users; they also can't assign
   }, []);
   useEffect(load, [load]);
 
@@ -42,12 +56,12 @@ export default function Departments() {
   };
 
   const addMember = async () => {
-    if (!addingTo) return;
+    if (!addingTo || !selectedUserId) return;
     try {
-      await api(`/departments/${addingTo.id}/members`, { method: 'POST', body: form });
-      toast.success(`${form.name} added — temp password: ${form.password} (share it once, they should change it)`);
+      await api(`/departments/${addingTo.id}/members`, { method: 'POST', body: { userId: Number(selectedUserId) } });
+      toast.success('Member assigned');
       setAddingTo(null);
-      setForm({ name: '', email: '', password: '' });
+      setSelectedUserId('');
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -190,31 +204,42 @@ export default function Departments() {
       </div>
 
       <Dialog open={!!addingTo} onOpenChange={(o) => !o && setAddingTo(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add member to {addingTo?.name}</DialogTitle>
+            <DialogTitle>Assign member to {addingTo?.name}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          {unassigned.length === 0 ? (
+            <p className="text-sm text-[#A1A1AA]">
+              No unassigned users available. Create one in the{' '}
+              <Link to="/portal/people" className="text-[#DFE104] hover:underline">
+                People
+              </Link>{' '}
+              section first.
+            </p>
+          ) : (
             <div className="space-y-1.5">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Label>Unassigned user</Label>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a user" />
+                </SelectTrigger>
+                <SelectContent>
+                  {unassigned.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.name} ({u.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Temporary password (8+ chars — shown once, share it with them)</Label>
-              <Input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            </div>
-          </div>
+          )}
           <DialogFooter>
-            <Button onClick={addMember} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
-              Add member
+            <Button
+              onClick={addMember}
+              disabled={!selectedUserId}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
+            >
+              Assign
             </Button>
           </DialogFooter>
         </DialogContent>

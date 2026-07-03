@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS milestones (
 for (const stmt of [
   "ALTER TABLE users ADD COLUMN finance_access INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE tasks ADD COLUMN due_notified INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1",
 ]) {
   try {
     db.exec(stmt);

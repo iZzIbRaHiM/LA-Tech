@@ -69,33 +69,19 @@ const denied = (r) => r.status === 401 || r.status === 403 || r.status === 404;
 async function main() {
   await login('ceo', CEO_EMAIL, CEO_PASSWORD);
 
-  // ---- Fixtures: two departments, three users, one project visible to A only ----
+  // ---- Fixtures: users created via People (POST /users), then assigned ----
   console.log(`Setting up fixtures (run ${TS})…`);
   const deptA = (await must('ceo', 'POST', '/departments', { name: `IsoTest Tech ${TS}` })).id;
   const deptB = (await must('ceo', 'POST', '/departments', { name: `IsoTest Mkt ${TS}` })).id;
 
-  const aHead = (
-    await must('ceo', 'POST', `/departments/${deptA}/members`, {
-      name: 'Iso A-Head',
-      email: `iso.ahead.${TS}@latechs.org`,
-      password: PW,
-    })
-  ).userId;
-  const aMember = (
-    await must('ceo', 'POST', `/departments/${deptA}/members`, {
-      name: 'Iso A-Member',
-      email: `iso.amember.${TS}@latechs.org`,
-      password: PW,
-    })
-  ).userId;
-  const bHead = (
-    await must('ceo', 'POST', `/departments/${deptB}/members`, {
-      name: 'Iso B-Head',
-      email: `iso.bhead.${TS}@latechs.org`,
-      password: PW,
-    })
-  ).userId;
+  const mkUser = async (name, email) => (await must('ceo', 'POST', '/users', { name, email, password: PW })).id;
+  const aHead = await mkUser('Iso A-Head', `iso.ahead.${TS}@latechs.org`);
+  const aMember = await mkUser('Iso A-Member', `iso.amember.${TS}@latechs.org`);
+  const bHead = await mkUser('Iso B-Head', `iso.bhead.${TS}@latechs.org`);
 
+  await must('ceo', 'POST', `/departments/${deptA}/members`, { userId: aHead });
+  await must('ceo', 'POST', `/departments/${deptA}/members`, { userId: aMember });
+  await must('ceo', 'POST', `/departments/${deptB}/members`, { userId: bHead });
   await must('ceo', 'POST', `/departments/${deptA}/head`, { userId: aHead });
   await must('ceo', 'POST', `/departments/${deptB}/head`, { userId: bHead });
 
@@ -286,6 +272,75 @@ async function main() {
   await must('ceo', 'POST', `/users/${bHead}/finance-access`, { grant: false });
   const revokedRead = await req('bhead', 'GET', '/finance/overview');
   check('bhead DENIED finance after revoke', denied(revokedRead), `got ${revokedRead.status}`);
+
+  console.log('\n== User lifecycle security ==');
+  // Only the CEO manages accounts.
+  const headCreate = await req('ahead', 'POST', '/users', { name: 'X', email: `iso.x.${TS}@latechs.org`, password: PW });
+  check('ahead DENIED creating users', denied(headCreate), `got ${headCreate.status}`);
+  const headReset = await req('ahead', 'POST', `/users/${aMember}/reset-password`, { password: PW });
+  check('ahead DENIED resetting passwords', denied(headReset), `got ${headReset.status}`);
+  const headDeact = await req('ahead', 'POST', `/users/${aMember}/active`, { active: false });
+  check('ahead DENIED deactivating users', denied(headDeact), `got ${headDeact.status}`);
+  // Assigning an already-assigned user is rejected (one department per user).
+  const doubleAssign = await req('ceo', 'POST', `/departments/${deptB}/members`, { userId: aMember });
+  check('CEO DENIED assigning already-assigned user', doubleAssign.status === 409, `got ${doubleAssign.status}`);
+  // Weak temp passwords rejected.
+  const weakPw = await req('ceo', 'POST', '/users', { name: 'Weak', email: `iso.weak.${TS}@latechs.org`, password: 'short' });
+  check('CEO DENIED creating user with weak password', weakPw.status === 400, `got ${weakPw.status}`);
+  // Duplicate email rejected.
+  const dupEmail = await req('ceo', 'POST', '/users', { name: 'Dup', email: `iso.ahead.${TS}@latechs.org`, password: PW });
+  check('CEO DENIED duplicate email', dupEmail.status === 409, `got ${dupEmail.status}`);
+  // Deactivation kills login AND the live session.
+  const victim = (await must('ceo', 'POST', '/users', { name: 'Iso Victim', email: `iso.victim.${TS}@latechs.org`, password: PW })).id;
+  await login('victim', `iso.victim.${TS}@latechs.org`, PW);
+  const victimBefore = await req('victim', 'GET', '/auth/me');
+  check('victim session works before deactivation', victimBefore.status === 200, `got ${victimBefore.status}`);
+  await must('ceo', 'POST', `/users/${victim}/active`, { active: false });
+  const victimAfter = await req('victim', 'GET', '/auth/me');
+  check('victim session dead after deactivation', victimAfter.status === 401, `got ${victimAfter.status}`);
+  const victimLogin = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `iso.victim.${TS}@latechs.org`, password: PW }),
+  });
+  check('deactivated user DENIED login', victimLogin.status === 401, `got ${victimLogin.status}`);
+  const assignInactive = await req('ceo', 'POST', `/departments/${deptA}/members`, { userId: victim });
+  check('CEO DENIED assigning deactivated user', assignInactive.status === 400, `got ${assignInactive.status}`);
+  // Archiving a department with members is blocked.
+  const archiveWithMembers = await req('ceo', 'PATCH', `/departments/${deptA}`, { archive: true });
+  check('CEO DENIED archiving department with members', archiveWithMembers.status === 409, `got ${archiveWithMembers.status}`);
+  // Login rate limiting: 10 bad attempts → 429.
+  for (let i = 0; i < 10; i++) {
+    await fetch(`${BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `iso.brute.${TS}@latechs.org`, password: 'wrong' }),
+    });
+  }
+  const brute = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: `iso.brute.${TS}@latechs.org`, password: 'wrong' }),
+  });
+  check('login rate-limited after repeated failures', brute.status === 429, `got ${brute.status}`);
+
+  console.log('\n== Sub-task scoping (§5) ==');
+  // A parent task assigned to amember, with one sub for amember and one sub
+  // for aHead: amember opening the parent must see only their own sub.
+  const parent2 = (await must('ahead', 'POST', '/tasks', { title: `Iso parent2 ${TS}`, assignedTo: aMember })).id;
+  await must('ahead', 'POST', '/tasks', { title: `Iso sub mine ${TS}`, assignedTo: aMember, parentTaskId: parent2 });
+  const otherSub = (
+    await must('ahead', 'POST', '/tasks', { title: `Iso sub other ${TS}`, assignedTo: aHead, parentTaskId: parent2 })
+  ).id;
+  const parentView = await req('amember', 'GET', `/tasks/${parent2}`);
+  const subLeak = (parentView.json?.subtasks ?? []).some((s) => s.id === otherSub);
+  check("amember's parent view hides teammates' sub-tasks", parentView.status === 200 && !subLeak, `leak=${subLeak}`);
+  const crossParent = await req('ahead', 'POST', '/tasks', {
+    title: 'bad parent',
+    assignedTo: aMember,
+    parentTaskId: 999999,
+  });
+  check('sub-task with nonexistent parent rejected', crossParent.status === 404, `got ${crossParent.status}`);
 
   console.log('\n== Positive controls (grants that SHOULD work) ==');
   const sub = await req('ahead', 'POST', '/tasks', {

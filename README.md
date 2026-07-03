@@ -5,7 +5,9 @@ Marketing site (React 19 + Vite + Tailwind + shadcn/Radix, 3D hero via react-thr
 ## Portal features
 
 - **Roles**: CEO (super admin) → Department Heads → Employees. Roles derive from org placement, not a standalone field.
-- **Org management** (CEO): create departments, add members (email + one-time temp password), assign one head per department.
+- **People** (CEO): create user accounts (email + one-time temp password), reset passwords, deactivate/reactivate (deactivation ends live sessions immediately), grant finance access. Users see a banner until they replace their temp password.
+- **Org management** (CEO): create departments, assign users from the unassigned pool, assign one head per department. Account lifecycle (People) and org placement (Departments) are separate steps.
+- **Auth hardening**: bcrypt password hashes, httpOnly session cookies (secure flag in production), login rate limiting (10 attempts / 15 min per email+IP), deactivated accounts indistinguishable from bad credentials at login.
 - **Tasks**: CEO assigns to departments (auto-assigns the head); heads split work into sub-tasks for their own team only; employees see only their assigned tasks. Board / list / table views, comments, notifications.
 - **Projects** (CEO-only creation): per-department visibility allow-list — departments not granted access cannot see a project exists.
 - **Finance** (CEO-only, enforced at the API layer): per-project ledger (budget / expense / income), portfolio dashboard, CSV export, audit-logged mutations.

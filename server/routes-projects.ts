@@ -94,12 +94,34 @@ projectsRouter.patch('/projects/:id', requireAuth, requireCeo, (req, res) => {
   for (const [col, val] of sets) db.prepare(`UPDATE projects SET ${col} = ? WHERE id = ?`).run(val, id);
 
   if (Array.isArray(departmentIds)) {
+    const before = new Set(
+      (
+        db.prepare('SELECT department_id FROM project_visibility WHERE project_id = ?').all(id) as Array<{
+          department_id: number;
+        }>
+      ).map((r) => r.department_id)
+    );
+    const projectName = (db.prepare('SELECT name FROM projects WHERE id = ?').get(id) as { name: string }).name;
     db.prepare('DELETE FROM project_visibility WHERE project_id = ?').run(id);
     for (const deptId of departmentIds) {
       db.prepare('INSERT OR IGNORE INTO project_visibility (project_id, department_id) VALUES (?, ?)').run(
         id,
         Number(deptId)
       );
+      // Newly granted departments get the same heads-up as on project creation.
+      if (!before.has(Number(deptId))) {
+        const head = db.prepare('SELECT head_user_id FROM departments WHERE id = ?').get(Number(deptId)) as
+          | { head_user_id: number | null }
+          | undefined;
+        if (head?.head_user_id) {
+          notify(
+            head.head_user_id,
+            'project',
+            `Your department was granted access to project: ${projectName}`,
+            `/portal/projects/${id}`
+          );
+        }
+      }
     }
     logActivity(req.user!.id, 'project', id, 'visibility_changed', { departmentIds });
   }

@@ -52,6 +52,10 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 seedCeo();
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.warn('[SECURITY] JWT_SECRET is not set — sessions are signed with the dev default. Set JWT_SECRET before going live.');
+}
+
 // Due-date reminders: once at boot, then hourly.
 sendDueReminders();
 setInterval(sendDueReminders, 60 * 60 * 1000);

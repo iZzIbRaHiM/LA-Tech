@@ -35,6 +35,7 @@ export interface SessionUser {
   email: string;
   isCeo: boolean;
   financeAccess: boolean;
+  mustChangePassword: boolean;
   departmentId: number | null;
   role: 'ceo' | 'head' | 'member' | 'unassigned';
 }

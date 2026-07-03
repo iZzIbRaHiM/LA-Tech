@@ -11,6 +11,7 @@ export interface SessionUser {
   email: string;
   isCeo: boolean;
   financeAccess: boolean;
+  mustChangePassword: boolean;
   departmentId: number | null;
   role: 'ceo' | 'head' | 'member' | 'unassigned';
 }
@@ -29,7 +30,8 @@ declare global {
 export function loadSessionUser(userId: number): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, m.department_id, m.role AS mrole
+      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, u.must_change_password, u.active,
+              m.department_id, m.role AS mrole
        FROM users u LEFT JOIN memberships m ON m.user_id = u.id
        WHERE u.id = ?`
     )
@@ -40,17 +42,22 @@ export function loadSessionUser(userId: number): SessionUser | null {
         email: string;
         is_ceo: number;
         finance_access: number;
+        must_change_password: number;
+        active: number;
         department_id: number | null;
         mrole: string | null;
       }
     | undefined;
-  if (!row) return null;
+  // Deactivated users are cut off here, which also kills any live session
+  // cookie they still hold — sessions resolve through this on every request.
+  if (!row || !row.active) return null;
   return {
     id: row.id,
     name: row.name,
     email: row.email,
     isCeo: !!row.is_ceo,
     financeAccess: !!row.finance_access,
+    mustChangePassword: !!row.must_change_password,
     departmentId: row.department_id,
     role: row.is_ceo ? 'ceo' : row.mrole === 'head' ? 'head' : row.mrole === 'member' ? 'member' : 'unassigned',
   };
@@ -61,6 +68,7 @@ export function issueSession(res: Response, userId: number) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
     maxAge: 7 * 24 * 3600 * 1000,
   });
 }
