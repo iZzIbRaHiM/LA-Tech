@@ -8,34 +8,34 @@ export const extrasRouter = Router();
 // ---------- Milestones ----------
 // Read: anyone who can see the project. Create/delete: CEO (projects are his).
 // Toggle complete: CEO or a head whose department has visibility (they do the work).
-extrasRouter.get('/projects/:id/milestones', requireAuth, (req, res) => {
+extrasRouter.get('/projects/:id/milestones', requireAuth, async (req, res) => {
   const projectId = Number(req.params.id);
   if (!userCanSeeProject(req.user!, projectId)) return res.status(404).json({ error: 'Not found' });
-  const rows = db
+  const rows = await db
     .prepare('SELECT * FROM milestones WHERE project_id = ? ORDER BY position, due_date, id')
     .all(projectId);
   res.json({ milestones: rows });
 });
 
-extrasRouter.post('/projects/:id/milestones', requireAuth, requireCeo, (req, res) => {
+extrasRouter.post('/projects/:id/milestones', requireAuth, requireCeo, async (req, res) => {
   const projectId = Number(req.params.id);
-  const project = db.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId);
+  const project = await db.prepare('SELECT id, name FROM projects WHERE id = ?').get(projectId);
   if (!project) return res.status(404).json({ error: 'Not found' });
   const { title, dueDate } = req.body ?? {};
   if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
-  const max = db
+  const max = await db
     .prepare('SELECT COALESCE(MAX(position), 0) AS p FROM milestones WHERE project_id = ?')
     .get(projectId) as { p: number };
-  const info = db
+  const info = await db
     .prepare('INSERT INTO milestones (project_id, title, due_date, position) VALUES (?, ?, ?, ?)')
     .run(projectId, title.trim(), dueDate ?? null, max.p + 1);
-  logActivity(req.user!.id, 'project', projectId, 'milestone_added', { title });
+  await logActivity(req.user!.id, 'project', projectId, 'milestone_added', { title });
   res.json({ id: Number(info.lastInsertRowid) });
 });
 
-extrasRouter.patch('/milestones/:id', requireAuth, (req, res) => {
+extrasRouter.patch('/milestones/:id', requireAuth, async (req, res) => {
   const user = req.user!;
-  const milestone = db.prepare('SELECT * FROM milestones WHERE id = ?').get(Number(req.params.id)) as
+  const milestone = await db.prepare('SELECT * FROM milestones WHERE id = ?').get(Number(req.params.id)) as
     | { id: number; project_id: number; title: string; completed_at: string | null }
     | undefined;
   if (!milestone || !userCanSeeProject(user, milestone.project_id)) {
@@ -46,28 +46,28 @@ extrasRouter.patch('/milestones/:id', requireAuth, (req, res) => {
 
   const { completed, title, dueDate } = req.body ?? {};
   if (completed !== undefined) {
-    db.prepare("UPDATE milestones SET completed_at = ? WHERE id = ?").run(
+    await db.prepare("UPDATE milestones SET completed_at = ? WHERE id = ?").run(
       completed ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null,
       milestone.id
     );
-    logActivity(user.id, 'project', milestone.project_id, completed ? 'milestone_completed' : 'milestone_reopened', {
+    await logActivity(user.id, 'project', milestone.project_id, completed ? 'milestone_completed' : 'milestone_reopened', {
       title: milestone.title,
     });
   }
   if (user.isCeo) {
-    if (title?.trim()) db.prepare('UPDATE milestones SET title = ? WHERE id = ?').run(title.trim(), milestone.id);
-    if (dueDate !== undefined) db.prepare('UPDATE milestones SET due_date = ? WHERE id = ?').run(dueDate, milestone.id);
+    if (title?.trim()) await db.prepare('UPDATE milestones SET title = ? WHERE id = ?').run(title.trim(), milestone.id);
+    if (dueDate !== undefined) await db.prepare('UPDATE milestones SET due_date = ? WHERE id = ?').run(dueDate, milestone.id);
   }
   res.json({ ok: true });
 });
 
-extrasRouter.delete('/milestones/:id', requireAuth, requireCeo, (req, res) => {
-  const milestone = db.prepare('SELECT id, project_id FROM milestones WHERE id = ?').get(Number(req.params.id)) as
+extrasRouter.delete('/milestones/:id', requireAuth, requireCeo, async (req, res) => {
+  const milestone = await db.prepare('SELECT id, project_id FROM milestones WHERE id = ?').get(Number(req.params.id)) as
     | { id: number; project_id: number }
     | undefined;
   if (!milestone) return res.status(404).json({ error: 'Not found' });
-  db.prepare('DELETE FROM milestones WHERE id = ?').run(milestone.id);
-  logActivity(req.user!.id, 'project', milestone.project_id, 'milestone_deleted');
+  await db.prepare('DELETE FROM milestones WHERE id = ?').run(milestone.id);
+  await logActivity(req.user!.id, 'project', milestone.project_id, 'milestone_deleted');
   res.json({ ok: true });
 });
 
@@ -83,8 +83,8 @@ interface ReportRow {
   rejected: number;
 }
 
-function attendanceReport(month: string): ReportRow[] {
-  return db
+async function attendanceReport(month: string): Promise<ReportRow[]> {
+  return await db
     .prepare(
       `SELECT u.id AS user_id, u.name, d.name AS department,
         COUNT(DISTINCT date(a.check_in)) AS days_present,
@@ -96,7 +96,7 @@ function attendanceReport(month: string): ReportRow[] {
        LEFT JOIN memberships m ON m.user_id = u.id
        LEFT JOIN departments d ON d.id = m.department_id
        JOIN attendance a ON a.user_id = u.id AND strftime('%Y-%m', a.check_in) = ? AND a.check_out IS NOT NULL
-       GROUP BY u.id ORDER BY u.name`
+       GROUP BY u.id, u.name, d.name ORDER BY u.name`
     )
     .all(month) as ReportRow[];
 }
@@ -104,14 +104,15 @@ function attendanceReport(month: string): ReportRow[] {
 const monthParam = (q: unknown) =>
   String(q ?? '').match(/^\d{4}-\d{2}$/) ? String(q) : new Date().toISOString().slice(0, 7);
 
-extrasRouter.get('/reports/attendance', requireAuth, requireCeo, (req, res) => {
+extrasRouter.get('/reports/attendance', requireAuth, requireCeo, async (req, res) => {
   const month = monthParam(req.query.month);
-  res.json({ month, rows: attendanceReport(month) });
+  const rows = await attendanceReport(month);
+  res.json({ month, rows });
 });
 
-extrasRouter.get('/reports/attendance.csv', requireAuth, requireCeo, (req, res) => {
+extrasRouter.get('/reports/attendance.csv', requireAuth, requireCeo, async (req, res) => {
   const month = monthParam(req.query.month);
-  const rows = attendanceReport(month);
+  const rows = await attendanceReport(month);
   const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = [
     'employee,department,days_present,total_hours,approved,pending,rejected',
@@ -127,27 +128,27 @@ extrasRouter.get('/reports/attendance.csv', requireAuth, requireCeo, (req, res) 
 });
 
 // ---------- Audit log viewer (CEO only) ----------
-extrasRouter.get('/audit', requireAuth, requireCeo, (req, res) => {
+extrasRouter.get('/audit', requireAuth, requireCeo, async (req, res) => {
   const entityType = String(req.query.entity_type ?? '');
   const limit = Math.min(Number(req.query.limit) || 100, 500);
   const offset = Number(req.query.offset) || 0;
   const where = entityType ? 'WHERE a.entity_type = ?' : '';
   const params = entityType ? [entityType, limit, offset] : [limit, offset];
-  const rows = db
+  const rows = await db
     .prepare(
       `SELECT a.*, u.name AS actor_name FROM activity_log a JOIN users u ON u.id = a.actor_id
        ${where} ORDER BY a.id DESC LIMIT ? OFFSET ?`
     )
     .all(...params);
-  const types = db.prepare('SELECT DISTINCT entity_type FROM activity_log ORDER BY entity_type').all();
+  const types = await db.prepare('SELECT DISTINCT entity_type FROM activity_log ORDER BY entity_type').all();
   res.json({ audit: rows, types });
 });
 
 // ---------- Due-date reminders ----------
 // Called hourly from index.ts: notifies assignees of tasks due within 24h,
 // once per task (due_notified flag).
-export function sendDueReminders() {
-  const rows = db
+export async function sendDueReminders() {
+  const rows = await db
     .prepare(
       `SELECT id, title, assigned_to, due_date FROM tasks
        WHERE status != 'done' AND due_notified = 0 AND assigned_to IS NOT NULL
@@ -155,8 +156,28 @@ export function sendDueReminders() {
     )
     .all() as Array<{ id: number; title: string; assigned_to: number; due_date: string }>;
   for (const t of rows) {
-    notify(t.assigned_to, 'due', `Task due ${t.due_date}: ${t.title}`, `/portal/tasks/${t.id}`);
-    db.prepare('UPDATE tasks SET due_notified = 1 WHERE id = ?').run(t.id);
+    await notify(t.assigned_to, 'due', `Task due ${t.due_date}: ${t.title}`, `/portal/tasks/${t.id}`);
+    await db.prepare('UPDATE tasks SET due_notified = 1 WHERE id = ?').run(t.id);
   }
   if (rows.length) console.log(`[reminders] sent ${rows.length} due-date reminder(s)`);
 }
+
+// Secure Cron route for Vercel (invoked hourly)
+extrasRouter.get('/cron/reminders', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const expectedSecret = process.env.CRON_SECRET;
+
+  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+    console.warn('[cron] Unauthorized reminder check attempt.');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('[cron] Running hourly due-date reminders...');
+  try {
+    await sendDueReminders();
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[cron] Reminders execution error:', err);
+    res.status(500).json({ error: 'Reminders execution failed', detail: err.message });
+  }
+});

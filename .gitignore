@@ -29,3 +29,7 @@ server/data/
 # Local dev tooling
 .claude/
 server/uploads/
+
+# Environment secrets
+.env
+.env.*

@@ -20,16 +20,17 @@ export function hasFinanceAccess(user: SessionUser): boolean {
 }
 
 // ---------- Projects (allow-list, PRD §4.3/§6) ----------
-export function departmentCanSeeProject(departmentId: number | null, projectId: number): boolean {
+export async function departmentCanSeeProject(departmentId: number | null, projectId: number): Promise<boolean> {
   if (departmentId == null) return false;
-  return !!db
+  const row = await db
     .prepare('SELECT 1 FROM project_visibility WHERE project_id = ? AND department_id = ?')
     .get(projectId, departmentId);
+  return !!row;
 }
 
-export function userCanSeeProject(user: SessionUser, projectId: number): boolean {
+export async function userCanSeeProject(user: SessionUser, projectId: number): Promise<boolean> {
   if (user.isCeo) return true;
-  return departmentCanSeeProject(user.departmentId, projectId);
+  return await departmentCanSeeProject(user.departmentId, projectId);
 }
 
 // ---------- Tasks ----------
@@ -48,33 +49,35 @@ export function canManageTask(user: SessionUser, task: { department_id: number }
 // ---------- Attendance / Leave (same authority model) ----------
 // The CEO decides for anyone; a head decides for members of their own
 // department; nobody decides for themselves (heads escalate to the CEO).
-function decidesFor(actor: SessionUser, subjectUserId: number): boolean {
+async function decidesFor(actor: SessionUser, subjectUserId: number): Promise<boolean> {
   if (subjectUserId === actor.id) return false;
   if (actor.isCeo) return true;
   if (actor.role !== 'head') return false;
-  return !!db
+  const row = await db
     .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
     .get(subjectUserId, actor.departmentId);
+  return !!row;
 }
 
-export function canValidateAttendance(actor: SessionUser, record: { user_id: number }): boolean {
-  return decidesFor(actor, record.user_id);
+export async function canValidateAttendance(actor: SessionUser, record: { user_id: number }): Promise<boolean> {
+  return await decidesFor(actor, record.user_id);
 }
 
-export function canDecideLeave(actor: SessionUser, request: { user_id: number }): boolean {
-  return decidesFor(actor, request.user_id);
+export async function canDecideLeave(actor: SessionUser, request: { user_id: number }): Promise<boolean> {
+  return await decidesFor(actor, request.user_id);
 }
 
 // ---------- Attachments ----------
 // An attachment inherits the permissions of the row it hangs off — finance
 // files require finance access, task files require task visibility.
-export function canAccessAttachmentEntity(user: SessionUser, entityType: string, entityId: number): boolean {
+export async function canAccessAttachmentEntity(user: SessionUser, entityType: string, entityId: number): Promise<boolean> {
   if (entityType === 'finance') {
     if (!hasFinanceAccess(user)) return false;
-    return !!db.prepare('SELECT 1 FROM finance_entries WHERE id = ?').get(entityId);
+    const row = await db.prepare('SELECT 1 FROM finance_entries WHERE id = ?').get(entityId);
+    return !!row;
   }
   if (entityType === 'task') {
-    const task = db.prepare('SELECT department_id, assigned_to FROM tasks WHERE id = ?').get(entityId) as
+    const task = await db.prepare('SELECT department_id, assigned_to FROM tasks WHERE id = ?').get(entityId) as
       | { department_id: number; assigned_to: number | null }
       | undefined;
     if (!task) return false;

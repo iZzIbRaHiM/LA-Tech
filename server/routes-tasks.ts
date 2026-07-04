@@ -16,17 +16,17 @@ const TASK_SELECT = `
 `;
 
 // Visibility predicates live in policy.ts (the RLS layer).
-tasksRouter.get('/tasks', requireAuth, (req, res) => {
+tasksRouter.get('/tasks', requireAuth, async (req, res) => {
   const { where, params } = taskVisibilityWhere(req.user!);
-  const rows = db.prepare(`${TASK_SELECT} WHERE ${where} ORDER BY t.created_at DESC`).all(...params);
+  const rows = await db.prepare(`${TASK_SELECT} WHERE ${where} ORDER BY t.created_at DESC`).all(...params);
   res.json({ tasks: rows });
 });
 
-tasksRouter.get('/tasks/:id', requireAuth, (req, res) => {
+tasksRouter.get('/tasks/:id', requireAuth, async (req, res) => {
   const { where, params } = taskVisibilityWhere(req.user!);
-  const task = db.prepare(`${TASK_SELECT} WHERE t.id = ? AND ${where}`).get(Number(req.params.id), ...params);
+  const task = await db.prepare(`${TASK_SELECT} WHERE t.id = ? AND ${where}`).get(Number(req.params.id), ...params);
   if (!task) return res.status(404).json({ error: 'Not found' });
-  const comments = db
+  const comments = await db
     .prepare(
       `SELECT tc.*, u.name AS author_name FROM task_comments tc
        JOIN users u ON u.id = tc.author_id WHERE tc.task_id = ? ORDER BY tc.created_at`
@@ -34,13 +34,13 @@ tasksRouter.get('/tasks/:id', requireAuth, (req, res) => {
     .all(Number(req.params.id));
   // Sub-tasks are scoped by the same visibility predicate as the main list —
   // an employee viewing their own task must not see teammates' sub-tasks (§5).
-  const subtasks = db
+  const subtasks = await db
     .prepare(`${TASK_SELECT} WHERE t.parent_task_id = ? AND ${where}`)
     .all(Number(req.params.id), ...params);
   res.json({ task, comments, subtasks });
 });
 
-tasksRouter.post('/tasks', requireAuth, (req, res) => {
+tasksRouter.post('/tasks', requireAuth, async (req, res) => {
   const user = req.user!;
   const { title, description, priority, dueDate, projectId, departmentId, assignedTo, parentTaskId } = req.body ?? {};
   if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
@@ -52,7 +52,7 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
     // CEO → department (implicitly its head), PRD §4.2.
     targetDept = Number(departmentId);
     if (!targetDept) return res.status(400).json({ error: 'departmentId required' });
-    const dept = db.prepare('SELECT head_user_id FROM departments WHERE id = ? AND archived_at IS NULL').get(targetDept) as
+    const dept = await db.prepare('SELECT head_user_id FROM departments WHERE id = ? AND archived_at IS NULL').get(targetDept) as
       | { head_user_id: number | null }
       | undefined;
     if (!dept) return res.status(404).json({ error: 'Department not found' });
@@ -62,7 +62,7 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
     targetDept = user.departmentId!;
     targetAssignee = Number(assignedTo);
     if (!targetAssignee) return res.status(400).json({ error: 'assignedTo required' });
-    const member = db
+    const member = await db
       .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
       .get(targetAssignee, targetDept);
     if (!member) {
@@ -74,21 +74,21 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
 
   // §6 invariant: assignee must belong to the task's department.
   if (targetAssignee) {
-    const ok = db
+    const ok = await db
       .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
       .get(targetAssignee, targetDept);
     if (!ok) return res.status(400).json({ error: 'Assignee does not belong to the task department' });
   }
 
   // Linking a project requires the creator to be able to see it.
-  if (projectId && !userCanSeeProject(user, Number(projectId))) {
+  if (projectId && !(await userCanSeeProject(user, Number(projectId)))) {
     return res.status(403).json({ error: 'No access to that project' });
   }
 
   // A sub-task must hang off a task in the same department — otherwise the
   // parent's owner could never see it and the hierarchy silently forks.
   if (parentTaskId) {
-    const parent = db.prepare('SELECT department_id FROM tasks WHERE id = ?').get(Number(parentTaskId)) as
+    const parent = await db.prepare('SELECT department_id FROM tasks WHERE id = ?').get(Number(parentTaskId)) as
       | { department_id: number }
       | undefined;
     if (!parent) return res.status(404).json({ error: 'Parent task not found' });
@@ -97,7 +97,7 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
     }
   }
 
-  const info = db
+  const info = await db
     .prepare(
       `INSERT INTO tasks (title, description, priority, due_date, project_id, department_id, assigned_to, created_by, parent_task_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -114,17 +114,17 @@ tasksRouter.post('/tasks', requireAuth, (req, res) => {
       parentTaskId ?? null
     );
   const taskId = Number(info.lastInsertRowid);
-  logActivity(user.id, 'task', taskId, 'created', { title, departmentId: targetDept });
+  await logActivity(user.id, 'task', taskId, 'created', { title, departmentId: targetDept });
   if (targetAssignee && targetAssignee !== user.id) {
-    notify(targetAssignee, 'task', `New task assigned: ${title.trim()}`, `/portal/tasks/${taskId}`);
+    await notify(targetAssignee, 'task', `New task assigned: ${title.trim()}`, `/portal/tasks/${taskId}`);
   }
   res.json({ id: taskId });
 });
 
-tasksRouter.patch('/tasks/:id', requireAuth, (req, res) => {
+tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
   const user = req.user!;
   const id = Number(req.params.id);
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
+  const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as
     | { id: number; department_id: number; assigned_to: number | null; title: string; status: string }
     | undefined;
   if (!task) return res.status(404).json({ error: 'Not found' });
@@ -143,14 +143,14 @@ tasksRouter.patch('/tasks/:id', requireAuth, (req, res) => {
   if (assignedTo !== undefined && canManage) {
     const newAssignee = assignedTo === null ? null : Number(assignedTo);
     if (newAssignee) {
-      const ok = db
+      const ok = await db
         .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
         .get(newAssignee, task.department_id);
       if (!ok) return res.status(400).json({ error: 'Assignee does not belong to the task department' });
-      notify(newAssignee, 'task', `Task reassigned to you: ${task.title}`, `/portal/tasks/${id}`);
+      await notify(newAssignee, 'task', `Task reassigned to you: ${task.title}`, `/portal/tasks/${id}`);
     }
-    db.prepare("UPDATE tasks SET assigned_to = ?, updated_at = datetime('now') WHERE id = ?").run(newAssignee, id);
-    logActivity(user.id, 'task', id, 'reassigned', { assignedTo: newAssignee });
+    await db.prepare("UPDATE tasks SET assigned_to = ?, updated_at = datetime('now') WHERE id = ?").run(newAssignee, id);
+    await logActivity(user.id, 'task', id, 'reassigned', { assignedTo: newAssignee });
   }
 
   const fields: Array<[string, unknown]> = [];
@@ -166,18 +166,18 @@ tasksRouter.patch('/tasks/:id', requireAuth, (req, res) => {
     if (description !== undefined) fields.push(['description', description]);
   }
   for (const [col, val] of fields) {
-    db.prepare(`UPDATE tasks SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, id);
+    await db.prepare(`UPDATE tasks SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, id);
   }
   if (status && status !== task.status) {
-    logActivity(user.id, 'task', id, 'status_changed', { from: task.status, to: status });
+    await logActivity(user.id, 'task', id, 'status_changed', { from: task.status, to: status });
   }
   res.json({ ok: true });
 });
 
-tasksRouter.post('/tasks/:id/comments', requireAuth, (req, res) => {
+tasksRouter.post('/tasks/:id/comments', requireAuth, async (req, res) => {
   const user = req.user!;
   const id = Number(req.params.id);
-  const task = db.prepare('SELECT department_id, assigned_to, created_by, title FROM tasks WHERE id = ?').get(id) as
+  const task = await db.prepare('SELECT department_id, assigned_to, created_by, title FROM tasks WHERE id = ?').get(id) as
     | { department_id: number; assigned_to: number | null; created_by: number; title: string }
     | undefined;
   if (!task) return res.status(404).json({ error: 'Not found' });
@@ -189,10 +189,10 @@ tasksRouter.post('/tasks/:id/comments', requireAuth, (req, res) => {
 
   const { body } = req.body ?? {};
   if (!body?.trim()) return res.status(400).json({ error: 'Comment body required' });
-  db.prepare('INSERT INTO task_comments (task_id, author_id, body) VALUES (?, ?, ?)').run(id, user.id, body.trim());
-  logActivity(user.id, 'task', id, 'commented');
+  await db.prepare('INSERT INTO task_comments (task_id, author_id, body) VALUES (?, ?, ?)').run(id, user.id, body.trim());
+  await logActivity(user.id, 'task', id, 'commented');
   for (const uid of new Set([task.assigned_to, task.created_by])) {
-    if (uid && uid !== user.id) notify(uid, 'comment', `New comment on: ${task.title}`, `/portal/tasks/${id}`);
+    if (uid && uid !== user.id) await notify(uid, 'comment', `New comment on: ${task.title}`, `/portal/tasks/${id}`);
   }
   res.json({ ok: true });
 });

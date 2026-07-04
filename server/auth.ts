@@ -29,8 +29,8 @@ declare global {
 
 // Role is derived from org placement on every request (PRD §3), never
 // stored in the token — so promoting/demoting a head takes effect immediately.
-export function loadSessionUser(userId: number): SessionUser | null {
-  const row = db
+export async function loadSessionUser(userId: number): Promise<SessionUser | null> {
+  const row = await db
     .prepare(
       `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, u.must_change_password, u.active,
               m.department_id, m.role AS mrole
@@ -65,8 +65,8 @@ export function loadSessionUser(userId: number): SessionUser | null {
   };
 }
 
-function currentTokenVersion(userId: number): number {
-  const row = db.prepare('SELECT token_version FROM users WHERE id = ?').get(userId) as
+async function currentTokenVersion(userId: number): Promise<number> {
+  const row = await db.prepare('SELECT token_version FROM users WHERE id = ?').get(userId) as
     | { token_version: number }
     | undefined;
   return row?.token_version ?? 0;
@@ -74,12 +74,13 @@ function currentTokenVersion(userId: number): number {
 
 // Session revocation: bumping the version invalidates every JWT issued
 // before the bump. Used on password change/reset and deactivation.
-export function bumpTokenVersion(userId: number) {
-  db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(userId);
+export async function bumpTokenVersion(userId: number) {
+  await db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(userId);
 }
 
-export function issueSession(res: Response, userId: number) {
-  const token = jwt.sign({ sub: userId, ver: currentTokenVersion(userId) }, JWT_SECRET, {
+export async function issueSession(res: Response, userId: number) {
+  const ver = await currentTokenVersion(userId);
+  const token = jwt.sign({ sub: userId, ver }, JWT_SECRET, {
     algorithm: 'HS256',
     issuer: JWT_ISSUER,
     expiresIn: '7d',
@@ -96,7 +97,7 @@ export function clearSession(res: Response) {
   res.clearCookie(COOKIE_NAME);
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[COOKIE_NAME];
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
@@ -107,10 +108,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
       ver?: number;
     };
     const userId = Number(payload.sub);
-    if ((payload.ver ?? 0) !== currentTokenVersion(userId)) {
+    const ver = await currentTokenVersion(userId);
+    if ((payload.ver ?? 0) !== ver) {
       return res.status(401).json({ error: 'Session expired — sign in again' });
     }
-    const user = loadSessionUser(userId);
+    const user = await loadSessionUser(userId);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
     req.user = user;
     next();
