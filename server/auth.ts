@@ -103,7 +103,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     // Pin algorithm and issuer so a tampered header can't downgrade
     // verification or replay a token minted for something else.
-    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'], issuer: JWT_ISSUER }) as {
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'], issuer: JWT_ISSUER }) as unknown as {
       sub: number;
       ver?: number;
     };

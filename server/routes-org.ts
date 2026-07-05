@@ -6,31 +6,33 @@ import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, b
 export const orgRouter = Router();
 
 // ---------- Auth ----------
-// Brute-force guard: sliding 15-minute window per email+IP, in memory.
-// Good enough for a single-process deployment; swap for a shared store if
-// this ever runs behind multiple instances.
-const loginAttempts = new Map<string, number[]>();
-const WINDOW_MS = 15 * 60 * 1000;
+// Brute-force guard: sliding 15-minute window per email+IP, backed by the
+// database — an in-memory Map doesn't work here since Vercel serverless
+// functions don't share memory across instances or survive cold starts.
 const MAX_ATTEMPTS = 10;
 
-function tooManyAttempts(key: string): boolean {
-  const now = Date.now();
-  const recent = (loginAttempts.get(key) ?? []).filter((t) => now - t < WINDOW_MS);
-  loginAttempts.set(key, recent);
-  return recent.length >= MAX_ATTEMPTS;
+async function tooManyAttempts(key: string): Promise<boolean> {
+  const row = (await db
+    .prepare("SELECT COUNT(*) AS c FROM login_attempts WHERE attempt_key = ? AND created_at > now() - INTERVAL '15 minutes'")
+    .get(key)) as { c: string | number };
+  return Number(row.c) >= MAX_ATTEMPTS;
 }
 
-function recordAttempt(key: string) {
-  const list = loginAttempts.get(key) ?? [];
-  list.push(Date.now());
-  loginAttempts.set(key, list);
+async function recordAttempt(key: string) {
+  await db.prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)').run(key);
+  // Opportunistic housekeeping so the table doesn't grow unbounded.
+  await db.prepare("DELETE FROM login_attempts WHERE created_at < now() - INTERVAL '1 day'").run();
+}
+
+async function clearAttempts(key: string) {
+  await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').run(key);
 }
 
 orgRouter.post('/auth/login', async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   const key = `${String(email).toLowerCase()}|${req.ip}`;
-  if (tooManyAttempts(key)) {
+  if (await tooManyAttempts(key)) {
     return res.status(429).json({ error: 'Too many attempts — try again in 15 minutes' });
   }
   const row = await db.prepare('SELECT id, password_hash, active FROM users WHERE email = ?').get(email) as
@@ -39,12 +41,12 @@ orgRouter.post('/auth/login', async (req, res) => {
   // Deactivated accounts fail with the same message as bad credentials so
   // the response doesn't reveal which accounts exist or their status.
   if (!row || !row.active || !bcrypt.compareSync(password, row.password_hash)) {
-    recordAttempt(key);
+    await recordAttempt(key);
     // Failed attempts on real accounts land in the audit trail.
     if (row) await logActivity(row.id, 'auth', row.id, 'login_failed');
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  loginAttempts.delete(key);
+  await clearAttempts(key);
   await issueSession(res, row.id);
   await logActivity(row.id, 'auth', row.id, 'login');
   res.json({ user: await loadSessionUser(row.id) });

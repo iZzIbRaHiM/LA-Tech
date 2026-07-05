@@ -85,11 +85,9 @@ export async function seedCeo() {
   const CEO_EMAIL = process.env.CEO_EMAIL || 'ceo@latechs.org';
   const CEO_PASSWORD = process.env.CEO_PASSWORD || 'ChangeMe123!';
   
-  await db.prepare('INSERT INTO users (name, email, password_hash, is_ceo) VALUES (?, ?, ?, 1)').run(
-    'CEO',
-    CEO_EMAIL,
-    bcrypt.hashSync(CEO_PASSWORD, 12)
-  );
+  await db
+    .prepare('INSERT INTO users (name, email, password_hash, is_ceo, must_change_password) VALUES (?, ?, ?, 1, 1)')
+    .run('CEO', CEO_EMAIL, bcrypt.hashSync(CEO_PASSWORD, 12));
   console.log(`[seed] CEO account created: ${CEO_EMAIL} / ${CEO_PASSWORD} (change after first login)`);
 }
 
@@ -321,6 +319,14 @@ export async function initDb() {
       uploaded_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      id SERIAL PRIMARY KEY,
+      attempt_key TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_key ON login_attempts(attempt_key, created_at);
 
     CREATE TABLE IF NOT EXISTS milestones (
       id SERIAL PRIMARY KEY,

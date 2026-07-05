@@ -162,7 +162,8 @@ export async function sendDueReminders() {
   if (rows.length) console.log(`[reminders] sent ${rows.length} due-date reminder(s)`);
 }
 
-// Secure Cron route for Vercel (invoked hourly)
+// Secure Cron route for Vercel (invoked daily — see vercel.json; Hobby-tier
+// cron jobs are limited to once per day)
 extrasRouter.get('/cron/reminders', async (req, res) => {
   const authHeader = req.headers.authorization;
   const expectedSecret = process.env.CRON_SECRET;

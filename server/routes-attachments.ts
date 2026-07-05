@@ -1,17 +1,13 @@
 import { Router } from 'express';
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import crypto from 'crypto';
-import { fileURLToPath } from 'url';
+import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { db, logActivity } from './db';
 import { requireAuth } from './auth';
 import { canAccessAttachmentEntity as canAccessEntity } from './policy';
+import { r2, ATTACHMENTS_BUCKET } from './r2';
 
 export const attachmentsRouter = Router();
-
-const UPLOAD_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'uploads');
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const MAX_SIZE = 15 * 1024 * 1024; // 15 MB
 
@@ -46,7 +42,19 @@ attachmentsRouter.post(
     if (!Buffer.isBuffer(body) || body.length === 0) return res.status(400).json({ error: 'Empty file' });
 
     const storedName = `${crypto.randomUUID()}-${filename}`;
-    fs.writeFileSync(path.join(UPLOAD_DIR, storedName), body);
+    try {
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: ATTACHMENTS_BUCKET,
+          Key: storedName,
+          Body: body,
+          ContentType: 'application/octet-stream',
+        })
+      );
+    } catch (err) {
+      console.error('[attachments] upload failed:', err);
+      return res.status(500).json({ error: 'Upload failed' });
+    }
     const info = await db
       .prepare(
         'INSERT INTO attachments (entity_type, entity_id, filename, stored_name, size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)'
@@ -64,10 +72,16 @@ attachmentsRouter.get('/attachments/:id/download', requireAuth, async (req, res)
   if (!row || !(await canAccessEntity(req.user!, row.entity_type, row.entity_id))) {
     return res.status(404).json({ error: 'Not found' });
   }
-  const file = path.join(UPLOAD_DIR, row.stored_name);
-  if (!fs.existsSync(file)) return res.status(404).json({ error: 'File missing' });
-  res.setHeader('Content-Disposition', `attachment; filename="${row.filename}"`);
-  res.sendFile(file);
+  try {
+    const object = await r2.send(new GetObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: row.stored_name }));
+    const bytes = await object.Body?.transformToByteArray();
+    if (!bytes) return res.status(404).json({ error: 'File missing' });
+    res.setHeader('Content-Disposition', `attachment; filename="${row.filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.send(Buffer.from(bytes));
+  } catch {
+    res.status(404).json({ error: 'File missing' });
+  }
 });
 
 attachmentsRouter.delete('/attachments/:id', requireAuth, async (req, res) => {
@@ -82,9 +96,9 @@ attachmentsRouter.delete('/attachments/:id', requireAuth, async (req, res) => {
   }
   await db.prepare('DELETE FROM attachments WHERE id = ?').run(row.id);
   try {
-    fs.unlinkSync(path.join(UPLOAD_DIR, row.stored_name));
-  } catch {
-    /* already gone */
+    await r2.send(new DeleteObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: row.stored_name }));
+  } catch (err) {
+    console.error('[attachments] delete from R2 failed:', err);
   }
   await logActivity(req.user!.id, row.entity_type, row.entity_id, 'attachment_deleted');
   res.json({ ok: true });
