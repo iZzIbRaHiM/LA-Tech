@@ -16,24 +16,23 @@ Marketing site (React 19 + Vite + Tailwind + shadcn/Radix, 3D hero via react-thr
 
 ## Run
 
-Requires Node 22.5+ (uses the built-in `node:sqlite` — no native builds).
+Database is PostgreSQL (Supabase). Set `DATABASE_URL` (Supabase connection pooler, port 6543 — required for serverless) in `.env` before running anything.
 
 ```bash
 pnpm install
-pnpm run server   # API on :5184 (seeds CEO account on first run)
+pnpm run server   # API on :5184 (creates tables + seeds CEO account on first run)
 pnpm run dev      # site + portal on :3000 (proxies /api to :5184)
 ```
 
-First login: `ceo@latechs.org` / `ChangeMe123!` — change it via the key icon in the portal sidebar. Override the seed with `CEO_EMAIL` / `CEO_PASSWORD` env vars; set `JWT_SECRET` in production.
+First login: `ceo@latechs.org` / `ChangeMe123!` — you'll be prompted to change it (temp-password banner). Override the seed with `CEO_EMAIL` / `CEO_PASSWORD` env vars; set `JWT_SECRET` in production.
 
-### Production
+### Production (Vercel + Supabase + Cloudflare R2)
 
-```bash
-pnpm run build    # outputs dist/
-pnpm run server   # serves dist/ + API from one process (SPA fallback included)
-```
-
-The SQLite database lives at `server/data/portal.db` (gitignored).
+- Deployed as static frontend (Vite build) + a single Vercel serverless function (`api/index.ts`, wraps the Express app) via `vercel.json` rewrites (`/api/*` → the function, everything else → `index.html` for the client-side router).
+- `pnpm run build` runs `scripts/migrate.ts` (creates/updates tables, seeds the CEO) before building — this means `DATABASE_URL` must be reachable and the Supabase project must not be paused at **build** time, or the Vercel deployment fails.
+- Required env vars in the Vercel project (Production + Preview): `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`, `CEO_EMAIL`, `CEO_PASSWORD`, `CRON_SECRET`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. Optional: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`.
+- Attachments are stored in Cloudflare R2 (S3-compatible object storage), not local disk (Vercel functions have a read-only filesystem) and not Supabase Storage (free-tier storage quota is small). Create the bucket in the Cloudflare dashboard (Storage & Databases → R2) and generate an API token (Access Key ID + Secret) under "Manage API tokens" — R2 has no bucket-level public/private toggle to worry about since every read/write in this app goes through `server/r2.ts` using those credentials, never a public URL.
+- The due-date reminder cron (`vercel.json` → `/api/cron/reminders`) runs once daily on Vercel's Hobby tier; `CRON_SECRET` must match what's configured so Vercel's automatic `Authorization: Bearer` header is accepted.
 
 ## Security tests
 

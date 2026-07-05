@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { seedCeo } from './db';
+import { initDb } from './db';
 import { orgRouter } from './routes-org';
 import { tasksRouter } from './routes-tasks';
 import { projectsRouter } from './routes-projects';
@@ -74,15 +74,27 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-seedCeo();
+const isVercel = !!process.env.VERCEL;
+
+if (!isVercel) {
+  // Local or traditional server: initialize DB and run background reminder loop
+  await initDb().catch((err) => {
+    console.error('[portal-api] Failed to initialize database:', err);
+    process.exit(1);
+  });
+
+  // Due-date reminders: once at boot, then hourly.
+  sendDueReminders().catch((err) => console.error('[reminders] error:', err));
+  setInterval(() => {
+    sendDueReminders().catch((err) => console.error('[reminders] error:', err));
+  }, 60 * 60 * 1000);
+
+  const PORT = Number(process.env.PORT_API || 5184);
+  app.listen(PORT, () => console.log(`[portal-api] listening on http://localhost:${PORT}`));
+}
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   console.warn('[SECURITY] JWT_SECRET is not set — sessions are signed with the dev default. Set JWT_SECRET before going live.');
 }
 
-// Due-date reminders: once at boot, then hourly.
-sendDueReminders();
-setInterval(sendDueReminders, 60 * 60 * 1000);
-
-const PORT = Number(process.env.PORT_API || 5184);
-app.listen(PORT, () => console.log(`[portal-api] listening on http://localhost:${PORT}`));
+export default app;

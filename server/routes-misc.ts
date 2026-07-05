@@ -4,15 +4,15 @@ import { requireAuth } from './auth';
 
 export const miscRouter = Router();
 
-miscRouter.get('/notifications', requireAuth, (req, res) => {
-  const rows = db
+miscRouter.get('/notifications', requireAuth, async (req, res) => {
+  const rows = await db
     .prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50')
     .all(req.user!.id);
   res.json({ notifications: rows });
 });
 
-miscRouter.post('/notifications/read', requireAuth, (req, res) => {
-  db.prepare("UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND read_at IS NULL").run(
+miscRouter.post('/notifications/read', requireAuth, async (req, res) => {
+  await db.prepare("UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND read_at IS NULL").run(
     req.user!.id
   );
   res.json({ ok: true });
@@ -20,18 +20,18 @@ miscRouter.post('/notifications/read', requireAuth, (req, res) => {
 
 // Activity feed scoped to what the viewer may see (PRD §4.5):
 // CEO everything; Head their department's tasks + own actions; Employee own tasks/actions.
-miscRouter.get('/activity', requireAuth, (req, res) => {
+miscRouter.get('/activity', requireAuth, async (req, res) => {
   const user = req.user!;
   let rows;
   if (user.isCeo) {
-    rows = db
+    rows = await db
       .prepare(
         `SELECT a.*, u.name AS actor_name FROM activity_log a JOIN users u ON u.id = a.actor_id
          ORDER BY a.created_at DESC LIMIT 50`
       )
       .all();
   } else if (user.role === 'head') {
-    rows = db
+    rows = await db
       .prepare(
         `SELECT a.*, u.name AS actor_name FROM activity_log a JOIN users u ON u.id = a.actor_id
          WHERE a.entity_type != 'finance' AND (
@@ -43,7 +43,7 @@ miscRouter.get('/activity', requireAuth, (req, res) => {
       )
       .all(user.id, user.departmentId, user.departmentId);
   } else {
-    rows = db
+    rows = await db
       .prepare(
         `SELECT a.*, u.name AS actor_name FROM activity_log a JOIN users u ON u.id = a.actor_id
          WHERE a.entity_type != 'finance' AND (
@@ -59,29 +59,29 @@ miscRouter.get('/activity', requireAuth, (req, res) => {
 
 // Permission-scoped search (PRD §4.6): reuses the same visibility predicates
 // as the list endpoints so search can never widen access.
-miscRouter.get('/search', requireAuth, (req, res) => {
+miscRouter.get('/search', requireAuth, async (req, res) => {
   const user = req.user!;
   const q = `%${String(req.query.q ?? '').trim()}%`;
   if (q === '%%') return res.json({ tasks: [], projects: [] });
 
   let tasks;
   if (user.isCeo) {
-    tasks = db.prepare('SELECT id, title, status FROM tasks WHERE title LIKE ? LIMIT 10').all(q);
+    tasks = await db.prepare('SELECT id, title, status FROM tasks WHERE title LIKE ? LIMIT 10').all(q);
   } else if (user.role === 'head') {
-    tasks = db
+    tasks = await db
       .prepare('SELECT id, title, status FROM tasks WHERE title LIKE ? AND department_id = ? LIMIT 10')
       .all(q, user.departmentId);
   } else {
-    tasks = db
+    tasks = await db
       .prepare('SELECT id, title, status FROM tasks WHERE title LIKE ? AND assigned_to = ? LIMIT 10')
       .all(q, user.id);
   }
 
   let projects;
   if (user.isCeo) {
-    projects = db.prepare('SELECT id, name, status FROM projects WHERE name LIKE ? LIMIT 10').all(q);
+    projects = await db.prepare('SELECT id, name, status FROM projects WHERE name LIKE ? LIMIT 10').all(q);
   } else if (user.departmentId != null) {
-    projects = db
+    projects = await db
       .prepare(
         `SELECT p.id, p.name, p.status FROM projects p
          JOIN project_visibility pv ON pv.project_id = p.id AND pv.department_id = ?
