@@ -36,15 +36,18 @@ export default function Projects() {
     api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
   }, [user]);
 
+  const canCreate = form.name.trim() !== '' && form.startDate !== '' && form.endDate !== '';
+
   const createProject = async () => {
+    if (!canCreate) return;
     try {
       await api('/projects', {
         method: 'POST',
         body: {
           name: form.name,
           description: form.description,
-          startDate: form.startDate || null,
-          endDate: form.endDate || null,
+          startDate: form.startDate,
+          endDate: form.endDate,
           departmentIds: visibleTo,
         },
       });
@@ -104,7 +107,7 @@ export default function Projects() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Name</Label>
+              <Label>Name <span className="text-red-500">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-1.5">
@@ -117,12 +120,17 @@ export default function Projects() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Start date</Label>
+                <Label>Start date <span className="text-red-500">*</span></Label>
                 <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label>End date</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                <Label>End date <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  min={form.startDate || undefined}
+                  value={form.endDate}
+                  onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -148,7 +156,11 @@ export default function Projects() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={createProject} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={createProject}
+              disabled={!canCreate}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Create project
             </Button>
           </DialogFooter>

@@ -50,5 +50,9 @@
     scroll-behavior: auto;
     overflow-x: hidden;
     width: 100%;
+    /* The whole app is dark-themed, but native form controls (date picker
+       icon/popup, scrollbars) default to a light color scheme regardless of
+       page CSS — making them invisible/unusable against dark backgrounds. */
+    color-scheme: dark;
   }
 }

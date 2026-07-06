@@ -100,6 +100,31 @@ export default function Attendance() {
     setReportMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   };
 
+  const downloadCsv = async (month: string) => {
+    try {
+      const res = await fetch(`/api/reports/attendance.csv?month=${month}`, { credentials: 'include' });
+      if (!res.ok) {
+        let message = `Export failed (${res.status})`;
+        try {
+          const j = await res.json();
+          if (j?.error) message = j.error;
+        } catch {
+          /* keep default */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `attendance_${month}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Export failed');
+    }
+  };
+
   return (
     <div className="p-8 max-w-4xl">
       <h1 className="font-display font-bold text-2xl mb-8">Attendance</h1>
@@ -204,11 +229,9 @@ export default function Attendance() {
               <Button variant="outline" size="sm" onClick={() => shiftReportMonth(1)}>
                 →
               </Button>
-              <a href={`/api/reports/attendance.csv?month=${reportMonth}`}>
-                <Button variant="outline" size="sm">
-                  <Download size={13} className="mr-1" /> CSV
-                </Button>
-              </a>
+              <Button variant="outline" size="sm" onClick={() => downloadCsv(reportMonth)}>
+                <Download size={13} className="mr-1" /> CSV
+              </Button>
             </div>
           </div>
           {report.length === 0 ? (

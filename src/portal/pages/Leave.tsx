@@ -115,7 +115,10 @@ export default function Leave() {
       .catch(() => {});
   }, [month, own, team]);
 
+  const canSubmit = form.startDate !== '' && form.endDate !== '';
+
   const submit = async () => {
+    if (!canSubmit) return;
     try {
       await api('/leave', { method: 'POST', body: form });
       setCreating(false);
@@ -275,12 +278,17 @@ export default function Leave() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>From</Label>
+                <Label>From <span className="text-red-500">*</span></Label>
                 <Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label>To</Label>
-                <Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+                <Label>To <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  min={form.startDate || undefined}
+                  value={form.endDate}
+                  onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -289,7 +297,11 @@ export default function Leave() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={submit} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={submit}
+              disabled={!canSubmit}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Submit request
             </Button>
           </DialogFooter>

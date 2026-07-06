@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Plus, Crown, UserMinus, Wallet } from 'lucide-react';
+import { Plus, Crown, UserMinus, Wallet, Pencil, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +31,8 @@ export default function Departments() {
   const [addingTo, setAddingTo] = useState<Department | null>(null);
   const [unassigned, setUnassigned] = useState<PortalUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [renaming, setRenaming] = useState<Department | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const load = useCallback(() => {
     api<{ departments: Department[] }>('/departments')
@@ -98,6 +100,30 @@ export default function Departments() {
     }
   };
 
+  const renameDept = async () => {
+    if (!renaming || !renameValue.trim()) return;
+    try {
+      await api(`/departments/${renaming.id}`, { method: 'PATCH', body: { name: renameValue } });
+      toast.success('Department renamed');
+      setRenaming(null);
+      setRenameValue('');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const archiveDept = async (dept: Department) => {
+    if (!confirm(`Archive "${dept.name}"? This can't be undone from here.`)) return;
+    try {
+      await api(`/departments/${dept.id}`, { method: 'PATCH', body: { archive: true } });
+      toast.success('Department archived');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
@@ -105,13 +131,17 @@ export default function Departments() {
         {user?.isCeo && (
           <div className="flex gap-2">
             <Input
-              placeholder="New department name"
+              placeholder="New department name *"
               value={newDeptName}
               onChange={(e) => setNewDeptName(e.target.value)}
               className="w-56"
               onKeyDown={(e) => e.key === 'Enter' && createDept()}
             />
-            <Button onClick={createDept} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={createDept}
+              disabled={!newDeptName.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               <Plus size={15} className="mr-1" /> Create
             </Button>
           </div>
@@ -131,14 +161,37 @@ export default function Departments() {
                 )}
               </div>
               {user?.isCeo && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setAddingTo(d)}
-                  className="text-[#A1A1AA] hover:text-[#FAFAFA]"
-                >
-                  <Plus size={14} className="mr-1" /> Add member
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Rename department"
+                    onClick={() => {
+                      setRenaming(d);
+                      setRenameValue(d.name);
+                    }}
+                    className="text-[#A1A1AA] hover:text-[#FAFAFA]"
+                  >
+                    <Pencil size={13} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Archive department"
+                    onClick={() => archiveDept(d)}
+                    className="text-[#A1A1AA] hover:text-[#FAFAFA]"
+                  >
+                    <Archive size={13} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAddingTo(d)}
+                    className="text-[#A1A1AA] hover:text-[#FAFAFA]"
+                  >
+                    <Plus size={14} className="mr-1" /> Add member
+                  </Button>
+                </div>
               )}
             </div>
             {d.members ? (
@@ -240,6 +293,31 @@ export default function Departments() {
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
             >
               Assign
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename department</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Name <span className="text-red-500">*</span></Label>
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && renameDept()}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={renameDept}
+              disabled={!renameValue.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -42,12 +42,19 @@ export default function People() {
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [resetPw, setResetPw] = useState('');
 
+  const passwordPolicyOk = (pw: string) =>
+    pw.length >= 10 && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw);
+
+  const canCreateUser = form.name.trim() !== '' && form.email.trim() !== '' && passwordPolicyOk(form.password);
+  const canResetPassword = passwordPolicyOk(resetPw);
+
   const load = useCallback(() => {
     api<{ users: PortalUser[] }>('/users').then((r) => setUsers(r.users)).catch((e) => toast.error(e.message));
   }, []);
   useEffect(load, [load]);
 
   const createUser = async () => {
+    if (!canCreateUser) return;
     try {
       await api('/users', { method: 'POST', body: form });
       toast.success(
@@ -62,7 +69,7 @@ export default function People() {
   };
 
   const resetPassword = async () => {
-    if (!resetting) return;
+    if (!resetting || !canResetPassword) return;
     try {
       await api(`/users/${resetting.id}/reset-password`, { method: 'POST', body: { password: resetPw } });
       toast.success(`Password reset for ${resetting.name} — new temp password: ${resetPw}`);
@@ -199,20 +206,27 @@ export default function People() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Full name</Label>
+              <Label>Full name <span className="text-red-500">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Email</Label>
+              <Label>Email <span className="text-red-500">*</span></Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div className="space-y-1.5">
-              <Label>Temporary password (8+ chars — shown once)</Label>
+              <Label>Temporary password <span className="text-red-500">*</span> (shown once)</Label>
               <Input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <p className="text-xs text-[#71717A]">
+                10+ characters, with uppercase, lowercase, a number, and a special character.
+              </p>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={createUser} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={createUser}
+              disabled={!canCreateUser}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Create user
             </Button>
           </DialogFooter>
@@ -226,11 +240,18 @@ export default function People() {
             <DialogTitle>Reset password for {resetting?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label>New temporary password (8+ chars)</Label>
+            <Label>New temporary password <span className="text-red-500">*</span></Label>
             <Input value={resetPw} onChange={(e) => setResetPw(e.target.value)} />
+            <p className="text-xs text-[#71717A]">
+              10+ characters, with uppercase, lowercase, a number, and a special character.
+            </p>
           </div>
           <DialogFooter>
-            <Button onClick={resetPassword} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={resetPassword}
+              disabled={!canResetPassword}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Reset password
             </Button>
           </DialogFooter>

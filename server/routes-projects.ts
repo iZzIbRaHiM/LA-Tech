@@ -58,9 +58,11 @@ projectsRouter.get('/projects/:id', requireAuth, async (req, res) => {
 projectsRouter.post('/projects', requireAuth, requireCeo, async (req, res) => {
   const { name, description, startDate, endDate, departmentIds } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
+  if (!startDate || !endDate) return res.status(400).json({ error: 'Start date and end date are required' });
+  if (String(endDate) < String(startDate)) return res.status(400).json({ error: 'End date must be on or after the start date' });
   const info = await db
     .prepare('INSERT INTO projects (name, description, owner_id, start_date, end_date) VALUES (?, ?, ?, ?, ?)')
-    .run(name.trim(), description ?? '', req.user!.id, startDate ?? null, endDate ?? null);
+    .run(name.trim(), description ?? '', req.user!.id, startDate, endDate);
   const projectId = Number(info.lastInsertRowid);
 
   for (const deptId of departmentIds ?? []) {

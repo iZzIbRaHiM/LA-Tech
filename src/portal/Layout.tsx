@@ -16,7 +16,7 @@ import {
   UserCog,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -69,6 +69,13 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', next: '' });
+
+  const passwordPolicyOk =
+    pwForm.next.length >= 10 &&
+    /[a-z]/.test(pwForm.next) &&
+    /[A-Z]/.test(pwForm.next) &&
+    /[0-9]/.test(pwForm.next) &&
+    /[^A-Za-z0-9]/.test(pwForm.next);
 
   const changePassword = async () => {
     try {
@@ -287,24 +294,29 @@ export default function Layout() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Current password</Label>
-              <Input
-                type="password"
+              <Label>Current password <span className="text-red-500">*</span></Label>
+              <PasswordInput
                 value={pwForm.current}
                 onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>New password (8+ characters)</Label>
-              <Input
-                type="password"
+              <Label>New password <span className="text-red-500">*</span></Label>
+              <PasswordInput
                 value={pwForm.next}
                 onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
               />
+              <p className="text-xs text-[#71717A]">
+                10+ characters, with uppercase, lowercase, a number, and a special character.
+              </p>
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={changePassword} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={changePassword}
+              disabled={!pwForm.current || !passwordPolicyOk}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Update password
             </Button>
           </DialogFooter>

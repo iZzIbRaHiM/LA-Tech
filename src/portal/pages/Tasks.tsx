@@ -86,7 +86,10 @@ export default function Tasks() {
     return departments.find((x) => x.id === user?.departmentId)?.members ?? [];
   }, [departments, form.departmentId, user]);
 
+  const canSubmitTask = form.title.trim() !== '' && (!user?.isCeo || form.departmentId !== '');
+
   const createTask = async () => {
+    if (!canSubmitTask) return;
     try {
       await api('/tasks', {
         method: 'POST',
@@ -245,7 +248,7 @@ export default function Tasks() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Title</Label>
+              <Label>Title <span className="text-red-500">*</span></Label>
               <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </div>
             <div className="space-y-1.5">
@@ -283,7 +286,7 @@ export default function Tasks() {
             </div>
             {user?.isCeo && (
               <div className="space-y-1.5">
-                <Label>Department (assigns to its head unless you pick someone)</Label>
+                <Label>Department (assigns to its head unless you pick someone) <span className="text-red-500">*</span></Label>
                 <Select
                   value={form.departmentId}
                   onValueChange={(v) => setForm({ ...form, departmentId: v, assignedTo: '' })}
@@ -337,7 +340,11 @@ export default function Tasks() {
             )}
           </div>
           <DialogFooter>
-            <Button onClick={createTask} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+            <Button
+              onClick={createTask}
+              disabled={!canSubmitTask}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
               Create task
             </Button>
           </DialogFooter>

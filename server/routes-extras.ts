@@ -88,7 +88,7 @@ async function attendanceReport(month: string): Promise<ReportRow[]> {
     .prepare(
       `SELECT u.id AS user_id, u.name, d.name AS department,
         COUNT(DISTINCT date(a.check_in)) AS days_present,
-        COALESCE(SUM((julianday(a.check_out) - julianday(a.check_in)) * 24 * 60), 0) AS total_minutes,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (a.check_out::timestamp - a.check_in::timestamp)) / 60), 0) AS total_minutes,
         SUM(CASE WHEN a.validation_status = 'approved' THEN 1 ELSE 0 END) AS approved,
         SUM(CASE WHEN a.validation_status = 'pending' THEN 1 ELSE 0 END) AS pending,
         SUM(CASE WHEN a.validation_status = 'rejected' THEN 1 ELSE 0 END) AS rejected

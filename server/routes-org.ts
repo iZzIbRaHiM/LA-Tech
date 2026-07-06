@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, bumpTokenVersion } from './auth.js';
+import { passwordPolicyError } from './validation.js';
 
 export const orgRouter = Router();
 
@@ -63,9 +64,8 @@ orgRouter.get('/auth/me', requireAuth, (req, res) => {
 
 orgRouter.post('/auth/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body ?? {};
-  if (!newPassword || String(newPassword).length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  }
+  const policyError = passwordPolicyError(newPassword);
+  if (policyError) return res.status(400).json({ error: policyError });
   const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user!.id) as {
     password_hash: string;
   };
@@ -248,9 +248,8 @@ orgRouter.post('/users', requireAuth, requireCeo, async (req, res) => {
   const { name, email, password } = req.body ?? {};
   if (!name?.trim() || !email?.trim()) return res.status(400).json({ error: 'Name and email required' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: 'Invalid email' });
-  if (!password || String(password).length < 8) {
-    return res.status(400).json({ error: 'Temporary password must be at least 8 characters' });
-  }
+  const createPolicyError = passwordPolicyError(password);
+  if (createPolicyError) return res.status(400).json({ error: createPolicyError });
   const dup = await db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim());
   if (dup) return res.status(409).json({ error: 'A user with this email already exists' });
   const info = await db
@@ -270,9 +269,8 @@ orgRouter.post('/users/:id/reset-password', requireAuth, requireCeo, async (req,
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (target.is_ceo) return res.status(400).json({ error: 'Use change-password for your own account' });
   const { password } = req.body ?? {};
-  if (!password || String(password).length < 8) {
-    return res.status(400).json({ error: 'Temporary password must be at least 8 characters' });
-  }
+  const resetPolicyError = passwordPolicyError(password);
+  if (resetPolicyError) return res.status(400).json({ error: resetPolicyError });
   await db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(
     bcrypt.hashSync(String(password), 12),
     userId
