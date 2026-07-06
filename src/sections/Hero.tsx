@@ -113,7 +113,7 @@ export default function Hero() {
       >
         {reducedMotion ? (
           <img
-            src="/images/hero-network-fallback.png"
+            src="/images/hero-network-fallback.webp"
             alt=""
             className="w-full h-full object-cover"
             style={{ opacity: 0.55 }}

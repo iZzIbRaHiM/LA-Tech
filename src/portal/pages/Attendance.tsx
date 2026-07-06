@@ -107,7 +107,7 @@ export default function Attendance() {
       {/* Check in/out card */}
       <div className="relative overflow-hidden border border-[#1f1f23] mb-10">
         <img
-          src="/images/hero-network-fallback.png"
+          src="/images/hero-network-fallback.webp"
           alt=""
           className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
         />

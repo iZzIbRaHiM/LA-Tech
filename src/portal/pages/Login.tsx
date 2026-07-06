@@ -28,7 +28,7 @@ export default function Login() {
     <div className="relative min-h-screen bg-[#09090B] text-[#FAFAFA] flex items-center justify-center p-6 overflow-hidden">
       {/* Higgsfield-generated 3D network backdrop (same asset as the marketing hero fallback) */}
       <img
-        src="/images/hero-network-fallback.png"
+        src="/images/hero-network-fallback.webp"
         alt=""
         className="absolute inset-0 w-full h-full object-cover opacity-40 pointer-events-none"
       />
