@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { db } from './db';
-import { requireAuth } from './auth';
+import { db } from './db.js';
+import { requireAuth } from './auth.js';
 
 export const miscRouter = Router();
 

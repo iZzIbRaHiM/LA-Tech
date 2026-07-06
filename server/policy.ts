@@ -11,8 +11,8 @@
 // - An employee's world is rows tied to them personally.
 // - Finance is CEO + explicitly granted delegates, nothing else.
 // - Project existence itself is confidential outside the allow-list.
-import { db } from './db';
-import type { SessionUser } from './auth';
+import { db } from './db.js';
+import type { SessionUser } from './auth.js';
 
 // ---------- Finance ----------
 export function hasFinanceAccess(user: SessionUser): boolean {

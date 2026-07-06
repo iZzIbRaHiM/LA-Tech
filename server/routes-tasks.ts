@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db';
-import { requireAuth } from './auth';
-import { taskVisibilityWhere, userCanSeeProject } from './policy';
+import { db, logActivity, notify } from './db.js';
+import { requireAuth } from './auth.js';
+import { taskVisibilityWhere, userCanSeeProject } from './policy.js';
 
 export const tasksRouter = Router();
 

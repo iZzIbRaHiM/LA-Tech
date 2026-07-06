@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { db, logActivity, notify } from './db';
-import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, bumpTokenVersion } from './auth';
+import { db, logActivity, notify } from './db.js';
+import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, bumpTokenVersion } from './auth.js';
 
 export const orgRouter = Router();
 

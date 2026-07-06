@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db';
-import { requireAuth } from './auth';
-import { canValidateAttendance } from './policy';
+import { db, logActivity, notify } from './db.js';
+import { requireAuth } from './auth.js';
+import { canValidateAttendance } from './policy.js';
 
 export const attendanceRouter = Router();
 

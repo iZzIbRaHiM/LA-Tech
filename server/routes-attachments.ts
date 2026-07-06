@@ -2,10 +2,10 @@ import { Router } from 'express';
 import express from 'express';
 import crypto from 'crypto';
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { db, logActivity } from './db';
-import { requireAuth } from './auth';
-import { canAccessAttachmentEntity as canAccessEntity } from './policy';
-import { r2, ATTACHMENTS_BUCKET } from './r2';
+import { db, logActivity } from './db.js';
+import { requireAuth } from './auth.js';
+import { canAccessAttachmentEntity as canAccessEntity } from './policy.js';
+import { r2, ATTACHMENTS_BUCKET } from './r2.js';
 
 export const attachmentsRouter = Router();
 

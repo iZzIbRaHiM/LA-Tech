@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db';
-import { requireAuth, requireCeo, userCanSeeProject } from './auth';
+import { db, logActivity, notify } from './db.js';
+import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
 
 export const projectsRouter = Router();
 

@@ -1,6 +1,6 @@
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import { sendEmail } from './email';
+import { sendEmail } from './email.js';
 
 const { Pool } = pg;
 

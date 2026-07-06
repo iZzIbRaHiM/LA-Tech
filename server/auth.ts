@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { db } from './db';
-import { hasFinanceAccess } from './policy';
+import { db } from './db.js';
+import { hasFinanceAccess } from './policy.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'latech-portal-dev-secret';
 const JWT_ISSUER = 'latech-portal';
@@ -133,4 +133,4 @@ export function requireFinance(req: Request, res: Response, next: NextFunction) 
 
 // Re-exported so existing imports keep working; the definitions live in the
 // policy layer (see policy.ts — single source of truth for row scoping).
-export { hasFinanceAccess, userCanSeeProject, departmentCanSeeProject } from './policy';
+export { hasFinanceAccess, userCanSeeProject, departmentCanSeeProject } from './policy.js';

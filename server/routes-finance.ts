@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { db, logActivity } from './db';
-import { requireAuth, requireFinance } from './auth';
+import { db, logActivity } from './db.js';
+import { requireAuth, requireFinance } from './auth.js';
 
 // PRD §4.4 / §6 invariant: finance is CEO-only at the API layer — plus any
 // explicit finance delegates the CEO has granted (requireFinance). The guard
