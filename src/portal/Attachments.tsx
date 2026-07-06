@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Paperclip, Download, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { api } from './api';
+import { api, downloadFile } from './api';
 
 interface Attachment {
   id: number;
@@ -66,6 +66,14 @@ export default function Attachments({
     }
   };
 
+  const download = async (a: Attachment) => {
+    try {
+      await downloadFile(`/attachments/${a.id}/download`, a.filename);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Download failed');
+    }
+  };
+
   return (
     <div className={compact ? '' : 'space-y-2'}>
       <input
@@ -84,9 +92,9 @@ export default function Attachments({
             <span className="max-w-40 truncate" title={`${a.filename} · ${fmtSize(a.size)} · ${a.uploaded_by_name}`}>
               {a.filename}
             </span>
-            <a href={`/api/attachments/${a.id}/download`} className="text-[#DFE104] hover:opacity-80" title="Download">
+            <button onClick={() => download(a)} className="text-[#DFE104] hover:opacity-80" title="Download">
               <Download size={11} />
-            </a>
+            </button>
             <button onClick={() => remove(a.id)} className="text-[#71717A] hover:text-red-400" title="Delete">
               <Trash2 size={11} />
             </button>

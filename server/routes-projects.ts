@@ -86,6 +86,9 @@ projectsRouter.patch('/projects/:id', requireAuth, requireCeo, async (req, res) 
   const project = await db.prepare('SELECT id FROM projects WHERE id = ?').get(id);
   if (!project) return res.status(404).json({ error: 'Not found' });
   const { name, description, status, startDate, endDate, departmentIds } = req.body ?? {};
+  if (startDate !== undefined && endDate !== undefined && startDate && endDate && String(endDate) < String(startDate)) {
+    return res.status(400).json({ error: 'End date must be on or after the start date' });
+  }
 
   const sets: Array<[string, unknown]> = [];
   if (name?.trim()) sets.push(['name', name.trim()]);

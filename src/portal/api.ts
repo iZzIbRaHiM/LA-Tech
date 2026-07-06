@@ -34,6 +34,34 @@ export async function api<T = unknown>(
   return res.json() as Promise<T>;
 }
 
+// A plain <a href="/api/..."> for authenticated downloads works when it
+// succeeds, but on failure (expired session, permission denied, missing
+// file) the browser just renders/downloads the raw JSON error body with no
+// feedback. Fetching it ourselves lets us surface a real error via toast.
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const res = await fetch(`/api${path}`, {
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'latech-portal' },
+  });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const j = await res.json();
+      if (j?.error) message = j.error;
+    } catch {
+      /* keep default */
+    }
+    throw new ApiError(res.status, message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export interface SessionUser {
   id: number;
   name: string;

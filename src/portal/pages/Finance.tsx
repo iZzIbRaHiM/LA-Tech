@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import Attachments from '../Attachments';
-import { api } from '../api';
+import { api, downloadFile } from '../api';
 
 interface ProjectFinance {
   id: number;
@@ -128,7 +128,10 @@ export function FinanceLedger() {
   }, [projectId]);
   useEffect(load, [load]);
 
+  const canAddEntry = Number.isFinite(Number(form.amount)) && Number(form.amount) > 0;
+
   const addEntry = async () => {
+    if (!canAddEntry) return;
     try {
       await api(`/finance/projects/${projectId}/entries`, {
         method: 'POST',
@@ -151,6 +154,17 @@ export function FinanceLedger() {
     }
   };
 
+  const downloadCsv = async () => {
+    try {
+      await downloadFile(
+        `/finance/projects/${projectId}/export.csv`,
+        `${name.replace(/[^a-z0-9]/gi, '_')}_finance.csv`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Export failed');
+    }
+  };
+
   return (
     <div className="p-8 max-w-4xl">
       <Link to="/portal/finance" className="text-sm text-[#A1A1AA] hover:text-[#FAFAFA] flex items-center gap-1 mb-4">
@@ -158,11 +172,9 @@ export function FinanceLedger() {
       </Link>
       <div className="flex items-center justify-between mb-8">
         <h1 className="font-display font-bold text-2xl">{name} — Ledger</h1>
-        <a href={`/api/finance/projects/${projectId}/export.csv`}>
-          <Button variant="outline" size="sm">
-            <Download size={14} className="mr-1" /> CSV
-          </Button>
-        </a>
+        <Button variant="outline" size="sm" onClick={downloadCsv}>
+          <Download size={14} className="mr-1" /> CSV
+        </Button>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6 items-end">
@@ -180,7 +192,7 @@ export function FinanceLedger() {
         </div>
         <Input
           type="number"
-          placeholder="Amount"
+          placeholder="Amount *"
           value={form.amount}
           onChange={(e) => setForm({ ...form, amount: e.target.value })}
           className="w-28"
@@ -197,7 +209,11 @@ export function FinanceLedger() {
           onChange={(e) => setForm({ ...form, note: e.target.value })}
           className="flex-1 min-w-40"
         />
-        <Button onClick={addEntry} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+        <Button
+          onClick={addEntry}
+          disabled={!canAddEntry}
+          className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+        >
           <Plus size={14} className="mr-1" /> Add
         </Button>
       </div>

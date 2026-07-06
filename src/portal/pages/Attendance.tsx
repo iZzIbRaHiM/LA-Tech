@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
-import { api } from '../api';
+import { api, downloadFile } from '../api';
 
 interface AttendanceRecord {
   id: number;
@@ -102,24 +102,7 @@ export default function Attendance() {
 
   const downloadCsv = async (month: string) => {
     try {
-      const res = await fetch(`/api/reports/attendance.csv?month=${month}`, { credentials: 'include' });
-      if (!res.ok) {
-        let message = `Export failed (${res.status})`;
-        try {
-          const j = await res.json();
-          if (j?.error) message = j.error;
-        } catch {
-          /* keep default */
-        }
-        throw new Error(message);
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `attendance_${month}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadFile(`/reports/attendance.csv?month=${month}`, `attendance_${month}.csv`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Export failed');
     }

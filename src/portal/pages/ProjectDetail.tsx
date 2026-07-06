@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, type Project, type Task, type Department } from '../api';
@@ -26,6 +42,14 @@ export default function ProjectDetail() {
   const [notFound, setNotFound] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [msForm, setMsForm] = useState({ title: '', dueDate: '' });
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    status: 'active',
+    startDate: '',
+    endDate: '',
+  });
 
   const load = useCallback(() => {
     api<{ project: Project; tasks: Task[]; visibility?: Array<{ id: number; name: string }> }>(`/projects/${id}`)
@@ -69,6 +93,40 @@ export default function ProjectDetail() {
     }
   };
 
+  const openEdit = () => {
+    setEditForm({
+      name: project.name,
+      description: project.description ?? '',
+      status: project.status,
+      startDate: project.start_date ?? '',
+      endDate: project.end_date ?? '',
+    });
+    setEditing(true);
+  };
+
+  const canSaveEdit = editForm.name.trim() !== '' && editForm.startDate !== '' && editForm.endDate !== '';
+
+  const saveEdit = async () => {
+    if (!canSaveEdit) return;
+    try {
+      await api(`/projects/${project.id}`, {
+        method: 'PATCH',
+        body: {
+          name: editForm.name,
+          description: editForm.description,
+          status: editForm.status,
+          startDate: editForm.startDate,
+          endDate: editForm.endDate,
+        },
+      });
+      setEditing(false);
+      load();
+      toast.success('Project updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   return (
     <div className="p-8 max-w-3xl">
       <Link to="/portal/projects" className="text-sm text-[#A1A1AA] hover:text-[#FAFAFA] flex items-center gap-1 mb-4">
@@ -78,6 +136,11 @@ export default function ProjectDetail() {
       <div className="flex items-center gap-3 mb-2">
         <h1 className="font-display font-bold text-2xl">{project.name}</h1>
         <Badge variant="outline" className="capitalize">{project.status.replace('_', ' ')}</Badge>
+        {user?.isCeo && (
+          <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
+            <Pencil size={13} className="mr-1" /> Edit
+          </Button>
+        )}
       </div>
       {(project.start_date || project.end_date) && (
         <p className="text-xs text-[#71717A] mb-4">
@@ -162,7 +225,7 @@ export default function ProjectDetail() {
         {user?.isCeo && (
           <div className="flex gap-2 mt-4 max-w-md">
             <Input
-              placeholder="Milestone title"
+              placeholder="Milestone title *"
               value={msForm.title}
               onChange={(e) => setMsForm({ ...msForm, title: e.target.value })}
               className="flex-1"
@@ -174,6 +237,7 @@ export default function ProjectDetail() {
               className="w-36"
             />
             <Button
+              disabled={!msForm.title.trim()}
               onClick={async () => {
                 if (!msForm.title.trim()) return;
                 try {
@@ -187,7 +251,7 @@ export default function ProjectDetail() {
                   toast.error(e instanceof Error ? e.message : 'Failed');
                 }
               }}
-              className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               <Plus size={14} />
             </Button>
@@ -215,6 +279,71 @@ export default function ProjectDetail() {
           {tasks.length === 0 && <p className="text-sm text-[#71717A]">No tasks linked yet.</p>}
         </div>
       </section>
+
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name <span className="text-red-500">*</span></Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['active', 'on_hold', 'completed', 'archived'].map((s) => (
+                    <SelectItem key={s} value={s} className="capitalize">
+                      {s.replace('_', ' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Start date <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={editForm.startDate}
+                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>End date <span className="text-red-500">*</span></Label>
+                <Input
+                  type="date"
+                  min={editForm.startDate || undefined}
+                  value={editForm.endDate}
+                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={saveEdit}
+              disabled={!canSaveEdit}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
