@@ -1,8 +1,12 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, lazy, Suspense } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import HeroScene from './HeroScene';
+
+// three.js + @react-three/fiber are the single heaviest dependency in the
+// marketing bundle and purely decorative — deferring them keeps the hero's
+// text/CTA from waiting on a 3D library to download and parse.
+const HeroScene = lazy(() => import('./HeroScene'));
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -115,7 +119,9 @@ export default function Hero() {
             style={{ opacity: 0.55 }}
           />
         ) : (
-          <HeroScene />
+          <Suspense fallback={null}>
+            <HeroScene />
+          </Suspense>
         )}
       </div>
 
