@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, Clock, Download, BarChart3 } from 'lucide-react';
+import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -15,12 +23,15 @@ import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile } from '../api';
 
+type Category = 'on_time' | 'late' | 'half_day' | 'absent' | null;
+
 interface AttendanceRecord {
   id: number;
   user_id: number;
   user_name?: string;
-  check_in: string;
+  check_in: string | null;
   check_out: string | null;
+  category: Category;
   validation_status: 'pending' | 'approved' | 'rejected';
   note: string;
 }
@@ -31,13 +42,40 @@ const STATUS_BADGE: Record<AttendanceRecord['validation_status'], string> = {
   rejected: 'text-red-400 border-red-900',
 };
 
-function duration(a: string, b: string | null): string {
-  if (!b) return '—';
+const CATEGORY_BADGE: Record<string, string> = {
+  on_time: 'text-emerald-400 border-emerald-900',
+  late: 'text-amber-400 border-amber-900',
+  half_day: 'text-orange-400 border-orange-900',
+  absent: 'text-red-400 border-red-900',
+};
+
+const CATEGORY_LABEL: Record<string, string> = {
+  on_time: 'On time',
+  late: 'Late',
+  half_day: 'Half day',
+  absent: 'Absent',
+};
+
+function CategoryBadge({ category }: { category: Category }) {
+  if (!category) return <span className="text-[#71717A]">—</span>;
+  return (
+    <Badge variant="outline" className={`text-xs ${CATEGORY_BADGE[category]}`}>
+      {CATEGORY_LABEL[category]}
+    </Badge>
+  );
+}
+
+function duration(a: string | null, b: string | null): string {
+  if (!a || !b) return '—';
   const ms = new Date(b.replace(' ', 'T') + 'Z').getTime() - new Date(a.replace(' ', 'T') + 'Z').getTime();
   const h = Math.floor(ms / 3600000);
   const m = Math.round((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
+
+// 'YYYY-MM-DD HH:MM:SS' <-> the value a datetime-local input wants/gives.
+const toInputValue = (checkIn: string) => checkIn.replace(' ', 'T').slice(0, 16);
+const fromInputValue = (value: string) => `${value.replace('T', ' ')}:00`;
 
 export default function Attendance() {
   const { user } = useAuth();
@@ -46,6 +84,8 @@ export default function Attendance() {
   const [team, setTeam] = useState<AttendanceRecord[]>([]);
   const [busy, setBusy] = useState(false);
   const [checkInNote, setCheckInNote] = useState('');
+  const [editing, setEditing] = useState<AttendanceRecord | null>(null);
+  const [editedTime, setEditedTime] = useState('');
 
   const load = useCallback(() => {
     api<{ open: AttendanceRecord | null }>('/attendance/status').then((r) => setOpen(r.open)).catch(() => {});
@@ -75,11 +115,32 @@ export default function Attendance() {
     }
   };
 
-  const validate = async (id: number, status: 'approved' | 'rejected') => {
+  const validate = async (id: number, status: 'approved' | 'rejected', checkInTime?: string) => {
     try {
-      await api(`/attendance/${id}/validate`, { method: 'POST', body: { status } });
+      await api(`/attendance/${id}/validate`, { method: 'POST', body: { status, checkInTime } });
       load();
-      toast.success(`Record ${status}`);
+      toast.success(status === 'approved' ? 'Approved' : 'Rejected');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const openEditDialog = (r: AttendanceRecord) => {
+    setEditing(r);
+    setEditedTime(r.check_in ? toInputValue(r.check_in) : '');
+  };
+
+  const approveWithEditedTime = async () => {
+    if (!editing || !editedTime) return;
+    await validate(editing.id, 'approved', fromInputValue(editedTime));
+    setEditing(null);
+  };
+
+  const deleteAbsence = async (r: AttendanceRecord) => {
+    try {
+      await api(`/attendance/${r.id}`, { method: 'DELETE' });
+      load();
+      toast.success('Absence record removed');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     }
@@ -185,6 +246,7 @@ export default function Attendance() {
                   <TableHead>Check in</TableHead>
                   <TableHead>Check out</TableHead>
                   <TableHead>Duration</TableHead>
+                  <TableHead>Category</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead className="text-right">Validate</TableHead>
                 </TableRow>
@@ -196,13 +258,17 @@ export default function Attendance() {
                     <TableCell className="text-xs text-[#A1A1AA]">{r.check_in}</TableCell>
                     <TableCell className="text-xs text-[#A1A1AA]">{r.check_out}</TableCell>
                     <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                    <TableCell>
+                      <CategoryBadge category={r.category} />
+                    </TableCell>
                     <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
                       {r.note || '—'}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="sm"
+                        title="Approve as-is"
                         className="text-emerald-400"
                         onClick={() => validate(r.id, 'approved')}
                       >
@@ -211,6 +277,16 @@ export default function Attendance() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        title="Correct the check-in time, then approve"
+                        className="text-[#A1A1AA] hover:text-[#FAFAFA]"
+                        onClick={() => openEditDialog(r)}
+                      >
+                        <PencilLine size={14} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Reject (blocks re-checking-in today)"
                         className="text-red-400"
                         onClick={() => validate(r.id, 'rejected')}
                       >
@@ -278,7 +354,7 @@ export default function Attendance() {
       )}
 
       {/* Own history */}
-      <section>
+      <section className="mb-10">
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My history</h2>
         {own.length === 0 ? (
           <p className="text-sm text-[#71717A]">No records yet — check in to create your first one.</p>
@@ -289,6 +365,7 @@ export default function Attendance() {
                 <TableHead>Check in</TableHead>
                 <TableHead>Check out</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>Note</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -296,9 +373,12 @@ export default function Attendance() {
             <TableBody>
               {own.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="text-xs">{r.check_in}</TableCell>
-                  <TableCell className="text-xs">{r.check_out ?? 'open'}</TableCell>
+                  <TableCell className="text-xs">{r.check_in ?? '—'}</TableCell>
+                  <TableCell className="text-xs">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
                   <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                  <TableCell>
+                    <CategoryBadge category={r.category} />
+                  </TableCell>
                   <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
                     {r.note || '—'}
                   </TableCell>
@@ -313,6 +393,77 @@ export default function Attendance() {
           </Table>
         )}
       </section>
+
+      {/* Team history — validators only, and only if there's something to see */}
+      {isValidator && team.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Team history</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Check in</TableHead>
+                <TableHead>Check out</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {team.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.user_name}</TableCell>
+                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ?? '—'}</TableCell>
+                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
+                  <TableCell>
+                    <CategoryBadge category={r.category} />
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.validation_status]}`}>
+                      {r.validation_status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r.category === 'absent' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Remove incorrect absence record"
+                        className="text-red-400"
+                        onClick={() => deleteAbsence(r)}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      )}
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Correct check-in time</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Actual check-in time</Label>
+            <Input type="datetime-local" value={editedTime} onChange={(e) => setEditedTime(e.target.value)} />
+            <p className="text-xs text-[#71717A]">Category (on time / late / half day) recomputes from this time.</p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={approveWithEditedTime}
+              disabled={!editedTime}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Approve with this time
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

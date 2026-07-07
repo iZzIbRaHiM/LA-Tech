@@ -11,7 +11,7 @@ import { financeRouter } from './routes-finance.js';
 import { attendanceRouter } from './routes-attendance.js';
 import { leaveRouter } from './routes-leave.js';
 import { attachmentsRouter } from './routes-attachments.js';
-import { extrasRouter, sendDueReminders } from './routes-extras.js';
+import { extrasRouter, sendDueReminders, sweepAbsences } from './routes-extras.js';
 import { miscRouter } from './routes-misc.js';
 import { settingsRouter } from './routes-settings.js';
 
@@ -88,10 +88,14 @@ if (!isVercel) {
     process.exit(1);
   });
 
-  // Due-date reminders: once at boot, then hourly.
+  // Due-date reminders + absence sweep: once at boot, then hourly (the
+  // sweep itself only actually does anything once per calendar day; the
+  // hourly interval is just how often it checks, matching the reminders loop).
   sendDueReminders().catch((err) => console.error('[reminders] error:', err));
+  sweepAbsences().catch((err) => console.error('[absence-sweep] error:', err));
   setInterval(() => {
     sendDueReminders().catch((err) => console.error('[reminders] error:', err));
+    sweepAbsences().catch((err) => console.error('[absence-sweep] error:', err));
   }, 60 * 60 * 1000);
 
   const PORT = Number(process.env.PORT_API || 5184);

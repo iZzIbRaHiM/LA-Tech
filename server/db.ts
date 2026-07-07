@@ -304,6 +304,16 @@ export async function initDb() {
       note TEXT NOT NULL DEFAULT ''
     );
 
+    -- check_in is nullable so system-generated absence rows (no one checked
+    -- in) can exist; record_date is always set (from check_in for real
+    -- records, explicitly for absences) so "one record per person per day"
+    -- can be enforced regardless of which kind of row it is.
+    ALTER TABLE attendance ALTER COLUMN check_in DROP NOT NULL;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS record_date TEXT;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS category TEXT CHECK (category IN ('on_time','late','half_day','absent'));
+    UPDATE attendance SET record_date = date(check_in) WHERE record_date IS NULL AND check_in IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_user_date ON attendance(user_id, record_date);
+
     CREATE TABLE IF NOT EXISTS leave_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
+import { isWeekday } from './attendance.js';
 
 // Milestones (project timeline), CEO attendance reports, and the audit viewer.
 export const extrasRouter = Router();
@@ -164,6 +165,49 @@ export async function sendDueReminders() {
   if (rows.length) console.log(`[reminders] sent ${rows.length} due-date reminder(s)`);
 }
 
+// ---------- Absence sweep ----------
+// Runs once daily (piggybacking on the reminders cron, not a second Vercel
+// cron slot — Hobby tier only allows one). Fires at 00:00 UTC, so "today" has
+// just started and "yesterday" is the most recently fully-completed day —
+// that's the day this sweep marks absences for, never same-day.
+// A user is marked absent for a work day (Mon-Fri, §2 of the PRD addendum)
+// only if they have no attendance record at all for that day AND no approved
+// leave covering it. Marked pre-approved (nothing to dispute — there's no
+// check-in to validate) but deletable by a validator if it's wrong.
+export async function sweepAbsences() {
+  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  if (!isWeekday(yesterday)) return;
+
+  const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
+  if (!ceo) return; // no CEO seeded yet — nothing to attribute the sweep's audit-log entries to
+
+  const users = await db.prepare('SELECT id FROM users WHERE active = 1').all() as Array<{ id: number }>;
+  let created = 0;
+  for (const u of users) {
+    const hasRecord = await db
+      .prepare('SELECT 1 FROM attendance WHERE user_id = ? AND record_date = ?')
+      .get(u.id, yesterday);
+    if (hasRecord) continue;
+
+    const onLeave = await db
+      .prepare(
+        "SELECT 1 FROM leave_requests WHERE user_id = ? AND status = 'approved' AND start_date <= ? AND end_date >= ?"
+      )
+      .get(u.id, yesterday, yesterday);
+    if (onLeave) continue;
+
+    const info = await db
+      .prepare(
+        "INSERT INTO attendance (user_id, check_in, check_out, record_date, category, validation_status) VALUES (?, ?, ?, ?, 'absent', 'approved')"
+      )
+      .run(u.id, null, null, yesterday);
+    await logActivity(ceo.id, 'attendance', Number(info.lastInsertRowid), 'marked_absent', { userId: u.id, date: yesterday });
+    await notify(u.id, 'attendance', `You were marked absent for ${yesterday} — no check-in recorded`, '/portal/attendance');
+    created++;
+  }
+  if (created) console.log(`[absence-sweep] marked ${created} absence(s) for ${yesterday}`);
+}
+
 // Secure Cron route for Vercel (invoked daily — see vercel.json; Hobby-tier
 // cron jobs are limited to once per day)
 extrasRouter.get('/cron/reminders', async (req, res) => {
@@ -175,12 +219,13 @@ extrasRouter.get('/cron/reminders', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  console.log('[cron] Running hourly due-date reminders...');
+  console.log('[cron] Running due-date reminders and absence sweep...');
   try {
     await sendDueReminders();
+    await sweepAbsences();
     res.json({ ok: true });
   } catch (err: any) {
-    console.error('[cron] Reminders execution error:', err);
+    console.error('[cron] Reminders/absence-sweep execution error:', err);
     res.status(500).json({ error: 'Reminders execution failed', detail: err.message });
   }
 });
