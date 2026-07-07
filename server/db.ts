@@ -345,6 +345,26 @@ export async function initDb() {
       position INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
+
+    -- Singleton company-wide attendance policy (id is always 1).
+    CREATE TABLE IF NOT EXISTS attendance_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      office_start_time TEXT NOT NULL DEFAULT '09:00',
+      office_end_time TEXT NOT NULL DEFAULT '18:00',
+      late_threshold_minutes INTEGER NOT NULL DEFAULT 15,
+      half_day_threshold_minutes INTEGER NOT NULL DEFAULT 90,
+      max_absent_allowed INTEGER NOT NULL DEFAULT 2,
+      late_deduction_type TEXT NOT NULL DEFAULT 'fixed' CHECK (late_deduction_type IN ('fixed','percentage')),
+      late_deduction_amount REAL NOT NULL DEFAULT 0,
+      half_day_deduction_type TEXT NOT NULL DEFAULT 'fixed' CHECK (half_day_deduction_type IN ('fixed','percentage')),
+      half_day_deduction_amount REAL NOT NULL DEFAULT 0,
+      absent_deduction_type TEXT NOT NULL DEFAULT 'fixed' CHECK (absent_deduction_type IN ('fixed','percentage')),
+      absent_deduction_amount REAL NOT NULL DEFAULT 0,
+      updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      updated_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+
+    INSERT INTO attendance_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
   `);
 
   await seedCeo();

@@ -14,6 +14,7 @@ import {
   CalendarDays,
   ScrollText,
   UserCog,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -131,6 +132,7 @@ export default function Layout() {
     { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
     ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
+    ...(user?.isCeo ? [{ to: '/portal/settings', label: 'Settings', icon: SettingsIcon }] : []),
   ];
 
   return (
