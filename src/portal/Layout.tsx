@@ -131,6 +131,7 @@ export default function Layout() {
     { to: '/portal/attendance', label: 'Attendance', icon: Clock },
     { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
     ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
+    ...(user?.isCeo ? [{ to: '/portal/salary', label: 'Salary', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
     ...(user?.isCeo ? [{ to: '/portal/settings', label: 'Settings', icon: SettingsIcon }] : []),
   ];

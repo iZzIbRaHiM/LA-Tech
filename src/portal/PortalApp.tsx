@@ -14,6 +14,7 @@ import Leave from './pages/Leave';
 import Audit from './pages/Audit';
 import People from './pages/People';
 import Settings from './pages/Settings';
+import Salary from './pages/Salary';
 import { FinanceOverview, FinanceLedger } from './pages/Finance';
 
 function Gate() {
@@ -43,6 +44,7 @@ function Gate() {
         {user.isCeo && <Route path="audit" element={<Audit />} />}
         {user.isCeo && <Route path="people" element={<People />} />}
         {user.isCeo && <Route path="settings" element={<Settings />} />}
+        {user.isCeo && <Route path="salary" element={<Salary />} />}
         <Route path="*" element={<Navigate to="/portal" replace />} />
       </Route>
     </Routes>

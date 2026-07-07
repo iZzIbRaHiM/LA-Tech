@@ -375,6 +375,41 @@ export async function initDb() {
     );
 
     INSERT INTO attendance_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+    -- Salary history: current salary is just the latest row per user, so a
+    -- past payment still reflects what was actually in effect that month
+    -- even after a later raise.
+    CREATE TABLE IF NOT EXISTS salaries (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      amount REAL NOT NULL,
+      effective_from TEXT NOT NULL,
+      set_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+    CREATE INDEX IF NOT EXISTS idx_salaries_user ON salaries(user_id, effective_from DESC);
+
+    CREATE TABLE IF NOT EXISTS salary_payments (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      period TEXT NOT NULL,
+      base_amount REAL NOT NULL,
+      late_count INTEGER NOT NULL DEFAULT 0,
+      half_day_count INTEGER NOT NULL DEFAULT 0,
+      billable_absent_count INTEGER NOT NULL DEFAULT 0,
+      apply_late_deduction INTEGER NOT NULL DEFAULT 1,
+      apply_half_day_deduction INTEGER NOT NULL DEFAULT 1,
+      apply_absent_deduction INTEGER NOT NULL DEFAULT 1,
+      late_deduction_total REAL NOT NULL DEFAULT 0,
+      half_day_deduction_total REAL NOT NULL DEFAULT 0,
+      absent_deduction_total REAL NOT NULL DEFAULT 0,
+      net_amount REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','paid')),
+      note TEXT NOT NULL DEFAULT '',
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
+      UNIQUE (user_id, period)
+    );
   `);
 
   await seedCeo();
