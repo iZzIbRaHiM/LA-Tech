@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -37,6 +45,14 @@ export default function TaskDetail() {
   const [subAssignee, setSubAssignee] = useState('');
   const [members, setMembers] = useState<Array<{ id: number; name: string }>>([]);
   const [notFound, setNotFound] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    dueDate: '',
+    assignedTo: '',
+  });
 
   const load = useCallback(() => {
     api<{ task: Task; comments: Comment[]; subtasks: Task[] }>(`/tasks/${id}`)
@@ -83,6 +99,40 @@ export default function TaskDetail() {
     }
   };
 
+  const openEdit = () => {
+    setEditForm({
+      title: task.title,
+      description: task.description ?? '',
+      priority: task.priority,
+      dueDate: task.due_date ?? '',
+      assignedTo: task.assigned_to ? String(task.assigned_to) : '',
+    });
+    setEditing(true);
+  };
+
+  const canSaveEdit = editForm.title.trim() !== '';
+
+  const saveEdit = async () => {
+    if (!canSaveEdit) return;
+    try {
+      await api(`/tasks/${task.id}`, {
+        method: 'PATCH',
+        body: {
+          title: editForm.title,
+          description: editForm.description,
+          priority: editForm.priority,
+          dueDate: editForm.dueDate || null,
+          assignedTo: editForm.assignedTo ? Number(editForm.assignedTo) : null,
+        },
+      });
+      setEditing(false);
+      load();
+      toast.success('Task updated');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const addComment = async () => {
     if (!comment.trim()) return;
     try {
@@ -123,7 +173,14 @@ export default function TaskDetail() {
       </Link>
 
       <div className="flex items-start justify-between gap-4 mb-2">
-        <h1 className="font-display font-bold text-2xl">{task.title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="font-display font-bold text-2xl">{task.title}</h1>
+          {canDelegate && (
+            <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
+              <Pencil size={13} />
+            </Button>
+          )}
+        </div>
         <Select value={task.status} onValueChange={setStatus}>
           <SelectTrigger className="w-36 shrink-0">
             <SelectValue />
@@ -229,6 +286,80 @@ export default function TaskDetail() {
           </Button>
         </div>
       </section>
+
+      <Dialog open={editing} onOpenChange={setEditing}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Title <span className="text-red-500">*</span></Label>
+              <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Priority</Label>
+                <Select value={editForm.priority} onValueChange={(v) => setEditForm({ ...editForm, priority: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['low', 'medium', 'high', 'urgent'].map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Due date</Label>
+                <Input
+                  type="date"
+                  value={editForm.dueDate}
+                  onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Assignee</Label>
+              <Select
+                value={editForm.assignedTo}
+                onValueChange={(v) => setEditForm({ ...editForm, assignedTo: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.map((m) => (
+                    <SelectItem key={m.id} value={String(m.id)}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={saveEdit}
+              disabled={!canSaveEdit}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
-import { taskVisibilityWhere, userCanSeeProject } from './policy.js';
+import { taskVisibilityWhere, userCanSeeProject, canManageTask } from './policy.js';
 
 export const tasksRouter = Router();
 
@@ -129,14 +129,19 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     | undefined;
   if (!task) return res.status(404).json({ error: 'Not found' });
 
-  const canManage = user.isCeo || (user.role === 'head' && user.departmentId === task.department_id);
+  const canManage = canManageTask(user, task);
   const isAssignee = task.assigned_to === user.id;
   if (!canManage && !isAssignee) return res.status(403).json({ error: 'No access' });
 
   const { status, priority, dueDate, assignedTo, title, description } = req.body ?? {};
 
-  // Assignees can only move status; managers can edit everything.
-  if (!canManage && (priority || dueDate || assignedTo || title || description)) {
+  // Assignees can only move status; managers can edit everything. Checked
+  // against undefined (not truthiness) so clearing a field to null/'' by a
+  // non-manager is rejected too, instead of silently no-op'ing below.
+  if (
+    !canManage &&
+    (priority !== undefined || dueDate !== undefined || assignedTo !== undefined || title !== undefined || description !== undefined)
+  ) {
     return res.status(403).json({ error: 'Assignees can only update status' });
   }
 

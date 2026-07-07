@@ -50,8 +50,10 @@ export function canManageTask(user: SessionUser, task: { department_id: number }
 // The CEO decides for anyone; a head decides for members of their own
 // department; nobody decides for themselves (heads escalate to the CEO).
 async function decidesFor(actor: SessionUser, subjectUserId: number): Promise<boolean> {
-  if (subjectUserId === actor.id) return false;
+  // The CEO outranks everyone, including themselves — nobody else could ever
+  // decide a CEO's own record, so without this it would sit pending forever.
   if (actor.isCeo) return true;
+  if (subjectUserId === actor.id) return false;
   if (actor.role !== 'head') return false;
   const row = await db
     .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
