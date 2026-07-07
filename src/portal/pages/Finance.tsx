@@ -20,6 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { useAuth } from '../AuthContext';
 import Attachments from '../Attachments';
 import { api, downloadFile } from '../api';
 
@@ -45,6 +46,7 @@ interface Entry {
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 export function FinanceOverview() {
+  const { user } = useAuth();
   const [perProject, setPerProject] = useState<ProjectFinance[]>([]);
   const [totals, setTotals] = useState({ budget: 0, expenses: 0, income: 0 });
 
@@ -60,7 +62,9 @@ export function FinanceOverview() {
   return (
     <div className="p-8 max-w-4xl">
       <h1 className="font-display font-bold text-2xl mb-1">Finance</h1>
-      <p className="text-sm text-[#A1A1AA] mb-8">Visible only to you (CEO).</p>
+      <p className="text-sm text-[#A1A1AA] mb-8">
+        {user?.isCeo ? 'Visible only to the CEO and finance delegates.' : 'You have finance delegate access.'}
+      </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         {(

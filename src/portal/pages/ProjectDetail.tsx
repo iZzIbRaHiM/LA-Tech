@@ -150,30 +150,30 @@ export default function ProjectDetail() {
       {project.description && <p className="text-sm text-[#D4D4D8] whitespace-pre-wrap mb-8">{project.description}</p>}
 
       {user?.isCeo && (
-        <>
-          <section className="mb-8">
-            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <Eye size={13} /> Department visibility
-            </h2>
-            <div className="space-y-2 border border-[#1f1f23] bg-[#0f0f12] p-3 max-w-sm">
-              {departments.map((d) => (
-                <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={visibility.some((v) => v.id === d.id)}
-                    onCheckedChange={(c) => toggleVisibility(d.id, !!c)}
-                  />
-                  {d.name}
-                </label>
-              ))}
-            </div>
-          </section>
-          <Link
-            to={`/portal/finance/${project.id}`}
-            className="inline-flex items-center gap-1.5 text-sm text-[#DFE104] hover:underline mb-8"
-          >
-            <Wallet size={14} /> Open finance ledger (CEO only)
-          </Link>
-        </>
+        <section className="mb-8">
+          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <Eye size={13} /> Department visibility
+          </h2>
+          <div className="space-y-2 border border-[#1f1f23] bg-[#0f0f12] p-3 max-w-sm">
+            {departments.map((d) => (
+              <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={visibility.some((v) => v.id === d.id)}
+                  onCheckedChange={(c) => toggleVisibility(d.id, !!c)}
+                />
+                {d.name}
+              </label>
+            ))}
+          </div>
+        </section>
+      )}
+      {(user?.isCeo || user?.financeAccess) && (
+        <Link
+          to={`/portal/finance/${project.id}`}
+          className="inline-flex items-center gap-1.5 text-sm text-[#DFE104] hover:underline mb-8"
+        >
+          <Wallet size={14} /> Open finance ledger
+        </Link>
       )}
 
       {/* Milestones timeline */}
