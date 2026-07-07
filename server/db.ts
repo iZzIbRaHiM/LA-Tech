@@ -23,6 +23,14 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
+// All "datetime now" columns are plain TEXT (SQLite-compat), so the client
+// (attendance duration math, etc.) treats every stored timestamp as UTC.
+// Force the session timezone rather than relying on the database's default
+// staying UTC forever.
+pool.on('connect', (client) => {
+  client.query("SET TIME ZONE 'UTC'").catch((err) => console.error('[DATABASE] Failed to set session timezone:', err));
+});
+
 export function translateQuery(sql: string): string {
   let translated = sql;
   let isInsertOrIgnore = false;

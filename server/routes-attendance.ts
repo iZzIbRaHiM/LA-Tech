@@ -44,14 +44,19 @@ attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => 
   await db.prepare("UPDATE attendance SET check_out = datetime('now') WHERE id = ?").run(open.id);
   await logActivity(user.id, 'attendance', open.id, 'checked_out');
 
-  // Tell the validator there's a completed record waiting.
+  // Tell the validator there's a completed record waiting — dept head, or
+  // the CEO if unassigned/headless (same escalation as leave requests).
   const head = await db
     .prepare(
       `SELECT d.head_user_id FROM memberships m JOIN departments d ON d.id = m.department_id
        WHERE m.user_id = ?`
     )
     .get(user.id) as { head_user_id: number | null } | undefined;
-  const validator = head?.head_user_id && head.head_user_id !== user.id ? head.head_user_id : null;
+  let validator = head?.head_user_id && head.head_user_id !== user.id ? head.head_user_id : null;
+  if (!validator) {
+    const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
+    validator = ceo && ceo.id !== user.id ? ceo.id : null;
+  }
   if (validator) {
     await notify(validator, 'attendance', `${user.name} checked out — attendance awaiting validation`, '/portal/attendance');
   }

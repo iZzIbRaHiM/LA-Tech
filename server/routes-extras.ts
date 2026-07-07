@@ -87,8 +87,10 @@ async function attendanceReport(month: string): Promise<ReportRow[]> {
   return await db
     .prepare(
       `SELECT u.id AS user_id, u.name, d.name AS department,
-        COUNT(DISTINCT date(a.check_in)) AS days_present,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (a.check_out::timestamp - a.check_in::timestamp)) / 60), 0) AS total_minutes,
+        -- Rejected records don't count toward days/hours — that's the point of validation.
+        COUNT(DISTINCT CASE WHEN a.validation_status != 'rejected' THEN date(a.check_in) END) AS days_present,
+        COALESCE(SUM(CASE WHEN a.validation_status != 'rejected'
+          THEN EXTRACT(EPOCH FROM (a.check_out::timestamp - a.check_in::timestamp)) / 60 ELSE 0 END), 0) AS total_minutes,
         SUM(CASE WHEN a.validation_status = 'approved' THEN 1 ELSE 0 END) AS approved,
         SUM(CASE WHEN a.validation_status = 'pending' THEN 1 ELSE 0 END) AS pending,
         SUM(CASE WHEN a.validation_status = 'rejected' THEN 1 ELSE 0 END) AS rejected

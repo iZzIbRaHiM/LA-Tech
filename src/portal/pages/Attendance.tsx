@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LogIn, LogOut, Check, X, Clock, Download, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -44,6 +45,7 @@ export default function Attendance() {
   const [own, setOwn] = useState<AttendanceRecord[]>([]);
   const [team, setTeam] = useState<AttendanceRecord[]>([]);
   const [busy, setBusy] = useState(false);
+  const [checkInNote, setCheckInNote] = useState('');
 
   const load = useCallback(() => {
     api<{ open: AttendanceRecord | null }>('/attendance/status').then((r) => setOpen(r.open)).catch(() => {});
@@ -59,8 +61,12 @@ export default function Attendance() {
   const punch = async (dir: 'check-in' | 'check-out') => {
     setBusy(true);
     try {
-      await api(`/attendance/${dir}`, { method: 'POST', body: {} });
+      await api(`/attendance/${dir}`, {
+        method: 'POST',
+        body: dir === 'check-in' ? { note: checkInNote } : {},
+      });
       toast.success(dir === 'check-in' ? 'Checked in — have a good day!' : 'Checked out');
+      setCheckInNote('');
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -80,7 +86,14 @@ export default function Attendance() {
   };
 
   const isValidator = user?.isCeo || user?.role === 'head';
-  const pendingTeam = team.filter((t) => t.check_out && t.validation_status === 'pending');
+  // Nobody outranks the CEO, so their own completed records also need a way
+  // to leave "pending" — the API allows the CEO to validate their own
+  // record; without folding it in here there'd be no button to do it.
+  const pendingOwnForCeo = user?.isCeo ? own.filter((r) => r.check_out && r.validation_status === 'pending') : [];
+  const pendingTeam = [
+    ...team.filter((t) => t.check_out && t.validation_status === 'pending'),
+    ...pendingOwnForCeo.map((r) => ({ ...r, user_name: r.user_name ?? 'You' })),
+  ];
 
   // CEO monthly report
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -119,18 +132,28 @@ export default function Attendance() {
           alt=""
           className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
         />
-        <div className="relative flex items-center justify-between p-6">
-          <div>
+        <div className="relative flex items-center justify-between gap-4 p-6">
+          <div className="min-w-0">
             <div className="text-sm text-[#A1A1AA] mb-1 flex items-center gap-1.5">
               <Clock size={13} />
               {open ? `Checked in at ${open.check_in}` : 'Not checked in'}
             </div>
-            <div className="font-display font-bold text-xl">
+            <div className="font-display font-bold text-xl mb-2">
               {open ? 'You are in the office' : 'Ready to start your day?'}
             </div>
+            {open ? (
+              open.note && <div className="text-sm text-[#A1A1AA]">Note: {open.note}</div>
+            ) : (
+              <Input
+                placeholder="Note (optional — e.g. WFH, on-site visit)"
+                value={checkInNote}
+                onChange={(e) => setCheckInNote(e.target.value)}
+                className="max-w-xs bg-[#09090B]/60"
+              />
+            )}
           </div>
           {open ? (
-            <Button onClick={() => punch('check-out')} disabled={busy} variant="outline" size="lg">
+            <Button onClick={() => punch('check-out')} disabled={busy} variant="outline" size="lg" className="shrink-0">
               <LogOut size={15} className="mr-1.5" /> Check out
             </Button>
           ) : (
@@ -138,7 +161,7 @@ export default function Attendance() {
               onClick={() => punch('check-in')}
               disabled={busy}
               size="lg"
-              className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] shrink-0"
             >
               <LogIn size={15} className="mr-1.5" /> Check in
             </Button>
@@ -162,6 +185,7 @@ export default function Attendance() {
                   <TableHead>Check in</TableHead>
                   <TableHead>Check out</TableHead>
                   <TableHead>Duration</TableHead>
+                  <TableHead>Note</TableHead>
                   <TableHead className="text-right">Validate</TableHead>
                 </TableRow>
               </TableHeader>
@@ -172,6 +196,9 @@ export default function Attendance() {
                     <TableCell className="text-xs text-[#A1A1AA]">{r.check_in}</TableCell>
                     <TableCell className="text-xs text-[#A1A1AA]">{r.check_out}</TableCell>
                     <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                    <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
+                      {r.note || '—'}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
@@ -262,6 +289,7 @@ export default function Attendance() {
                 <TableHead>Check in</TableHead>
                 <TableHead>Check out</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Note</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -271,6 +299,9 @@ export default function Attendance() {
                   <TableCell className="text-xs">{r.check_in}</TableCell>
                   <TableCell className="text-xs">{r.check_out ?? 'open'}</TableCell>
                   <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                  <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
+                    {r.note || '—'}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.validation_status]}`}>
                       {r.validation_status}
