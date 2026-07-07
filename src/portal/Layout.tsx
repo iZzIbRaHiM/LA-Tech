@@ -15,6 +15,7 @@ import {
   ScrollText,
   UserCog,
   Settings as SettingsIcon,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -130,6 +131,7 @@ export default function Layout() {
     { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
     { to: '/portal/attendance', label: 'Attendance', icon: Clock },
     { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
+    { to: '/portal/chat', label: 'Chat', icon: MessageSquare },
     ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/salary', label: 'Salary', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),

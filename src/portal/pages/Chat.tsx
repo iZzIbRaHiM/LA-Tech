@@ -1,0 +1,333 @@
+import { useEffect, useRef, useState } from 'react';
+import { MessageSquare, Plus, Pencil, Trash2, Send } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { useAuth } from '../AuthContext';
+import { api } from '../api';
+import type { PortalUser } from './People';
+
+interface ChatGroup {
+  id: number;
+  name: string;
+  created_by: number;
+  member_count: number;
+}
+
+interface Member {
+  id: number;
+  name: string;
+  email: string;
+}
+
+interface Message {
+  id: number;
+  sender_id: number;
+  sender_name: string;
+  body: string;
+  created_at: string;
+}
+
+const POLL_MS = 6000;
+
+export default function Chat() {
+  const { user } = useAuth();
+  const [groups, setGroups] = useState<ChatGroup[]>([]);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [draft, setDraft] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<ChatGroup | null>(null);
+  const [allUsers, setAllUsers] = useState<PortalUser[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const loadGroups = () => {
+    api<{ groups: ChatGroup[] }>('/chat/groups')
+      .then((r) => {
+        setGroups(r.groups);
+        setActiveId((cur) => cur ?? r.groups[0]?.id ?? null);
+      })
+      .catch((e) => toast.error(e.message));
+  };
+  useEffect(loadGroups, []);
+
+  useEffect(() => {
+    if (!user?.isCeo) return;
+    api<{ users: PortalUser[] }>('/users').then((r) => setAllUsers(r.users)).catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    const load = () => {
+      api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`)
+        .then((r) => setMessages(r.messages))
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, POLL_MS);
+    return () => clearInterval(interval);
+  }, [activeId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages]);
+
+  const send = async () => {
+    if (!activeId || !draft.trim()) return;
+    const body = draft;
+    setDraft('');
+    try {
+      await api(`/chat/groups/${activeId}/messages`, { method: 'POST', body: { body } });
+      const r = await api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`);
+      setMessages(r.messages);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send');
+      setDraft(body);
+    }
+  };
+
+  const openCreate = () => {
+    setGroupName('');
+    setSelectedMembers([]);
+    setCreating(true);
+  };
+
+  const openEdit = async (g: ChatGroup) => {
+    setGroupName(g.name);
+    setEditing(g);
+    try {
+      const r = await api<{ members: Member[] }>(`/chat/groups/${g.id}/members`);
+      setSelectedMembers(r.members.filter((m) => m.id !== user?.id).map((m) => m.id));
+    } catch {
+      setSelectedMembers([]);
+    }
+  };
+
+  const createGroup = async () => {
+    if (!groupName.trim()) return;
+    try {
+      const r = await api<{ id: number }>('/chat/groups', {
+        method: 'POST',
+        body: { name: groupName, memberIds: selectedMembers },
+      });
+      toast.success('Group created');
+      setCreating(false);
+      loadGroups();
+      setActiveId(r.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !groupName.trim()) return;
+    try {
+      await api(`/chat/groups/${editing.id}`, {
+        method: 'PATCH',
+        body: { name: groupName, memberIds: selectedMembers },
+      });
+      toast.success('Group updated');
+      setEditing(null);
+      loadGroups();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const deleteGroup = async (g: ChatGroup) => {
+    if (!confirm(`Delete "${g.name}"? This removes it for everyone, including its message history.`)) return;
+    try {
+      await api(`/chat/groups/${g.id}`, { method: 'DELETE' });
+      toast.success('Group deleted');
+      if (activeId === g.id) setActiveId(null);
+      loadGroups();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const activeGroup = groups.find((g) => g.id === activeId);
+
+  const MemberPicker = () => (
+    <div className="space-y-1.5">
+      <Label>Members</Label>
+      <div className="space-y-1.5 border border-[#1f1f23] p-3 max-h-56 overflow-auto">
+        {allUsers
+          .filter((u) => u.id !== user?.id)
+          .map((u) => (
+            <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={selectedMembers.includes(u.id)}
+                onCheckedChange={(c) =>
+                  setSelectedMembers((prev) => (c ? [...prev, u.id] : prev.filter((id) => id !== u.id)))
+                }
+              />
+              {u.name} <span className="text-[#71717A]">({u.email})</span>
+            </label>
+          ))}
+        {allUsers.length === 0 && <p className="text-xs text-[#71717A]">No other users yet.</p>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-full">
+      <div className="w-64 shrink-0 border-r border-[#1f1f23] flex flex-col">
+        <div className="px-4 py-3 flex items-center justify-between border-b border-[#1f1f23]">
+          <h2 className="font-medium text-sm">Chats</h2>
+          {user?.isCeo && (
+            <Button variant="ghost" size="sm" onClick={openCreate} className="text-[#DFE104]">
+              <Plus size={14} />
+            </Button>
+          )}
+        </div>
+        <div className="flex-1 overflow-auto">
+          {groups.map((g) => (
+            <div
+              key={g.id}
+              className={`flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm border-b border-[#141417] ${
+                activeId === g.id ? 'bg-[#1c1c20]' : 'hover:bg-[#141417]'
+              }`}
+              onClick={() => setActiveId(g.id)}
+            >
+              <div className="min-w-0">
+                <div className="truncate">{g.name}</div>
+                <div className="text-xs text-[#71717A]">{g.member_count} members</div>
+              </div>
+              {user?.isCeo && (
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEdit(g);
+                    }}
+                    className="text-[#71717A] hover:text-[#FAFAFA] p-1"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteGroup(g);
+                    }}
+                    className="text-[#71717A] hover:text-red-400 p-1"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {groups.length === 0 && (
+            <p className="text-sm text-[#71717A] p-4">
+              {user?.isCeo ? 'No groups yet — create one.' : "You're not in any chat groups yet."}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        {activeGroup ? (
+          <>
+            <div className="px-4 py-3 border-b border-[#1f1f23] font-medium text-sm">{activeGroup.name}</div>
+            <div className="flex-1 overflow-auto p-4 space-y-3">
+              {messages.map((m) => (
+                <div key={m.id} className={m.sender_id === user?.id ? 'flex justify-end' : 'flex justify-start'}>
+                  <div
+                    className={`max-w-md px-3 py-2 text-sm ${
+                      m.sender_id === user?.id ? 'bg-[#DFE104] text-black' : 'bg-[#141417] text-[#FAFAFA]'
+                    }`}
+                  >
+                    {m.sender_id !== user?.id && (
+                      <div className="text-xs text-[#A1A1AA] mb-0.5">{m.sender_name}</div>
+                    )}
+                    <div className="whitespace-pre-wrap">{m.body}</div>
+                    <div className={`text-[10px] mt-1 ${m.sender_id === user?.id ? 'text-black/60' : 'text-[#71717A]'}`}>
+                      {m.created_at}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {messages.length === 0 && <p className="text-sm text-[#71717A]">No messages yet — say hello.</p>}
+              <div ref={bottomRef} />
+            </div>
+            <div className="p-3 border-t border-[#1f1f23] flex gap-2">
+              <Input
+                placeholder="Message…"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && send()}
+              />
+              <Button onClick={send} disabled={!draft.trim()} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+                <Send size={14} />
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-[#71717A]">
+            <MessageSquare size={16} className="mr-2" /> Select a chat
+          </div>
+        )}
+      </div>
+
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>New group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name <span className="text-red-500">*</span></Label>
+              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} />
+            </div>
+            <MemberPicker />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={createGroup}
+              disabled={!groupName.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Name <span className="text-red-500">*</span></Label>
+              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} />
+            </div>
+            <MemberPicker />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={saveEdit}
+              disabled={!groupName.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

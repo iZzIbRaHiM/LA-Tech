@@ -87,3 +87,12 @@ export async function canAccessAttachmentEntity(user: SessionUser, entityType: s
   }
   return false;
 }
+
+// ---------- Chat ----------
+// A group's existence and messages are confidential to non-members, same
+// posture as project visibility — CEO membership isn't automatic just from
+// being CEO, only from actually being added (including auto-add on create).
+export async function isGroupMember(userId: number, groupId: number): Promise<boolean> {
+  const row = await db.prepare('SELECT 1 FROM chat_group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
+  return !!row;
+}

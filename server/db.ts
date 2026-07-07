@@ -53,8 +53,9 @@ export function translateQuery(sql: string): string {
 
   const trimmed = translated.trim().toUpperCase();
   if (trimmed.startsWith('INSERT ')) {
-    if (!trimmed.includes(' RETURNING ') && 
-        !trimmed.includes('INTO MEMBERSHIPS') && 
+    if (!trimmed.includes(' RETURNING ') &&
+        !trimmed.includes('INTO MEMBERSHIPS') &&
+        !trimmed.includes('CHAT_GROUP_MEMBERS') &&
         !translated.toUpperCase().includes('PROJECT_VISIBILITY')) {
       translated += ' RETURNING id';
     }
@@ -410,6 +411,31 @@ export async function initDb() {
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
       UNIQUE (user_id, period)
     );
+
+    -- Group chat: CEO-created, explicit member list, confidential to
+    -- non-members (same posture as project_visibility).
+    CREATE TABLE IF NOT EXISTS chat_groups (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_group_members (
+      group_id INTEGER NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      added_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
+      PRIMARY KEY (group_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id SERIAL PRIMARY KEY,
+      group_id INTEGER NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+      sender_id INTEGER NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_group ON chat_messages(group_id, created_at);
   `);
 
   await seedCeo();

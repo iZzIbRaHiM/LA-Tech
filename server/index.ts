@@ -15,6 +15,7 @@ import { extrasRouter, sendDueReminders, sweepAbsences } from './routes-extras.j
 import { miscRouter } from './routes-misc.js';
 import { settingsRouter } from './routes-settings.js';
 import { salaryRouter } from './routes-salary.js';
+import { chatRouter } from './routes-chat.js';
 
 // VERCEL is set on every Vercel deployment (dev/preview/prod alike) — a more
 // reliable "are we actually deployed" signal than NODE_ENV alone.
@@ -60,6 +61,7 @@ app.use('/api', extrasRouter);
 app.use('/api', miscRouter);
 app.use('/api', settingsRouter);
 app.use('/api', salaryRouter);
+app.use('/api', chatRouter);
 
 // Production: serve the built frontend from this same process, with an SPA
 // fallback so client routes like /portal/tasks/3 load index.html. In dev,

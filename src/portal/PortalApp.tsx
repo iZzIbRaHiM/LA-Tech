@@ -15,6 +15,7 @@ import Audit from './pages/Audit';
 import People from './pages/People';
 import Settings from './pages/Settings';
 import Salary from './pages/Salary';
+import Chat from './pages/Chat';
 import { FinanceOverview, FinanceLedger } from './pages/Finance';
 
 function Gate() {
@@ -38,6 +39,7 @@ function Gate() {
         <Route path="projects/:id" element={<ProjectDetail />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="leave" element={<Leave />} />
+        <Route path="chat" element={<Chat />} />
         {/* Role-gated routes render conditionally; the API enforces access regardless. */}
         {(user.isCeo || user.financeAccess) && <Route path="finance" element={<FinanceOverview />} />}
         {(user.isCeo || user.financeAccess) && <Route path="finance/:projectId" element={<FinanceLedger />} />}
