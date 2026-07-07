@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { db, logActivity, notify } from './db.js';
-import { requireAuth, requireCeo, issueSession, clearSession, loadSessionUser, bumpTokenVersion } from './auth.js';
+import { requireAuth, requireCeo, issueSession, logoutAndRevoke, loadSessionUser, bumpTokenVersion } from './auth.js';
 import { passwordPolicyError } from './validation.js';
 
 export const orgRouter = Router();
@@ -53,8 +53,8 @@ orgRouter.post('/auth/login', async (req, res) => {
   res.json({ user: await loadSessionUser(row.id) });
 });
 
-orgRouter.post('/auth/logout', (_req, res) => {
-  clearSession(res);
+orgRouter.post('/auth/logout', async (req, res) => {
+  await logoutAndRevoke(req, res);
   res.json({ ok: true });
 });
 

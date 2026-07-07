@@ -14,6 +14,11 @@ import { attachmentsRouter } from './routes-attachments.js';
 import { extrasRouter, sendDueReminders } from './routes-extras.js';
 import { miscRouter } from './routes-misc.js';
 
+// VERCEL is set on every Vercel deployment (dev/preview/prod alike) — a more
+// reliable "are we actually deployed" signal than NODE_ENV alone.
+const isVercel = !!process.env.VERCEL;
+const isDeployed = isVercel || process.env.NODE_ENV === 'production';
+
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
@@ -24,7 +29,7 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  if (process.env.NODE_ENV === 'production') {
+  if (isDeployed) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   next();
@@ -74,8 +79,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const isVercel = !!process.env.VERCEL;
-
 if (!isVercel) {
   // Local or traditional server: initialize DB and run background reminder loop
   await initDb().catch((err) => {
@@ -93,8 +96,7 @@ if (!isVercel) {
   app.listen(PORT, () => console.log(`[portal-api] listening on http://localhost:${PORT}`));
 }
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  console.warn('[SECURITY] JWT_SECRET is not set — sessions are signed with the dev default. Set JWT_SECRET before going live.');
-}
+// JWT_SECRET is enforced at import time in auth.ts (throws in any deployed
+// environment if unset) — no need to duplicate that check here.
 
 export default app;
