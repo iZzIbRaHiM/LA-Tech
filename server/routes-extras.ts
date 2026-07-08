@@ -114,6 +114,21 @@ extrasRouter.get('/reports/attendance', requireAuth, requireCeo, async (req, res
   res.json({ month, rows });
 });
 
+// Company-wide category breakdown for a month — dashboard donut chart.
+// Rejected records excluded (never established as true) and the CEO
+// naturally has no records to include (excluded from attendance entirely).
+extrasRouter.get('/reports/attendance/summary', requireAuth, requireCeo, async (req, res) => {
+  const month = monthParam(req.query.month);
+  const rows = await db
+    .prepare(
+      `SELECT category, COUNT(*) AS count FROM attendance
+       WHERE record_date LIKE ? AND validation_status != 'rejected' AND category IS NOT NULL
+       GROUP BY category`
+    )
+    .all(`${month}%`) as Array<{ category: string; count: number }>;
+  res.json({ month, rows });
+});
+
 extrasRouter.get('/reports/attendance.csv', requireAuth, requireCeo, async (req, res) => {
   const month = monthParam(req.query.month);
   const rows = await attendanceReport(month);

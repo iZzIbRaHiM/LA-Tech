@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../AuthContext';
 import { api, type Task, type Project } from '../api';
+
+// recharts is a heavy dependency used nowhere else in the app — lazy-load
+// it so only a CEO's browser ever downloads it, not every portal user.
+const CeoInsights = lazy(() => import('../CeoInsights'));
 
 interface Activity {
   id: number;
@@ -29,7 +33,7 @@ export default function Dashboard() {
   const overdue = open.filter((t) => t.due_date && t.due_date < new Date().toISOString().slice(0, 10));
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-6xl">
       <h1 className="font-display font-bold text-2xl mb-1">
         Welcome back, {user?.name?.split(' ')[0]}
       </h1>
@@ -59,6 +63,12 @@ export default function Dashboard() {
           <CardContent className="text-3xl font-display font-bold">{projects.length}</CardContent>
         </Card>
       </div>
+
+      {user?.isCeo && (
+        <Suspense fallback={<div className="h-32 mb-12 animate-pulse bg-[#0f0f12] border border-[#1f1f23]" />}>
+          <CeoInsights />
+        </Suspense>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section>
