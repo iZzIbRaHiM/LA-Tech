@@ -234,3 +234,22 @@ salaryRouter.get('/salary/:userId/payments', async (req, res) => {
     .all(userId);
   res.json({ payments });
 });
+
+// Company-wide payment ledger, for Finance overview — CEO only (the router-
+// level guard above already enforces this; salary stays stricter than the
+// finance-delegate model, so this must never be surfaced anywhere a
+// finance delegate could reach it).
+salaryRouter.get('/salary/payments', async (req, res) => {
+  const period = typeof req.query.period === 'string' ? req.query.period : undefined;
+  const where = period ? 'WHERE sp.period = ?' : '';
+  const params = period ? [period] : [];
+  const payments = await db
+    .prepare(
+      `SELECT sp.*, u.name AS user_name FROM salary_payments sp
+       JOIN users u ON u.id = sp.user_id
+       ${where} ORDER BY sp.period DESC, sp.id DESC`
+    )
+    .all(...params) as Array<{ net_amount: number }>;
+  const total = payments.reduce((sum, p) => sum + Number(p.net_amount), 0);
+  res.json({ payments, total });
+});

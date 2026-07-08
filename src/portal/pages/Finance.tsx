@@ -43,12 +43,21 @@ interface Entry {
   created_at: string;
 }
 
+interface SalaryPayment {
+  id: number;
+  user_name: string;
+  period: string;
+  net_amount: number;
+}
+
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 export function FinanceOverview() {
   const { user } = useAuth();
   const [perProject, setPerProject] = useState<ProjectFinance[]>([]);
   const [totals, setTotals] = useState({ budget: 0, expenses: 0, income: 0 });
+  const [salaryPayments, setSalaryPayments] = useState<SalaryPayment[]>([]);
+  const [salaryTotal, setSalaryTotal] = useState(0);
 
   useEffect(() => {
     api<{ perProject: ProjectFinance[]; totals: typeof totals }>('/finance/overview')
@@ -58,6 +67,19 @@ export function FinanceOverview() {
       })
       .catch((e) => toast.error(e.message));
   }, []);
+
+  useEffect(() => {
+    // Salary is CEO-only (stricter than finance-delegate access) — never
+    // fetched or rendered for a non-CEO finance delegate, even though they
+    // can otherwise see this page.
+    if (!user?.isCeo) return;
+    api<{ payments: SalaryPayment[]; total: number }>('/salary/payments')
+      .then((r) => {
+        setSalaryPayments(r.payments);
+        setSalaryTotal(r.total);
+      })
+      .catch(() => {});
+  }, [user]);
 
   return (
     <div className="p-8 max-w-4xl">
@@ -112,6 +134,45 @@ export function FinanceOverview() {
         </TableBody>
       </Table>
       {perProject.length === 0 && <p className="text-sm text-[#71717A] mt-4">No projects yet.</p>}
+
+      {user?.isCeo && (
+        <section className="mt-10">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide">Salary payments</h2>
+            <Link to="/portal/salary" className="text-sm text-[#DFE104] hover:underline">
+              Manage salaries →
+            </Link>
+          </div>
+          <Card className="bg-[#0f0f12] border-[#1f1f23] mb-4 max-w-xs">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-[#A1A1AA] font-normal">Total paid (all time)</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-display font-bold">{fmt(salaryTotal)}</CardContent>
+          </Card>
+          {salaryPayments.length === 0 ? (
+            <p className="text-sm text-[#71717A]">No salary payments recorded yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead className="text-right">Net paid</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {salaryPayments.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>{p.user_name}</TableCell>
+                    <TableCell className="text-[#A1A1AA]">{p.period}</TableCell>
+                    <TableCell className="text-right">{fmt(p.net_amount)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </section>
+      )}
     </div>
   );
 }
