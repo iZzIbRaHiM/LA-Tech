@@ -85,6 +85,13 @@ export async function canAccessAttachmentEntity(user: SessionUser, entityType: s
     if (!task) return false;
     return canManageTask(user, task) || task.assigned_to === user.id;
   }
+  if (entityType === 'leave') {
+    const request = await db.prepare('SELECT user_id FROM leave_requests WHERE id = ?').get(entityId) as
+      | { user_id: number }
+      | undefined;
+    if (!request) return false;
+    return request.user_id === user.id || (await canDecideLeave(user, request));
+  }
   return false;
 }
 

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Check, X, Plus, CalendarDays } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Check, X, Plus, CalendarDays, Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
+import Attachments from '../Attachments';
 import { api } from '../api';
 
 interface LeaveRequest {
@@ -98,6 +99,7 @@ export default function Leave() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ type: 'vacation', startDate: '', endDate: '', reason: '' });
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     api<{ own: LeaveRequest[]; team: LeaveRequest[] }>('/leave')
@@ -179,22 +181,39 @@ export default function Leave() {
               </TableHeader>
               <TableBody>
                 {pending.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.user_name}</TableCell>
-                    <TableCell className="capitalize">{r.type}</TableCell>
-                    <TableCell className="text-xs">
-                      {r.start_date} → {r.end_date}
-                    </TableCell>
-                    <TableCell className="text-[#A1A1AA] max-w-48 truncate">{r.reason}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="text-emerald-400" onClick={() => decide(r.id, 'approved')}>
-                        <Check size={14} />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-400" onClick={() => decide(r.id, 'rejected')}>
-                        <X size={14} />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                  <Fragment key={r.id}>
+                    <TableRow>
+                      <TableCell>{r.user_name}</TableCell>
+                      <TableCell className="capitalize">{r.type}</TableCell>
+                      <TableCell className="text-xs">
+                        {r.start_date} → {r.end_date}
+                      </TableCell>
+                      <TableCell className="text-[#A1A1AA] max-w-48 truncate">{r.reason}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-[#A1A1AA]"
+                          onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                        >
+                          <Paperclip size={13} />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-emerald-400" onClick={() => decide(r.id, 'approved')}>
+                          <Check size={14} />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-red-400" onClick={() => decide(r.id, 'rejected')}>
+                          <X size={14} />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                    {expandedId === r.id && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="bg-[#0c0c0f]">
+                          <Attachments entityType="leave" entityId={r.id} compact />
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -233,22 +252,42 @@ export default function Leave() {
                 <TableHead>Dates</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Attachments</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {own.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="capitalize">{r.type}</TableCell>
-                  <TableCell className="text-xs">
-                    {r.start_date} → {r.end_date}
-                  </TableCell>
-                  <TableCell className="text-[#A1A1AA] max-w-56 truncate">{r.reason}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.status]}`}>
-                      {r.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
+                <Fragment key={r.id}>
+                  <TableRow>
+                    <TableCell className="capitalize">{r.type}</TableCell>
+                    <TableCell className="text-xs">
+                      {r.start_date} → {r.end_date}
+                    </TableCell>
+                    <TableCell className="text-[#A1A1AA] max-w-56 truncate">{r.reason}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.status]}`}>
+                        {r.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-[#A1A1AA]"
+                        onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+                      >
+                        <Paperclip size={13} />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  {expandedId === r.id && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="bg-[#0c0c0f]">
+                        <Attachments entityType="leave" entityId={r.id} compact />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               ))}
             </TableBody>
           </Table>

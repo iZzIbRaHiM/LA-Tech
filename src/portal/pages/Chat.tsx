@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MessageSquare, Plus, Pencil, Trash2, Send } from 'lucide-react';
+import { MessageSquare, Plus, Pencil, Trash2, Send, Paperclip, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
-import { api } from '../api';
+import { api, downloadFile } from '../api';
 import type { PortalUser } from './People';
 
 interface ChatGroup {
@@ -35,7 +35,11 @@ interface Message {
   sender_name: string;
   body: string;
   created_at: string;
+  attachment_filename: string | null;
+  attachment_size: number | null;
 }
+
+const fmtSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
 const POLL_MS = 6000;
 
@@ -50,7 +54,9 @@ export default function Chat() {
   const [allUsers, setAllUsers] = useState<PortalUser[]>([]);
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadGroups = () => {
     api<{ groups: ChatGroup[] }>('/chat/groups')
@@ -94,6 +100,36 @@ export default function Chat() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to send');
       setDraft(body);
+    }
+  };
+
+  const uploadFile = async (file: File) => {
+    if (!activeId) return;
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/chat/groups/${activeId}/attachments?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/octet-stream', 'X-Requested-With': 'latech-portal' },
+        body: file,
+      });
+      if (!res.ok) throw new Error((await res.json())?.error ?? 'Upload failed');
+      const r = await api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`);
+      setMessages(r.messages);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadAttachment = async (m: Message) => {
+    if (!activeId || !m.attachment_filename) return;
+    try {
+      await downloadFile(`/chat/groups/${activeId}/messages/${m.id}/download`, m.attachment_filename);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Download failed');
     }
   };
 
@@ -252,7 +288,22 @@ export default function Chat() {
                     {m.sender_id !== user?.id && (
                       <div className="text-xs text-[#A1A1AA] mb-0.5">{m.sender_name}</div>
                     )}
-                    <div className="whitespace-pre-wrap">{m.body}</div>
+                    {m.attachment_filename ? (
+                      <button
+                        onClick={() => downloadAttachment(m)}
+                        className={`flex items-center gap-1.5 text-left hover:opacity-80 ${
+                          m.sender_id === user?.id ? 'text-black' : 'text-[#FAFAFA]'
+                        }`}
+                      >
+                        <FileText size={14} className="shrink-0" />
+                        <span className="truncate max-w-52">{m.attachment_filename}</span>
+                        {m.attachment_size != null && (
+                          <span className="text-xs opacity-70 shrink-0">{fmtSize(m.attachment_size)}</span>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="whitespace-pre-wrap">{m.body}</div>
+                    )}
                     <div className={`text-[10px] mt-1 ${m.sender_id === user?.id ? 'text-black/60' : 'text-[#71717A]'}`}>
                       {m.created_at}
                     </div>
@@ -263,6 +314,20 @@ export default function Chat() {
               <div ref={bottomRef} />
             </div>
             <div className="p-3 border-t border-[#1f1f23] flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+              />
+              <Button
+                variant="outline"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                title="Attach a file"
+              >
+                <Paperclip size={14} />
+              </Button>
               <Input
                 placeholder="Message…"
                 value={draft}

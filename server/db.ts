@@ -330,7 +330,7 @@ export async function initDb() {
 
     CREATE TABLE IF NOT EXISTS attachments (
       id SERIAL PRIMARY KEY,
-      entity_type TEXT NOT NULL CHECK (entity_type IN ('task','finance')),
+      entity_type TEXT NOT NULL CHECK (entity_type IN ('task','finance','leave')),
       entity_id INTEGER NOT NULL,
       filename TEXT NOT NULL,
       stored_name TEXT NOT NULL,
@@ -338,6 +338,13 @@ export async function initDb() {
       uploaded_by INTEGER NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
+
+    -- CREATE TABLE IF NOT EXISTS above only applies the widened CHECK on a
+    -- fresh database; the constraint on an already-existing table needs an
+    -- explicit migration. Safe to run every deploy: drop-if-exists then
+    -- recreate.
+    ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_entity_type_check;
+    ALTER TABLE attachments ADD CONSTRAINT attachments_entity_type_check CHECK (entity_type IN ('task','finance','leave'));
 
     CREATE TABLE IF NOT EXISTS login_attempts (
       id SERIAL PRIMARY KEY,
@@ -433,9 +440,18 @@ export async function initDb() {
       group_id INTEGER NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
       sender_id INTEGER NOT NULL REFERENCES users(id),
       body TEXT NOT NULL,
+      attachment_filename TEXT,
+      attachment_stored_name TEXT,
+      attachment_size INTEGER,
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
     CREATE INDEX IF NOT EXISTS idx_chat_messages_group ON chat_messages(group_id, created_at);
+
+    -- Columns above only apply on a fresh database; add them explicitly for
+    -- an already-existing table (safe/idempotent to run every deploy).
+    ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_filename TEXT;
+    ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_stored_name TEXT;
+    ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER;
   `);
 
   await seedCeo();

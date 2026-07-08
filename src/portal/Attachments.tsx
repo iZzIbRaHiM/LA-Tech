@@ -19,7 +19,7 @@ export default function Attachments({
   entityId,
   compact = false,
 }: {
-  entityType: 'task' | 'finance';
+  entityType: 'task' | 'finance' | 'leave';
   entityId: number;
   compact?: boolean;
 }) {

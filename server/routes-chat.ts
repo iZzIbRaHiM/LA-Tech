@@ -1,9 +1,15 @@
 import { Router } from 'express';
+import express from 'express';
+import crypto from 'crypto';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 import { isGroupMember } from './policy.js';
+import { r2, ATTACHMENTS_BUCKET } from './r2.js';
 
 export const chatRouter = Router();
+
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB, matches the generic attachments limit
 
 // Groups the current user belongs to — a non-member can't discover a group
 // exists at all, so every route below re-checks membership per group.
@@ -98,7 +104,8 @@ chatRouter.get('/chat/groups/:id/messages', requireAuth, async (req, res) => {
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
   const messages = await db
     .prepare(
-      `SELECT m.id, m.body, m.created_at, m.sender_id, u.name AS sender_name
+      `SELECT m.id, m.body, m.created_at, m.sender_id, u.name AS sender_name,
+              m.attachment_filename, m.attachment_size
        FROM chat_messages m JOIN users u ON u.id = m.sender_id
        WHERE m.group_id = ? ORDER BY m.created_at ASC LIMIT 200`
     )
@@ -115,4 +122,60 @@ chatRouter.post('/chat/groups/:id/messages', requireAuth, async (req, res) => {
     .prepare('INSERT INTO chat_messages (group_id, sender_id, body) VALUES (?, ?, ?)')
     .run(groupId, req.user!.id, body.trim());
   res.json({ id: Number(info.lastInsertRowid) });
+});
+
+// A file "message" — one message optionally carries a file instead of (or
+// alongside) text, rather than a separate polymorphic attachments table:
+// chat is a stream of messages, not "one entity with a list of files"
+// like tasks/finance/leave, so this fits its shape better.
+chatRouter.post(
+  '/chat/groups/:id/attachments',
+  requireAuth,
+  express.raw({ type: '*/*', limit: MAX_FILE_SIZE }),
+  async (req, res) => {
+    const groupId = Number(req.params.id);
+    if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+    const filename = String(req.query.filename ?? 'file').replace(/[^\w.\- ]/g, '_').slice(0, 120);
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || body.length === 0) return res.status(400).json({ error: 'Empty file' });
+
+    const storedName = `chat/${crypto.randomUUID()}-${filename}`;
+    try {
+      await r2.send(
+        new PutObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: storedName, Body: body, ContentType: 'application/octet-stream' })
+      );
+    } catch (err) {
+      console.error('[chat] upload failed:', err);
+      return res.status(500).json({ error: 'Upload failed' });
+    }
+
+    const info = await db
+      .prepare(
+        `INSERT INTO chat_messages (group_id, sender_id, body, attachment_filename, attachment_stored_name, attachment_size)
+         VALUES (?, ?, '', ?, ?, ?)`
+      )
+      .run(groupId, req.user!.id, filename, storedName, body.length);
+    res.json({ id: Number(info.lastInsertRowid) });
+  }
+);
+
+chatRouter.get('/chat/groups/:id/messages/:messageId/download', requireAuth, async (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  const message = await db
+    .prepare('SELECT attachment_filename, attachment_stored_name FROM chat_messages WHERE id = ? AND group_id = ?')
+    .get(Number(req.params.messageId), groupId) as
+    | { attachment_filename: string | null; attachment_stored_name: string | null }
+    | undefined;
+  if (!message?.attachment_stored_name) return res.status(404).json({ error: 'Not found' });
+  try {
+    const object = await r2.send(new GetObjectCommand({ Bucket: ATTACHMENTS_BUCKET, Key: message.attachment_stored_name }));
+    const bytes = await object.Body?.transformToByteArray();
+    if (!bytes) return res.status(404).json({ error: 'File missing' });
+    res.setHeader('Content-Disposition', `attachment; filename="${message.attachment_filename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.send(Buffer.from(bytes));
+  } catch {
+    res.status(404).json({ error: 'File missing' });
+  }
 });
