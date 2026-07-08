@@ -143,12 +143,29 @@ export function FinanceOverview() {
               Manage salaries →
             </Link>
           </div>
-          <Card className="bg-[#0f0f12] border-[#1f1f23] mb-4 max-w-xs">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-[#A1A1AA] font-normal">Total paid (all time)</CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-display font-bold">{fmt(salaryTotal)}</CardContent>
-          </Card>
+          {/* Payroll figures render only for the CEO — this whole section is
+              isCeo-gated, so finance delegates never see payroll magnitude
+              even though they can see the project totals above. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 max-w-xl">
+            <Card className="bg-[#0f0f12] border-[#1f1f23]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-[#A1A1AA] font-normal">Total payroll paid (all time)</CardTitle>
+              </CardHeader>
+              <CardContent className="text-2xl font-display font-bold">{fmt(salaryTotal)}</CardContent>
+            </Card>
+            <Card className="bg-[#0f0f12] border-[#1f1f23]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-[#A1A1AA] font-normal">Net profit (incl. payroll)</CardTitle>
+              </CardHeader>
+              <CardContent
+                className={`text-2xl font-display font-bold ${
+                  totals.income - totals.expenses - salaryTotal >= 0 ? 'text-emerald-400' : 'text-red-400'
+                }`}
+              >
+                {fmt(totals.income - totals.expenses - salaryTotal)}
+              </CardContent>
+            </Card>
+          </div>
           {salaryPayments.length === 0 ? (
             <p className="text-sm text-[#71717A]">No salary payments recorded yet.</p>
           ) : (

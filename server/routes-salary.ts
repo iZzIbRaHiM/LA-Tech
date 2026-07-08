@@ -227,18 +227,13 @@ salaryRouter.post('/salary/:userId/payments', async (req, res) => {
   res.json({ id: Number(info.lastInsertRowid), netAmount });
 });
 
-salaryRouter.get('/salary/:userId/payments', async (req, res) => {
-  const userId = Number(req.params.userId);
-  const payments = await db
-    .prepare('SELECT * FROM salary_payments WHERE user_id = ? ORDER BY period DESC')
-    .all(userId);
-  res.json({ payments });
-});
-
 // Company-wide payment ledger, for Finance overview — CEO only (the router-
 // level guard above already enforces this; salary stays stricter than the
 // finance-delegate model, so this must never be surfaced anywhere a
 // finance delegate could reach it).
+// MUST be registered before /salary/:userId/payments — Express matches in
+// order, and the param route would otherwise capture this path with
+// userId="payments" (NaN → query error).
 salaryRouter.get('/salary/payments', async (req, res) => {
   const period = typeof req.query.period === 'string' ? req.query.period : undefined;
   const where = period ? 'WHERE sp.period = ?' : '';
@@ -252,4 +247,13 @@ salaryRouter.get('/salary/payments', async (req, res) => {
     .all(...params) as Array<{ net_amount: number }>;
   const total = payments.reduce((sum, p) => sum + Number(p.net_amount), 0);
   res.json({ payments, total });
+});
+
+salaryRouter.get('/salary/:userId/payments', async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId)) return res.status(400).json({ error: 'Invalid user id' });
+  const payments = await db
+    .prepare('SELECT * FROM salary_payments WHERE user_id = ? ORDER BY period DESC')
+    .all(userId);
+  res.json({ payments });
 });

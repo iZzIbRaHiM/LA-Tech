@@ -44,6 +44,26 @@ settingsRouter.patch('/settings/attendance', requireAuth, requireCeo, async (req
       return res.status(400).json({ error: `${label} must be 'fixed' or 'percentage'` });
     }
   }
+  // Numeric fields: reject NaN/negatives up front — otherwise garbage input
+  // 500s at the database and a negative threshold silently mis-categorizes
+  // every future check-in.
+  for (const [label, val] of [
+    ['lateThresholdMinutes', lateThresholdMinutes],
+    ['halfDayThresholdMinutes', halfDayThresholdMinutes],
+    ['maxAbsentAllowed', maxAbsentAllowed],
+    ['lateDeductionAmount', lateDeductionAmount],
+    ['halfDayDeductionAmount', halfDayDeductionAmount],
+    ['absentDeductionAmount', absentDeductionAmount],
+  ] as const) {
+    if (val !== undefined && (!Number.isFinite(Number(val)) || Number(val) < 0)) {
+      return res.status(400).json({ error: `${label} must be a non-negative number` });
+    }
+  }
+  const lateThresh = lateThresholdMinutes !== undefined ? Number(lateThresholdMinutes) : undefined;
+  const halfThresh = halfDayThresholdMinutes !== undefined ? Number(halfDayThresholdMinutes) : undefined;
+  if (lateThresh !== undefined && halfThresh !== undefined && halfThresh <= lateThresh) {
+    return res.status(400).json({ error: 'Half-day threshold must be greater than the late threshold' });
+  }
 
   const sets: Array<[string, unknown]> = [];
   if (officeStartTime !== undefined) sets.push(['office_start_time', officeStartTime]);

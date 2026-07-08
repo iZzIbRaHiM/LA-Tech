@@ -10,8 +10,14 @@ Marketing site (React 19 + Vite + Tailwind + shadcn/Radix, 3D hero via react-thr
 - **Auth hardening**: bcrypt password hashes, httpOnly session cookies (secure flag in production), login rate limiting (10 attempts / 15 min per email+IP), deactivated accounts indistinguishable from bad credentials at login.
 - **Tasks**: CEO assigns to departments (auto-assigns the head); heads split work into sub-tasks for their own team only; employees see only their assigned tasks. Board / list / table views, comments, notifications.
 - **Projects** (CEO-only creation): per-department visibility allow-list — departments not granted access cannot see a project exists.
-- **Finance** (CEO-only, enforced at the API layer): per-project ledger (budget / expense / income), portfolio dashboard, CSV export, audit-logged mutations.
-- **Attendance**: everyone checks in/out; department heads validate their team's records, the CEO validates heads.
+- **Finance** (CEO + explicitly granted delegates): per-project ledger (budget / expense / income), portfolio dashboard, CSV export, audit-logged mutations. Payroll figures on this page are CEO-only, never shown to delegates.
+- **Attendance**: employees check in/out (the CEO is excluded — tracking applies to everyone else); check-ins auto-categorize as on-time / late / half-day from the configured office hours and thresholds; validators (dept head, or CEO for heads/unassigned) approve, reject, or approve with a corrected time; a rejected check-in blocks re-check-in that day; a daily sweep marks weekday absences (no record, no approved leave).
+- **Settings** (CEO): office start/end time, late and half-day thresholds, free-absence allowance, and per-category deduction amounts (fixed or % of salary) that feed payroll.
+- **Salary** (CEO-only, stricter than finance delegation): assign per-employee salaries (history-preserving), record monthly payments that pull the employee's confirmed late/half-day/billable-absence counts and suggest deductions from Settings — with full CEO control to toggle or override every deduction. Absences beyond the free allowance are the only ones billed.
+- **Leave**: request with dates/type/reason + file attachments; dept head or CEO decides; approved leave shows on a shared month calendar and suppresses absence marking.
+- **Chat**: CEO-created groups with explicit member lists; group existence and messages are invisible to non-members; text + file messages.
+- **Dashboard**: role-scoped overview; the CEO additionally gets company KPIs (net profit including payroll, revenue, expenses, payroll) and charts (revenue vs expenses by project, payroll trend, task status, monthly attendance mix).
+- **Attachments**: on tasks, finance entries, leave requests, and chat messages — stored in Cloudflare R2, permission-checked through the owning record on every access.
 - **Search** (Ctrl+K): permission-scoped — never returns results the viewer isn't authorized to see.
 
 ## Run
