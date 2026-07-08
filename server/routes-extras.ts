@@ -99,6 +99,7 @@ async function attendanceReport(month: string): Promise<ReportRow[]> {
        LEFT JOIN memberships m ON m.user_id = u.id
        LEFT JOIN departments d ON d.id = m.department_id
        JOIN attendance a ON a.user_id = u.id AND strftime('%Y-%m', a.check_in) = ? AND a.check_out IS NOT NULL
+       WHERE u.is_ceo = 0
        GROUP BY u.id, u.name, d.name ORDER BY u.name`
     )
     .all(month) as ReportRow[];
@@ -174,6 +175,7 @@ export async function sendDueReminders() {
 // only if they have no attendance record at all for that day AND no approved
 // leave covering it. Marked pre-approved (nothing to dispute — there's no
 // check-in to validate) but deletable by a validator if it's wrong.
+// The CEO is excluded entirely — attendance tracking doesn't apply to them.
 export async function sweepAbsences() {
   const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
   if (!isWeekday(yesterday)) return;
@@ -181,7 +183,7 @@ export async function sweepAbsences() {
   const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
   if (!ceo) return; // no CEO seeded yet — nothing to attribute the sweep's audit-log entries to
 
-  const users = await db.prepare('SELECT id FROM users WHERE active = 1').all() as Array<{ id: number }>;
+  const users = await db.prepare('SELECT id FROM users WHERE active = 1 AND is_ceo = 0').all() as Array<{ id: number }>;
   let created = 0;
   for (const u of users) {
     const hasRecord = await db

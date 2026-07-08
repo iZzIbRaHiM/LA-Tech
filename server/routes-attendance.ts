@@ -34,6 +34,7 @@ attendanceRouter.get('/attendance/status', requireAuth, async (req, res) => {
 
 attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
   const user = req.user!;
+  if (user.isCeo) return res.status(403).json({ error: 'Attendance tracking does not apply to the CEO account' });
   const checkInTime = nowUtcString();
   const today = checkInTime.slice(0, 10);
 
@@ -59,6 +60,7 @@ attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
 
 attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => {
   const user = req.user!;
+  if (user.isCeo) return res.status(403).json({ error: 'Attendance tracking does not apply to the CEO account' });
   const open = await db
     .prepare('SELECT id FROM attendance WHERE user_id = ? AND check_out IS NULL AND check_in IS NOT NULL')
     .get(user.id) as { id: number } | undefined;

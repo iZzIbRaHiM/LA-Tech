@@ -147,14 +147,11 @@ export default function Attendance() {
   };
 
   const isValidator = user?.isCeo || user?.role === 'head';
-  // Nobody outranks the CEO, so their own completed records also need a way
-  // to leave "pending" — the API allows the CEO to validate their own
-  // record; without folding it in here there'd be no button to do it.
-  const pendingOwnForCeo = user?.isCeo ? own.filter((r) => r.check_out && r.validation_status === 'pending') : [];
-  const pendingTeam = [
-    ...team.filter((t) => t.check_out && t.validation_status === 'pending'),
-    ...pendingOwnForCeo.map((r) => ({ ...r, user_name: r.user_name ?? 'You' })),
-  ];
+  // Attendance doesn't apply to the CEO at all — there's only one, and the
+  // whole system is scoped to everyone else. No self-validation case to
+  // handle here (unlike leave, where the CEO still requests/approves their
+  // own).
+  const pendingTeam = team.filter((t) => t.check_out && t.validation_status === 'pending');
 
   // CEO monthly report
   const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -186,49 +183,52 @@ export default function Attendance() {
     <div className="p-8 max-w-4xl">
       <h1 className="font-display font-bold text-2xl mb-8">Attendance</h1>
 
-      {/* Check in/out card */}
-      <div className="relative overflow-hidden border border-[#1f1f23] mb-10">
-        <img
-          src="/images/hero-network-fallback.webp"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
-        />
-        <div className="relative flex items-center justify-between gap-4 p-6">
-          <div className="min-w-0">
-            <div className="text-sm text-[#A1A1AA] mb-1 flex items-center gap-1.5">
-              <Clock size={13} />
-              {open ? `Checked in at ${open.check_in}` : 'Not checked in'}
-            </div>
-            <div className="font-display font-bold text-xl mb-2">
-              {open ? 'You are in the office' : 'Ready to start your day?'}
+      {/* Check in/out card — doesn't apply to the CEO at all (there's only
+          one, and attendance tracking is scoped to everyone else) */}
+      {!user?.isCeo && (
+        <div className="relative overflow-hidden border border-[#1f1f23] mb-10">
+          <img
+            src="/images/hero-network-fallback.webp"
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none"
+          />
+          <div className="relative flex items-center justify-between gap-4 p-6">
+            <div className="min-w-0">
+              <div className="text-sm text-[#A1A1AA] mb-1 flex items-center gap-1.5">
+                <Clock size={13} />
+                {open ? `Checked in at ${open.check_in}` : 'Not checked in'}
+              </div>
+              <div className="font-display font-bold text-xl mb-2">
+                {open ? 'You are in the office' : 'Ready to start your day?'}
+              </div>
+              {open ? (
+                open.note && <div className="text-sm text-[#A1A1AA]">Note: {open.note}</div>
+              ) : (
+                <Input
+                  placeholder="Note (optional — e.g. WFH, on-site visit)"
+                  value={checkInNote}
+                  onChange={(e) => setCheckInNote(e.target.value)}
+                  className="max-w-xs bg-[#09090B]/60"
+                />
+              )}
             </div>
             {open ? (
-              open.note && <div className="text-sm text-[#A1A1AA]">Note: {open.note}</div>
+              <Button onClick={() => punch('check-out')} disabled={busy} variant="outline" size="lg" className="shrink-0">
+                <LogOut size={15} className="mr-1.5" /> Check out
+              </Button>
             ) : (
-              <Input
-                placeholder="Note (optional — e.g. WFH, on-site visit)"
-                value={checkInNote}
-                onChange={(e) => setCheckInNote(e.target.value)}
-                className="max-w-xs bg-[#09090B]/60"
-              />
+              <Button
+                onClick={() => punch('check-in')}
+                disabled={busy}
+                size="lg"
+                className="bg-[#DFE104] text-black hover:bg-[#c9cb04] shrink-0"
+              >
+                <LogIn size={15} className="mr-1.5" /> Check in
+              </Button>
             )}
           </div>
-          {open ? (
-            <Button onClick={() => punch('check-out')} disabled={busy} variant="outline" size="lg" className="shrink-0">
-              <LogOut size={15} className="mr-1.5" /> Check out
-            </Button>
-          ) : (
-            <Button
-              onClick={() => punch('check-in')}
-              disabled={busy}
-              size="lg"
-              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] shrink-0"
-            >
-              <LogIn size={15} className="mr-1.5" /> Check in
-            </Button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Validation queue for heads/CEO */}
       {isValidator && (
@@ -353,46 +353,48 @@ export default function Attendance() {
         </section>
       )}
 
-      {/* Own history */}
-      <section className="mb-10">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My history</h2>
-        {own.length === 0 ? (
-          <p className="text-sm text-[#71717A]">No records yet — check in to create your first one.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Check in</TableHead>
-                <TableHead>Check out</TableHead>
-                <TableHead>Duration</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {own.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="text-xs">{r.check_in ?? '—'}</TableCell>
-                  <TableCell className="text-xs">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
-                  <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
-                  <TableCell>
-                    <CategoryBadge category={r.category} />
-                  </TableCell>
-                  <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
-                    {r.note || '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.validation_status]}`}>
-                      {r.validation_status}
-                    </Badge>
-                  </TableCell>
+      {/* Own history — doesn't apply to the CEO (no attendance records of their own) */}
+      {!user?.isCeo && (
+        <section className="mb-10">
+          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My history</h2>
+          {own.length === 0 ? (
+            <p className="text-sm text-[#71717A]">No records yet — check in to create your first one.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Check in</TableHead>
+                  <TableHead>Check out</TableHead>
+                  <TableHead>Duration</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Note</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </section>
+              </TableHeader>
+              <TableBody>
+                {own.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-xs">{r.check_in ?? '—'}</TableCell>
+                    <TableCell className="text-xs">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
+                    <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                    <TableCell>
+                      <CategoryBadge category={r.category} />
+                    </TableCell>
+                    <TableCell className="text-xs text-[#A1A1AA] max-w-40 truncate" title={r.note}>
+                      {r.note || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.validation_status]}`}>
+                        {r.validation_status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </section>
+      )}
 
       {/* Team history — validators only, and only if there's something to see */}
       {isValidator && team.length > 0 && (
