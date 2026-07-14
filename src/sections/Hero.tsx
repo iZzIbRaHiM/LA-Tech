@@ -144,9 +144,9 @@ export default function Hero() {
           ref={title1Ref}
           className="font-display font-bold uppercase text-[#FAFAFA]"
           style={{
-            fontSize: 'clamp(3rem, 14vw, 16rem)',
+            fontSize: 'clamp(2.75rem, 12vw, 12rem)',
             letterSpacing: '-0.02em',
-            lineHeight: 0.85,
+            lineHeight: 0.9,
             opacity: 0,
           }}
         >
@@ -158,9 +158,9 @@ export default function Hero() {
           ref={title2Ref}
           className="font-display font-bold uppercase text-[#FAFAFA] text-right"
           style={{
-            fontSize: 'clamp(3rem, 14vw, 16rem)',
+            fontSize: 'clamp(2.75rem, 12vw, 12rem)',
             letterSpacing: '-0.02em',
-            lineHeight: 0.85,
+            lineHeight: 0.9,
             opacity: 0,
           }}
         >
@@ -171,12 +171,12 @@ export default function Hero() {
         <div className="pb-8">
           <p
             ref={subtitleRef}
-            className="text-[#A1A1AA]"
+            className="text-[#D4D4D8]"
             style={{
               fontSize: 'clamp(1.125rem, 1.5vw, 1.5rem)',
               fontWeight: 400,
-              lineHeight: 1.5,
-              maxWidth: '42ch',
+              lineHeight: 1.6,
+              maxWidth: '46ch',
               opacity: 0,
             }}
           >
@@ -205,7 +205,7 @@ export default function Hero() {
             className="absolute bottom-8 left-1/2 -translate-x-1/2 font-display uppercase text-[#A1A1AA] animate-pulse-opacity"
             style={{
               fontSize: 'clamp(0.75rem, 1vw, 1rem)',
-              letterSpacing: '0.05em',
+              letterSpacing: '0.15em',
             }}
           >
             SCROLL ↓

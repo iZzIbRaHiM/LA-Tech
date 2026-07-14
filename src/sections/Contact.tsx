@@ -110,8 +110,8 @@ export default function Contact() {
           ref={headingRef}
           className="font-display font-bold uppercase text-[#000000]"
           style={{
-            fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-            lineHeight: 0.85,
+            fontSize: 'clamp(2.25rem, 6vw, 5.5rem)',
+            lineHeight: 0.9,
             letterSpacing: '-0.02em',
             opacity: 0,
           }}

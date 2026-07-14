@@ -32,8 +32,8 @@ export default function Footer() {
 
   const headingStyle = "font-display font-bold uppercase text-[#A1A1AA] block mb-4";
   const headingSize = {
-    fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
-    letterSpacing: '0.05em',
+    fontSize: 'clamp(0.75rem, 1vw, 1rem)',
+    letterSpacing: '0.12em',
   } as React.CSSProperties;
 
   return (
@@ -51,8 +51,8 @@ export default function Footer() {
           <span
             className="font-display font-bold uppercase text-[#FAFAFA] block"
             style={{
-              fontSize: 'clamp(1.5rem, 4vw, 4rem)',
-              lineHeight: 0.85,
+              fontSize: 'clamp(1.5rem, 2.5vw, 2.5rem)',
+              lineHeight: 0.9,
               letterSpacing: '-0.02em',
             }}
           >
@@ -61,8 +61,8 @@ export default function Footer() {
           <span
             className="font-display font-bold uppercase text-[#A1A1AA] block mt-1"
             style={{
-              fontSize: 'clamp(1.5rem, 4vw, 4rem)',
-              lineHeight: 0.85,
+              fontSize: 'clamp(1.5rem, 2.5vw, 2.5rem)',
+              lineHeight: 0.9,
               letterSpacing: '-0.02em',
             }}
           >

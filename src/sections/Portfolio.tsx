@@ -22,19 +22,19 @@ function getCardDimensions() {
   
   let cardWidth = 400;
   if (w < 768) {
-    // Mobile: 75% of screen width, max 280px
-    cardWidth = Math.min(w * 0.75, 280);
+    // Mobile: 82% of screen width, max 320px
+    cardWidth = Math.min(w * 0.82, 320);
   } else if (w < 1024) {
-    // Tablet: 55% of screen width, max 420px
-    cardWidth = Math.min(w * 0.55, 420);
+    // Tablet: 62% of screen width, max 480px
+    cardWidth = Math.min(w * 0.62, 480);
   } else {
     // Desktop - scale based on height to prevent vertical overflow
     if (h < 750) {
-      cardWidth = Math.min(w * 0.4, 480);
+      cardWidth = Math.min(w * 0.45, 560);
     } else if (h < 900) {
-      cardWidth = Math.min(w * 0.45, 600);
+      cardWidth = Math.min(w * 0.5, 680);
     } else {
-      cardWidth = Math.min(w * 0.45, 660);
+      cardWidth = Math.min(w * 0.5, 760);
     }
   }
   
@@ -184,8 +184,8 @@ export default function Portfolio() {
             ref={titleRef}
             className="font-display font-bold uppercase text-[#FAFAFA]"
             style={{
-              fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-              lineHeight: 0.85,
+              fontSize: 'clamp(2.25rem, 6vw, 5.5rem)',
+              lineHeight: 0.9,
               letterSpacing: '-0.02em',
               opacity: 0,
             }}
@@ -240,6 +240,9 @@ export default function Portfolio() {
                   marginLeft: `-${cardWidth / 2}px`,
                   marginTop: `-${cardHeight / 2}px`,
                   transformStyle: 'preserve-3d',
+                  // Cards on the far side of the ring otherwise render
+                  // mirrored through the front cards, garbling the captions.
+                  backfaceVisibility: 'hidden',
                 }}
               >
                 <figure className="w-full h-full">
@@ -250,15 +253,19 @@ export default function Portfolio() {
                     style={{ borderRadius: '0' }}
                   />
                   <figcaption
-                    className="font-display uppercase text-center mt-4"
-                    style={{
-                      fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
-                      letterSpacing: '0.05em',
-                    }}
+                    className="text-center mt-4"
+                    style={{ fontSize: 'clamp(0.75rem, 1vw, 1.125rem)' }}
                   >
-                    <span className="text-[#FAFAFA]">{project.name}</span>
-                    <span className="block text-[#71717A]" style={{ fontSize: '0.75em' }}>
-                      {CATEGORY_LABELS[project.category]}
+                    {/* Solid backdrop so partially-rotated neighbors can't
+                        bleed through the label and blur it. */}
+                    <span
+                      className="font-display uppercase inline-block bg-[#09090B] px-4 py-2"
+                      style={{ letterSpacing: '0.05em' }}
+                    >
+                      <span className="text-[#FAFAFA]">{project.name}</span>
+                      <span className="block text-[#71717A]" style={{ fontSize: '0.75em' }}>
+                        {CATEGORY_LABELS[project.category]}
+                      </span>
                     </span>
                   </figcaption>
                 </figure>

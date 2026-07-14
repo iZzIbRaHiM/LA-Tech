@@ -55,7 +55,7 @@ export default function Navigation() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
             className="font-display font-bold uppercase tracking-tighter text-[#FAFAFA]"
-            style={{ fontSize: 'clamp(1.5rem, 4vw, 4rem)', lineHeight: 0.85 }}
+            style={{ fontSize: 'clamp(1.375rem, 2vw, 1.875rem)', lineHeight: 0.9 }}
           >
             LATech
           </a>

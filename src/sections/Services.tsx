@@ -135,10 +135,10 @@ export default function Services() {
         ref={headingRef}
         className="font-display font-bold uppercase text-[#FAFAFA]"
         style={{
-          fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-          lineHeight: 0.85,
+          fontSize: 'clamp(2.25rem, 6vw, 5.5rem)',
+          lineHeight: 0.9,
           letterSpacing: '-0.02em',
-          marginBottom: '4rem',
+          marginBottom: 'clamp(2.5rem, 4vw, 4rem)',
           opacity: 0,
         }}
       >
@@ -160,10 +160,10 @@ export default function Services() {
               {service.icon}
             </div>
             <h3
-              className="font-display font-bold uppercase text-[#FAFAFA] group-hover:text-[#000000] transition-colors duration-300 mb-4"
+              className="font-display font-semibold uppercase text-[#FAFAFA] group-hover:text-[#000000] transition-colors duration-300 mb-4"
               style={{
-                fontSize: 'clamp(1.5rem, 4vw, 4rem)',
-                lineHeight: 0.85,
+                fontSize: 'clamp(1.375rem, 2.2vw, 2.25rem)',
+                lineHeight: 1.05,
                 letterSpacing: '-0.02em',
               }}
             >
@@ -174,8 +174,8 @@ export default function Services() {
               style={{
                 fontSize: 'clamp(1rem, 1.2vw, 1.25rem)',
                 fontWeight: 400,
-                lineHeight: 1.5,
-                maxWidth: '32ch',
+                lineHeight: 1.6,
+                maxWidth: '38ch',
               }}
             >
               {service.description}

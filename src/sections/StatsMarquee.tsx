@@ -1,7 +1,7 @@
 const stats = [
-  { number: '150+', label: 'Projects Delivered' },
-  { number: '50+', label: 'Business Partners' },
-  { number: '12+', label: 'Years Experience' },
+  { number: '2+', label: 'Years Experience' },
+  { number: '100+', label: 'Business Clients' },
+  { number: '14+', label: 'Products Delivered' },
   { number: '24/7', label: 'Support Available' },
 ];
 
@@ -11,18 +11,18 @@ function StatItem({ number, label }: { number: string; label: string }) {
       <span
         className="font-display font-bold text-[#000000] uppercase"
         style={{
-          fontSize: 'clamp(3rem, 8vw, 7rem)',
-          lineHeight: 0.85,
+          fontSize: 'clamp(2.25rem, 5vw, 4.5rem)',
+          lineHeight: 0.9,
           letterSpacing: '-0.02em',
         }}
       >
         {number}
       </span>
       <span
-        className="font-display font-medium text-[#000000] uppercase mt-2"
+        className="font-display font-medium text-[#000000] uppercase mt-3"
         style={{
           fontSize: 'clamp(0.75rem, 1vw, 1rem)',
-          letterSpacing: '0.05em',
+          letterSpacing: '0.12em',
         }}
       >
         {label}
@@ -51,7 +51,7 @@ export default function StatsMarquee() {
   return (
     <section
       className="w-full overflow-hidden bg-[#DFE104] flex items-center"
-      style={{ height: 'clamp(100px, 12vw, 160px)' }}
+      style={{ height: 'clamp(96px, 10vw, 140px)' }}
     >
       <div className="flex animate-marquee whitespace-nowrap">
         {content}

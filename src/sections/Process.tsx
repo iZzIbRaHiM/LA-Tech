@@ -125,10 +125,10 @@ export default function Process() {
         ref={headingRef}
         className="font-display font-bold uppercase text-[#FAFAFA]"
         style={{
-          fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-          lineHeight: 0.85,
+          fontSize: 'clamp(2.25rem, 6vw, 5.5rem)',
+          lineHeight: 0.9,
           letterSpacing: '-0.02em',
-          marginBottom: '4rem',
+          marginBottom: 'clamp(2.5rem, 4vw, 4rem)',
           opacity: 0,
         }}
       >
@@ -149,7 +149,7 @@ export default function Process() {
             <div
               className="bg-number absolute font-display font-bold text-[#27272A] pointer-events-none select-none"
               style={{
-                fontSize: 'clamp(6rem, 12vw, 14rem)',
+                fontSize: 'clamp(5rem, 10vw, 11rem)',
                 lineHeight: 0.85,
                 letterSpacing: '-0.02em',
                 opacity: 0,
@@ -177,16 +177,16 @@ export default function Process() {
                 className="font-display font-bold uppercase text-[#DFE104]"
                 style={{
                   fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
-                  letterSpacing: '0.05em',
+                  letterSpacing: '0.12em',
                 }}
               >
                 {step.number}
               </span>
               <h3
-                className="font-display font-bold uppercase text-[#FAFAFA] mt-2"
+                className="font-display font-semibold uppercase text-[#FAFAFA] mt-2"
                 style={{
-                  fontSize: 'clamp(1.5rem, 4vw, 4rem)',
-                  lineHeight: 0.85,
+                  fontSize: 'clamp(1.5rem, 2.5vw, 2.5rem)',
+                  lineHeight: 1.05,
                   letterSpacing: '-0.02em',
                 }}
               >
@@ -197,8 +197,8 @@ export default function Process() {
                 style={{
                   fontSize: 'clamp(1rem, 1.2vw, 1.25rem)',
                   fontWeight: 400,
-                  lineHeight: 1.5,
-                  maxWidth: '42ch',
+                  lineHeight: 1.6,
+                  maxWidth: '46ch',
                 }}
               >
                 {step.description}
