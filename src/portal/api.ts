@@ -70,7 +70,26 @@ export interface SessionUser {
   financeAccess: boolean;
   mustChangePassword: boolean;
   departmentId: number | null;
-  role: 'ceo' | 'head' | 'member' | 'unassigned';
+  role: 'ceo' | 'head' | 'member' | 'intern' | 'unassigned';
+}
+
+// One row per employee, as returned by GET /org-tree — flat, edges implied
+// by manager_id. See src/portal/pages/OrgChart.tsx for tree assembly.
+export interface OrgNode {
+  id: number;
+  name: string;
+  email: string;
+  title: string;
+  phone: string;
+  manager_id: number | null;
+  is_ceo: number;
+  finance_access: number;
+  active: number;
+  online: boolean;
+  department_id: number | null;
+  department_name: string | null;
+  membership_role: 'head' | 'member' | 'intern' | null;
+  direct_reports_count: number;
 }
 
 export interface Department {
@@ -108,4 +127,38 @@ export interface Project {
   start_date: string | null;
   end_date: string | null;
   created_at: string;
+}
+
+export interface Meeting {
+  id: number;
+  title: string;
+  created_by: number;
+  creator_name: string;
+  ended_at: string | null;
+  created_at: string;
+  in_room_count: number;
+}
+
+export interface WorkSchedule {
+  id: number;
+  name: string;
+  office_start_time: string;
+  office_end_time: string;
+  late_threshold_minutes: number;
+  half_day_threshold_minutes: number;
+}
+
+export interface ScheduleAssignment {
+  schedule_id: number;
+  target_type: 'department' | 'user';
+  target_id: number;
+  target_name: string | null;
+}
+
+export interface ResolvedSchedule {
+  office_start_time: string;
+  office_end_time: string;
+  late_threshold_minutes: number;
+  half_day_threshold_minutes: number;
+  schedule_name: string | null;
 }

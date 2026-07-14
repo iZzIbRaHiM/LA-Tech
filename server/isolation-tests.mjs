@@ -88,6 +88,15 @@ async function main() {
   await must('ceo', 'POST', `/departments/${deptA}/head`, { userId: aHead });
   await must('ceo', 'POST', `/departments/${deptB}/head`, { userId: bHead });
 
+  // manager_id is fully decoupled from departments now (policy.ts's
+  // decidesFor walks the manager chain, not memberships) — wire it
+  // explicitly so the attendance/leave-validation assertions below keep
+  // testing the same shape of boundary against the new authority source.
+  // aMember reports to aHead; bHead (and aHead) default to the CEO from the
+  // POST /users backfill, so cross-department/self assertions still hold
+  // with zero other changes.
+  await must('ceo', 'PATCH', `/org-tree/users/${aMember}`, { managerId: aHead });
+
   const deptTask = (
     await must('ceo', 'POST', '/tasks', { title: `Iso dept task ${TS}`, departmentId: deptA })
   ).id;
@@ -97,6 +106,10 @@ async function main() {
       name: `Iso Hidden Project ${TS}`,
       description: 'visible to dept A only',
       departmentIds: [deptA],
+      // routes-projects.ts requires both dates on create — this fixture
+      // was stale (pre-existing, unrelated to the org-hierarchy work).
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
     })
   ).id;
 
@@ -213,6 +226,121 @@ async function main() {
   const bLeave = await req('bhead', 'GET', '/leave');
   const bLeaveLeak = (bLeave.json?.team ?? []).some((l) => l.user_id === aMember);
   check("bhead's leave view excludes dept-A requests", !bLeaveLeak, `leak=${bLeaveLeak}`);
+
+  console.log('\n== Org hierarchy & manager-chain authority ==');
+  // grandchild reports to aMember, who reports to aHead — a 3-level chain
+  // (CEO -> aHead -> aMember -> grandchild) to prove skip-level ancestors,
+  // not just direct managers, can decide.
+  const grandchild = await mkUser('Iso Grandchild', `iso.grandchild.${TS}@latechs.org`);
+  await must('ceo', 'PATCH', `/org-tree/users/${grandchild}`, { managerId: aMember });
+  await login('grandchild', `iso.grandchild.${TS}@latechs.org`, PW);
+
+  const nonCeoTree = await req('amember', 'GET', '/org-tree');
+  check('non-CEO DENIED reading the org tree', denied(nonCeoTree), `got ${nonCeoTree.status}`);
+  const nonCeoPatch = await req('amember', 'PATCH', `/org-tree/users/${grandchild}`, { title: 'hack' });
+  check('non-CEO DENIED patching the org tree', denied(nonCeoPatch), `got ${nonCeoPatch.status}`);
+
+  const ceoMe = await req('ceo', 'GET', '/auth/me');
+  const ceoSelfPatch = await req('ceo', 'PATCH', `/org-tree/users/${ceoMe.json.user.id}`, { managerId: aHead });
+  check("CEO's own manager cannot be changed", ceoSelfPatch.status === 400, `got ${ceoSelfPatch.status}`);
+
+  const cyclePatch = await req('ceo', 'PATCH', `/org-tree/users/${aHead}`, { managerId: grandchild });
+  check('reassigning a manager onto their own descendant is rejected (cycle)', cyclePatch.status === 409, `got ${cyclePatch.status}`);
+
+  await must('grandchild', 'POST', '/attendance/check-in', {});
+  await must('grandchild', 'POST', '/attendance/check-out', {});
+  const gcAtt = await req('grandchild', 'GET', '/attendance');
+  const gcRec = gcAtt.json.own[0];
+  const unrelatedDenied = await req('bhead', 'POST', `/attendance/${gcRec.id}/validate`, { status: 'approved' });
+  check('unrelated manager DENIED validating a non-report', denied(unrelatedDenied), `got ${unrelatedDenied.status}`);
+  const skipLevel = await req('ahead', 'POST', `/attendance/${gcRec.id}/validate`, { status: 'approved' });
+  check('skip-level ancestor (grandmanager) CAN validate', skipLevel.status === 200, `got ${skipLevel.status}`);
+
+  // Deactivating a manager bubbles their direct reports up one level rather
+  // than orphaning them — dedicated fixtures so this doesn't disturb
+  // aMember/grandchild, which later sections still depend on.
+  const bubbleManager = await mkUser('Iso Bubble Manager', `iso.bubblemgr.${TS}@latechs.org`);
+  await must('ceo', 'PATCH', `/org-tree/users/${bubbleManager}`, { managerId: aHead });
+  const bubbleReport = await mkUser('Iso Bubble Report', `iso.bubblerpt.${TS}@latechs.org`);
+  await must('ceo', 'PATCH', `/org-tree/users/${bubbleReport}`, { managerId: bubbleManager });
+  await must('ceo', 'POST', `/users/${bubbleManager}/active`, { active: false });
+  const treeAfterBubble = await must('ceo', 'GET', '/org-tree');
+  const bubbled = treeAfterBubble.users.find((u) => u.id === bubbleReport);
+  check(
+    'deactivating a manager bubbles direct reports to the manager above them',
+    bubbled?.manager_id === aHead,
+    `manager_id=${bubbled?.manager_id}`
+  );
+
+  // Intern is a label, not a new restriction — task visibility must be
+  // identical to a plain member.
+  await must('ceo', 'POST', `/departments/${deptB}/members`, { userId: grandchild, role: 'intern' });
+  const internTask = await must('bhead', 'POST', '/tasks', { title: `Iso intern task ${TS}`, assignedTo: grandchild });
+  const gcOwnTasks = await req('grandchild', 'GET', '/tasks');
+  const seesOwn = (gcOwnTasks.json?.tasks ?? []).some((t) => t.id === internTask.id);
+  check('intern sees their own assigned task (behaves like member)', seesOwn, `seesOwn=${seesOwn}`);
+  const amemberTasks = await req('amember', 'GET', '/tasks');
+  const internLeak = (amemberTasks.json?.tasks ?? []).some((t) => t.id === internTask.id);
+  check("intern's task does not leak to an unrelated department member", !internLeak, `leak=${internLeak}`);
+
+  console.log('\n== Meetings: participant-only access ==');
+  const meetingId = (await must('ceo', 'POST', '/meetings', { title: `Iso meeting ${TS}`, participantIds: [aMember] })).id;
+  const nonCeoCreate = await req('ahead', 'POST', '/meetings', { title: 'x', participantIds: [aMember] });
+  check('non-CEO DENIED creating meetings', denied(nonCeoCreate), `got ${nonCeoCreate.status}`);
+  const outsiderDetail = await req('bhead', 'GET', `/meetings/${meetingId}`);
+  check('non-participant DENIED meeting detail (404 — existence hidden)', denied(outsiderDetail), `got ${outsiderDetail.status}`);
+  const outsiderJoin = await req('bhead', 'POST', `/meetings/${meetingId}/join`, {});
+  check('non-participant DENIED joining', denied(outsiderJoin), `got ${outsiderJoin.status}`);
+  const outsiderPoll = await req('bhead', 'GET', `/meetings/${meetingId}/signals?after=0`);
+  check('non-participant DENIED reading signals', denied(outsiderPoll), `got ${outsiderPoll.status}`);
+  await must('amember', 'POST', `/meetings/${meetingId}/join`, {});
+  const signalToOutsider = await req('amember', 'POST', `/meetings/${meetingId}/signals`, {
+    toUser: bHead,
+    type: 'offer',
+    payload: {},
+  });
+  check('signaling to a non-participant rejected', signalToOutsider.status === 400, `got ${signalToOutsider.status}`);
+  const badType = await req('amember', 'POST', `/meetings/${meetingId}/signals`, {
+    toUser: aMember,
+    type: 'evil-type',
+    payload: {},
+  });
+  check('invalid signal type rejected', badType.status === 400, `got ${badType.status}`);
+  const nonCreatorEnd = await req('amember', 'POST', `/meetings/${meetingId}/end`, {});
+  check('non-creator DENIED ending the meeting', denied(nonCreatorEnd), `got ${nonCreatorEnd.status}`);
+  const creatorEnd = await req('ceo', 'POST', `/meetings/${meetingId}/end`, {});
+  check('creator CAN end the meeting', creatorEnd.status === 200, `got ${creatorEnd.status}`);
+
+  console.log('\n== Office timings (schedules) ==');
+  const nonCeoSched = await req('ahead', 'POST', '/schedules', { name: 'x', officeStartTime: '09:00', officeEndTime: '17:00' });
+  check('non-CEO DENIED creating schedules', denied(nonCeoSched), `got ${nonCeoSched.status}`);
+  const schedId = (
+    await must('ceo', 'POST', '/schedules', {
+      name: `Iso Shift ${TS}`,
+      officeStartTime: '10:00',
+      officeEndTime: '19:00',
+      lateThresholdMinutes: 20,
+      halfDayThresholdMinutes: 100,
+    })
+  ).id;
+  const nonCeoAssign = await req('ahead', 'POST', `/schedules/${schedId}/assign`, { targetType: 'user', targetId: aMember });
+  check('non-CEO DENIED assigning schedules', denied(nonCeoAssign), `got ${nonCeoAssign.status}`);
+  const badThreshold = await req('ceo', 'PATCH', `/schedules/${schedId}`, { lateThresholdMinutes: 'garbage' });
+  check('non-numeric threshold rejected with 400', badThreshold.status === 400, `got ${badThreshold.status}`);
+  await must('ceo', 'POST', `/schedules/${schedId}/assign`, { targetType: 'user', targetId: aMember });
+  const mine = await req('amember', 'GET', '/schedules/mine');
+  check(
+    'assigned user resolves their own timing',
+    mine.status === 200 && mine.json?.schedule?.schedule_name === `Iso Shift ${TS}`,
+    `got ${mine.status} / ${mine.json?.schedule?.schedule_name}`
+  );
+  await must('ceo', 'DELETE', `/schedules/${schedId}`);
+  const mineAfter = await req('amember', 'GET', '/schedules/mine');
+  check(
+    'deleted timing falls back to the company default',
+    mineAfter.status === 200 && mineAfter.json?.schedule?.schedule_name === null,
+    `got ${mineAfter.status} / ${mineAfter.json?.schedule?.schedule_name}`
+  );
 
   console.log('\n== Attachment ACLs follow the owning entity ==');
   const finEntry = (

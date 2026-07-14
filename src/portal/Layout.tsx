@@ -16,6 +16,9 @@ import {
   UserCog,
   Settings as SettingsIcon,
   MessageSquare,
+  Network,
+  Video,
+  Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -29,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   CommandDialog,
   CommandEmpty,
@@ -71,6 +75,7 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [pwOpen, setPwOpen] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', next: '' });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const passwordPolicyOk =
     pwForm.next.length >= 10 &&
@@ -126,79 +131,112 @@ export default function Layout() {
   const nav = [
     { to: '/portal', label: 'Dashboard', icon: LayoutDashboard, end: true },
     ...(user?.isCeo ? [{ to: '/portal/people', label: 'People', icon: UserCog }] : []),
+    ...(user?.isCeo ? [{ to: '/portal/org', label: 'Org Chart', icon: Network }] : []),
     { to: '/portal/departments', label: 'Departments', icon: Users },
     { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
     { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
     { to: '/portal/attendance', label: 'Attendance', icon: Clock },
     { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
     { to: '/portal/chat', label: 'Chat', icon: MessageSquare },
+    { to: '/portal/meetings', label: 'Meetings', icon: Video },
     ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/salary', label: 'Salary', icon: Wallet }] : []),
     ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
     ...(user?.isCeo ? [{ to: '/portal/settings', label: 'Settings', icon: SettingsIcon }] : []),
   ];
 
+  const navContent = (onNavigate?: () => void) => (
+    <>
+      <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto">
+        {nav.map(({ to, label, icon: Icon, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
+                isActive
+                  ? 'bg-[#1c1c20] text-[#FAFAFA]'
+                  : 'text-[#A1A1AA] hover:bg-[#141417] hover:text-[#FAFAFA]'
+              }`
+            }
+          >
+            <Icon size={15} />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="px-3 py-3 border-t border-[#1f1f23] flex items-center justify-between">
+        <div className="min-w-0">
+          <div className="text-sm truncate">{user?.name}</div>
+          <div className="text-xs text-[#A1A1AA] capitalize">{user?.role}</div>
+        </div>
+        <div className="flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setPwOpen(true)}
+            title="Change password"
+          >
+            <KeyRound size={15} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => logout()} title="Sign out">
+            <LogOut size={15} />
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-screen bg-[#09090B] text-[#FAFAFA]">
-      {/* Notion-style sidebar */}
-      <aside className="w-60 shrink-0 border-r border-[#1f1f23] flex flex-col">
+      {/* Notion-style sidebar — desktop only; mobile gets the drawer below */}
+      <aside className="hidden md:flex w-60 shrink-0 border-r border-[#1f1f23] flex-col">
         <div className="px-4 py-4 flex items-center gap-2">
           <img src="/brand/latech-symbol.svg" alt="" className="h-6 w-auto shrink-0" />
           <span className="font-display font-bold uppercase tracking-tight text-lg">
             LATech <span className="text-[#DFE104]">Portal</span>
           </span>
         </div>
-        <nav className="flex-1 px-2 space-y-0.5">
-          {nav.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-[#1c1c20] text-[#FAFAFA]'
-                    : 'text-[#A1A1AA] hover:bg-[#141417] hover:text-[#FAFAFA]'
-                }`
-              }
-            >
-              <Icon size={15} />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="px-3 py-3 border-t border-[#1f1f23] flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-sm truncate">{user?.name}</div>
-            <div className="text-xs text-[#A1A1AA] capitalize">{user?.role}</div>
-          </div>
-          <div className="flex">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setPwOpen(true)}
-              title="Change password"
-            >
-              <KeyRound size={15} />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => logout()} title="Sign out">
-              <LogOut size={15} />
-            </Button>
-          </div>
-        </div>
+        {navContent()}
       </aside>
+
+      {/* Mobile nav drawer */}
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="w-64 p-0 bg-[#09090B] border-[#1f1f23] flex flex-col md:hidden">
+          <SheetHeader className="px-4 py-4">
+            <SheetTitle className="flex items-center gap-2 font-display font-bold uppercase tracking-tight text-lg">
+              <img src="/brand/latech-symbol.svg" alt="" className="h-6 w-auto shrink-0" />
+              LATech <span className="text-[#DFE104]">Portal</span>
+            </SheetTitle>
+          </SheetHeader>
+          {navContent(() => setMobileNavOpen(false))}
+        </SheetContent>
+      </Sheet>
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-12 shrink-0 border-b border-[#1f1f23] flex items-center justify-between px-4 gap-3">
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 text-sm text-[#A1A1AA] hover:text-[#FAFAFA] transition-colors"
-          >
-            <Search size={14} />
-            Search
-            <Kbd className="ml-1">Ctrl K</Kbd>
-          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden shrink-0"
+              onClick={() => setMobileNavOpen(true)}
+              title="Menu"
+            >
+              <Menu size={17} />
+            </Button>
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-2 text-sm text-[#A1A1AA] hover:text-[#FAFAFA] transition-colors"
+            >
+              <Search size={14} />
+              Search
+              <Kbd className="ml-1 hidden sm:inline-flex">Ctrl K</Kbd>
+            </button>
+          </div>
           <Popover onOpenChange={(open) => {
             if (open && unread > 0) {
               api('/notifications/read', { method: 'POST' }).then(loadNotifications).catch(() => {});

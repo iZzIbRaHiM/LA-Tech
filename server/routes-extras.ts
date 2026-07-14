@@ -11,7 +11,7 @@ export const extrasRouter = Router();
 // Toggle complete: CEO or a head whose department has visibility (they do the work).
 extrasRouter.get('/projects/:id/milestones', requireAuth, async (req, res) => {
   const projectId = Number(req.params.id);
-  if (!userCanSeeProject(req.user!, projectId)) return res.status(404).json({ error: 'Not found' });
+  if (!(await userCanSeeProject(req.user!, projectId))) return res.status(404).json({ error: 'Not found' });
   const rows = await db
     .prepare('SELECT * FROM milestones WHERE project_id = ? ORDER BY position, due_date, id')
     .all(projectId);
@@ -39,7 +39,7 @@ extrasRouter.patch('/milestones/:id', requireAuth, async (req, res) => {
   const milestone = await db.prepare('SELECT * FROM milestones WHERE id = ?').get(Number(req.params.id)) as
     | { id: number; project_id: number; title: string; completed_at: string | null }
     | undefined;
-  if (!milestone || !userCanSeeProject(user, milestone.project_id)) {
+  if (!milestone || !(await userCanSeeProject(user, milestone.project_id))) {
     return res.status(404).json({ error: 'Not found' });
   }
   const canToggle = user.isCeo || user.role === 'head';

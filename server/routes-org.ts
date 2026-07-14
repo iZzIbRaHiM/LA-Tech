@@ -179,14 +179,37 @@ orgRouter.post('/departments/:id/members', requireAuth, requireCeo, async (req, 
     return res.status(409).json({ error: 'User already belongs to a department (one department per user in v1)' });
   }
 
+  // 'head' stays exclusive to the dedicated /head endpoint so "exactly one
+  // head per department" can't be bypassed by assigning it here.
+  const requestedRole = req.body?.role === 'intern' ? 'intern' : 'member';
+
   await db.prepare('INSERT INTO memberships (user_id, department_id, role) VALUES (?, ?, ?)').run(
     userId,
     departmentId,
-    'member'
+    requestedRole
   );
-  await logActivity(req.user!.id, 'department', departmentId, 'member_added', { userId });
+  await logActivity(req.user!.id, 'department', departmentId, 'member_added', { userId, role: requestedRole });
   await notify(userId, 'org', `You were added to a department`, '/portal/departments');
   res.json({ userId });
+});
+
+// Toggle an existing member between 'member' and 'intern' without a
+// remove/re-add cycle. Head status changes only through /head.
+orgRouter.patch('/departments/:id/members/:userId', requireAuth, requireCeo, async (req, res) => {
+  const departmentId = Number(req.params.id);
+  const userId = Number(req.params.userId);
+  const role = req.body?.role;
+  if (!['member', 'intern'].includes(role)) return res.status(400).json({ error: "role must be 'member' or 'intern'" });
+
+  const membership = await db
+    .prepare('SELECT role FROM memberships WHERE user_id = ? AND department_id = ?')
+    .get(userId, departmentId) as { role: string } | undefined;
+  if (!membership) return res.status(404).json({ error: 'Not a member of this department' });
+  if (membership.role === 'head') return res.status(400).json({ error: 'Reassign the head via /head first' });
+
+  await db.prepare('UPDATE memberships SET role = ? WHERE user_id = ? AND department_id = ?').run(role, userId, departmentId);
+  await logActivity(req.user!.id, 'department', departmentId, 'member_role_changed', { userId, role });
+  res.json({ ok: true });
 });
 
 orgRouter.delete('/departments/:id/members/:userId', requireAuth, requireCeo, async (req, res) => {
@@ -245,16 +268,34 @@ orgRouter.get('/users', requireAuth, requireCeo, async (_req, res) => {
 });
 
 orgRouter.post('/users', requireAuth, requireCeo, async (req, res) => {
-  const { name, email, password } = req.body ?? {};
+  const { name, email, password, managerId, title, phone } = req.body ?? {};
   if (!name?.trim() || !email?.trim()) return res.status(400).json({ error: 'Name and email required' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: 'Invalid email' });
   const createPolicyError = passwordPolicyError(password);
   if (createPolicyError) return res.status(400).json({ error: createPolicyError });
   const dup = await db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim());
   if (dup) return res.status(409).json({ error: 'A user with this email already exists' });
+
+  // Everyone needs a place in the reporting chain — default new hires under
+  // the CEO so they're never orphaned; the org-tree "add report" flow
+  // passes the clicked node's id instead.
+  let resolvedManagerId: number | null = null;
+  if (managerId !== undefined && managerId !== null) {
+    const proposed = await db.prepare('SELECT id, active FROM users WHERE id = ?').get(Number(managerId)) as
+      | { id: number; active: number }
+      | undefined;
+    if (!proposed || !proposed.active) return res.status(400).json({ error: 'Manager not found or inactive' });
+    resolvedManagerId = proposed.id;
+  } else {
+    const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
+    resolvedManagerId = ceo?.id ?? null;
+  }
+
   const info = await db
-    .prepare('INSERT INTO users (name, email, password_hash, must_change_password) VALUES (?, ?, ?, 1)')
-    .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 12));
+    .prepare(
+      'INSERT INTO users (name, email, password_hash, must_change_password, manager_id, title, phone) VALUES (?, ?, ?, 1, ?, ?, ?)'
+    )
+    .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 12), resolvedManagerId, title?.trim() ?? '', phone?.trim() ?? '');
   await logActivity(req.user!.id, 'user', Number(info.lastInsertRowid), 'created', { email: email.trim() });
   res.json({ id: Number(info.lastInsertRowid) });
 });
@@ -309,6 +350,25 @@ orgRouter.post('/users/:id/active', requireAuth, requireCeo, async (req, res) =>
         userId
       );
       await db.prepare('DELETE FROM memberships WHERE user_id = ?').run(userId);
+    }
+  }
+  if (!activate) {
+    // Reports bubble up one level rather than being orphaned — the
+    // deactivated user's own manager_id is left untouched (nothing about
+    // them is erased, matching the soft-delete convention everywhere else
+    // in this codebase). Reactivation needs no special handling since
+    // manager_id was never touched.
+    const current = await db.prepare('SELECT manager_id FROM users WHERE id = ?').get(userId) as {
+      manager_id: number | null;
+    };
+    const reports = await db.prepare('SELECT id FROM users WHERE manager_id = ?').all(userId) as Array<{ id: number }>;
+    if (reports.length > 0) {
+      await db.prepare('UPDATE users SET manager_id = ? WHERE manager_id = ?').run(current.manager_id, userId);
+      await logActivity(req.user!.id, 'user', userId, 'reports_bubbled_up', {
+        count: reports.length,
+        newManagerId: current.manager_id,
+        affectedUserIds: reports.map((r) => r.id),
+      });
     }
   }
   await db.prepare('UPDATE users SET active = ? WHERE id = ?').run(activate ? 1 : 0, userId);

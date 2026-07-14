@@ -7,7 +7,14 @@ import { requireAuth, requireCeo } from './auth.js';
 // sensitive as project finance, arguably more so, and the request was
 // explicit: "ceo and only ceo."
 export const salaryRouter = Router();
-salaryRouter.use('/salary', requireAuth, requireCeo);
+// Gate applied inline per route below. This router previously used
+// router.use('/salary', requireAuth, requireCeo) and every /salary route
+// 404'd in the running app (observed live 2026-07; the same symptom hit the
+// new org-hierarchy router, while routes-finance.ts's identical-looking
+// pattern worked — root cause never fully pinned down, a minimal two-router
+// repro of the pattern works fine in isolation). Inline middleware is the
+// pattern every other router here already uses, and is verified working.
+const gate = [requireAuth, requireCeo] as const;
 
 interface DeductionSettings {
   max_absent_allowed: number;
@@ -37,7 +44,7 @@ async function currentSalary(userId: number): Promise<number | null> {
 }
 
 // Employee list with current salary — non-CEO active users only.
-salaryRouter.get('/salary/employees', async (_req, res) => {
+salaryRouter.get('/salary/employees', ...gate, async (_req, res) => {
   const users = await db
     .prepare(
       `SELECT u.id, u.name, u.email, d.name AS department_name
@@ -55,7 +62,7 @@ salaryRouter.get('/salary/employees', async (_req, res) => {
   res.json({ employees: withSalary });
 });
 
-salaryRouter.post('/salary/:userId/assign', async (req, res) => {
+salaryRouter.post('/salary/:userId/assign', ...gate, async (req, res) => {
   const userId = Number(req.params.userId);
   const target = await db.prepare('SELECT id, is_ceo FROM users WHERE id = ?').get(userId) as
     | { id: number; is_ceo: number }
@@ -77,7 +84,7 @@ salaryRouter.post('/salary/:userId/assign', async (req, res) => {
 
 // Preview: for a given employee + period, compute confirmed late/half-day/
 // billable-absent counts and the suggested (not yet applied) deductions.
-salaryRouter.get('/salary/:userId/preview', async (req, res) => {
+salaryRouter.get('/salary/:userId/preview', ...gate, async (req, res) => {
   const userId = Number(req.params.userId);
   const period = String(req.query.period ?? '');
   if (!/^\d{4}-\d{2}$/.test(period)) return res.status(400).json({ error: 'period must be YYYY-MM' });
@@ -130,7 +137,7 @@ salaryRouter.get('/salary/:userId/preview', async (req, res) => {
   });
 });
 
-salaryRouter.post('/salary/:userId/payments', async (req, res) => {
+salaryRouter.post('/salary/:userId/payments', ...gate, async (req, res) => {
   const userId = Number(req.params.userId);
   const {
     period,
@@ -234,7 +241,7 @@ salaryRouter.post('/salary/:userId/payments', async (req, res) => {
 // MUST be registered before /salary/:userId/payments — Express matches in
 // order, and the param route would otherwise capture this path with
 // userId="payments" (NaN → query error).
-salaryRouter.get('/salary/payments', async (req, res) => {
+salaryRouter.get('/salary/payments', ...gate, async (req, res) => {
   const period = typeof req.query.period === 'string' ? req.query.period : undefined;
   const where = period ? 'WHERE sp.period = ?' : '';
   const params = period ? [period] : [];
@@ -249,7 +256,7 @@ salaryRouter.get('/salary/payments', async (req, res) => {
   res.json({ payments, total });
 });
 
-salaryRouter.get('/salary/:userId/payments', async (req, res) => {
+salaryRouter.get('/salary/:userId/payments', ...gate, async (req, res) => {
   const userId = Number(req.params.userId);
   if (!Number.isInteger(userId)) return res.status(400).json({ error: 'Invalid user id' });
   const payments = await db

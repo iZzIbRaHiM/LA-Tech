@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider, useAuth } from './AuthContext';
@@ -16,7 +17,13 @@ import People from './pages/People';
 import Settings from './pages/Settings';
 import Salary from './pages/Salary';
 import Chat from './pages/Chat';
+import Meetings from './pages/Meetings';
+import MeetingRoom from './pages/MeetingRoom';
 import { FinanceOverview, FinanceLedger } from './pages/Finance';
+
+// React Flow + dagre are a meaningful bundle addition and only the CEO ever
+// opens this page — lazy-load it so nobody else pays for it.
+const OrgChart = lazy(() => import('./pages/OrgChart'));
 
 function Gate() {
   const { user, loading } = useAuth();
@@ -40,9 +47,21 @@ function Gate() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="leave" element={<Leave />} />
         <Route path="chat" element={<Chat />} />
+        <Route path="meetings" element={<Meetings />} />
+        <Route path="meetings/:id" element={<MeetingRoom />} />
         {/* Role-gated routes render conditionally; the API enforces access regardless. */}
         {(user.isCeo || user.financeAccess) && <Route path="finance" element={<FinanceOverview />} />}
         {(user.isCeo || user.financeAccess) && <Route path="finance/:projectId" element={<FinanceLedger />} />}
+        {user.isCeo && (
+          <Route
+            path="org"
+            element={
+              <Suspense fallback={<div className="p-8 text-sm text-[#71717A]">Loading…</div>}>
+                <OrgChart />
+              </Suspense>
+            }
+          />
+        )}
         {user.isCeo && <Route path="audit" element={<Audit />} />}
         {user.isCeo && <Route path="people" element={<People />} />}
         {user.isCeo && <Route path="settings" element={<Settings />} />}

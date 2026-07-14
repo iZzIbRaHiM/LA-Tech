@@ -32,7 +32,7 @@ export interface SessionUser {
   financeAccess: boolean;
   mustChangePassword: boolean;
   departmentId: number | null;
-  role: 'ceo' | 'head' | 'member' | 'unassigned';
+  role: 'ceo' | 'head' | 'member' | 'intern' | 'unassigned';
 }
 
 declare global {
@@ -78,7 +78,21 @@ export async function loadSessionUser(userId: number): Promise<SessionUser | nul
     financeAccess: !!row.finance_access,
     mustChangePassword: !!row.must_change_password,
     departmentId: row.department_id,
-    role: row.is_ceo ? 'ceo' : row.mrole === 'head' ? 'head' : row.mrole === 'member' ? 'member' : 'unassigned',
+    // Intern behaves exactly like member everywhere taskVisibilityWhere/
+    // canManageTask look at role — both route any non-'head' role into the
+    // same rows-you're-assigned branch, so passing 'intern' through here
+    // (instead of letting it fall to the more-restrictive 'unassigned') is
+    // the only change needed to make the tier actually work as promised.
+    role:
+      row.is_ceo
+        ? 'ceo'
+        : row.mrole === 'head'
+        ? 'head'
+        : row.mrole === 'member'
+        ? 'member'
+        : row.mrole === 'intern'
+        ? 'intern'
+        : 'unassigned',
   };
 }
 
@@ -158,6 +172,33 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const user = await loadSessionUser(userId);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
     req.user = user;
+    // Presence heartbeat for the org-tree's "online now" indicator. Not
+    // awaited — a hiccup here must never delay or fail a real request (the
+    // one deliberate exception to this file's "await everything" norm).
+    // Throttled to the DB so 6s client polling produces at most one write
+    // per user per ~20s; the tree's online window is 75s, so the indicator
+    // tracks reality within about a poll cycle.
+    db.prepare(
+      "UPDATE users SET last_seen_at = datetime('now') WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at::timestamp < now() - INTERVAL '20 seconds')"
+    )
+      .run(userId)
+      .then((r) => {
+        if (r.changes > 0) {
+          // While checked in, this same heartbeat is the work-session
+          // monitor: accumulate active time on the open attendance row.
+          // Capped at 5 minutes per beat so time away (laptop closed,
+          // browser shut) never counts as online time.
+          return db
+            .prepare(
+              `UPDATE attendance SET
+                 online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - last_active_at::timestamp)) / 60.0, 0), 5),
+                 last_active_at = datetime('now')
+               WHERE user_id = ? AND check_out IS NULL AND check_in IS NOT NULL AND last_active_at IS NOT NULL`
+            )
+            .run(userId);
+        }
+      })
+      .catch((err) => console.warn('[heartbeat] presence/session update failed:', err?.message ?? err));
     next();
   } catch {
     return res.status(401).json({ error: 'Not authenticated' });

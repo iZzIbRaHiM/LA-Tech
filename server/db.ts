@@ -53,9 +53,13 @@ export function translateQuery(sql: string): string {
 
   const trimmed = translated.trim().toUpperCase();
   if (trimmed.startsWith('INSERT ')) {
+    // Tables with composite primary keys and no `id` column must be excluded
+    // from the automatic RETURNING id.
     if (!trimmed.includes(' RETURNING ') &&
         !trimmed.includes('INTO MEMBERSHIPS') &&
         !trimmed.includes('CHAT_GROUP_MEMBERS') &&
+        !trimmed.includes('MEETING_PARTICIPANTS') &&
+        !trimmed.includes('SCHEDULE_ASSIGNMENTS') &&
         !translated.toUpperCase().includes('PROJECT_VISIBILITY')) {
       translated += ' RETURNING id';
     }
@@ -220,6 +224,25 @@ export async function initDb() {
       role TEXT NOT NULL CHECK (role IN ('head','member')),
       PRIMARY KEY (user_id, department_id)
     );
+
+    -- Reporting hierarchy: arbitrary-depth manager chain, decoupled from
+    -- departments. Drives the org-tree UI and attendance/leave approval
+    -- authority (policy.ts). Departments/memberships stay untouched by this.
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TEXT;
+    CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id);
+
+    -- Backfill so the hierarchy is never invalid: everyone reports to the
+    -- CEO until explicitly repositioned. No-op after the first deploy.
+    UPDATE users SET manager_id = (SELECT id FROM users WHERE is_ceo = 1 LIMIT 1)
+    WHERE manager_id IS NULL AND is_ceo = 0;
+
+    -- Intern tier: widen the existing CHECK the same way
+    -- attachments_entity_type_check is widened further down this file.
+    ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_check;
+    ALTER TABLE memberships ADD CONSTRAINT memberships_role_check CHECK (role IN ('head','member','intern'));
 
     CREATE TABLE IF NOT EXISTS projects (
       id SERIAL PRIMARY KEY,
@@ -452,6 +475,63 @@ export async function initDb() {
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_filename TEXT;
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_stored_name TEXT;
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER;
+
+    -- In-portal meetings (WebRTC mesh; the DB carries only the signaling
+    -- handshake — offers/answers/ICE — never any media).
+    CREATE TABLE IF NOT EXISTS meetings (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      ended_at TEXT,
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+
+    CREATE TABLE IF NOT EXISTS meeting_participants (
+      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      joined_at TEXT,
+      left_at TEXT,
+      PRIMARY KEY (meeting_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS meeting_signals (
+      id SERIAL PRIMARY KEY,
+      meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      from_user INTEGER NOT NULL REFERENCES users(id),
+      to_user INTEGER NOT NULL REFERENCES users(id),
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_meeting_signals ON meeting_signals(meeting_id, to_user, id);
+    ALTER TABLE meeting_signals DROP CONSTRAINT IF EXISTS meeting_signals_type_check;
+    ALTER TABLE meeting_signals ADD CONSTRAINT meeting_signals_type_check CHECK (type IN ('offer','answer','ice','peer-left'));
+
+    -- Multiple office timings: named schedules assignable to a department or
+    -- an individual (individual wins over department, department over the
+    -- company-wide attendance_settings defaults).
+    CREATE TABLE IF NOT EXISTS work_schedules (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      office_start_time TEXT NOT NULL DEFAULT '09:00',
+      office_end_time TEXT NOT NULL DEFAULT '18:00',
+      late_threshold_minutes INTEGER NOT NULL DEFAULT 15,
+      half_day_threshold_minutes INTEGER NOT NULL DEFAULT 90,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
+    );
+
+    CREATE TABLE IF NOT EXISTS schedule_assignments (
+      schedule_id INTEGER NOT NULL REFERENCES work_schedules(id) ON DELETE CASCADE,
+      target_type TEXT NOT NULL CHECK (target_type IN ('department','user')),
+      target_id INTEGER NOT NULL,
+      PRIMARY KEY (target_type, target_id)
+    );
+
+    -- Session-tracked attendance: while checked in, the presence heartbeat
+    -- accumulates online_minutes; check-out finalizes the day's total.
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS online_minutes REAL NOT NULL DEFAULT 0;
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS last_active_at TEXT;
   `);
 
   await seedCeo();

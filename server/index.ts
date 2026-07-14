@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { initDb } from './db.js';
 import { orgRouter } from './routes-org.js';
+import { orgHierarchyRouter } from './routes-org-hierarchy.js';
 import { tasksRouter } from './routes-tasks.js';
 import { projectsRouter } from './routes-projects.js';
 import { financeRouter } from './routes-finance.js';
@@ -16,6 +17,8 @@ import { miscRouter } from './routes-misc.js';
 import { settingsRouter } from './routes-settings.js';
 import { salaryRouter } from './routes-salary.js';
 import { chatRouter } from './routes-chat.js';
+import { meetingsRouter } from './routes-meetings.js';
+import { schedulesRouter } from './routes-schedules.js';
 
 // VERCEL is set on every Vercel deployment (dev/preview/prod alike) — a more
 // reliable "are we actually deployed" signal than NODE_ENV alone.
@@ -51,6 +54,7 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api', orgRouter);
+app.use('/api', orgHierarchyRouter);
 app.use('/api', tasksRouter);
 app.use('/api', projectsRouter);
 app.use('/api', financeRouter);
@@ -62,6 +66,8 @@ app.use('/api', miscRouter);
 app.use('/api', settingsRouter);
 app.use('/api', salaryRouter);
 app.use('/api', chatRouter);
+app.use('/api', meetingsRouter);
+app.use('/api', schedulesRouter);
 
 // Production: serve the built frontend from this same process, with an SPA
 // fallback so client routes like /portal/tasks/3 load index.html. In dev,

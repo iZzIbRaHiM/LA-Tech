@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { api } from '../api';
+import OfficeTimings from '../components/OfficeTimings';
 
 interface AttendanceSettings {
   office_start_time: string;
@@ -163,6 +164,8 @@ export default function Settings() {
           start by more than the half-day threshold = half day.
         </p>
       </section>
+
+      <OfficeTimings />
 
       <section className="mb-8">
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Absences</h2>

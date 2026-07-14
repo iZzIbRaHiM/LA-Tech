@@ -13,6 +13,7 @@
 // - Project existence itself is confidential outside the allow-list.
 import { db } from './db.js';
 import type { SessionUser } from './auth.js';
+import { isAncestor } from './org-hierarchy.js';
 
 // ---------- Finance ----------
 export function hasFinanceAccess(user: SessionUser): boolean {
@@ -46,19 +47,19 @@ export function canManageTask(user: SessionUser, task: { department_id: number }
   return user.isCeo || (user.role === 'head' && user.departmentId === task.department_id);
 }
 
-// ---------- Attendance / Leave (same authority model) ----------
-// The CEO decides for anyone; a head decides for members of their own
-// department; nobody decides for themselves (heads escalate to the CEO).
+// ---------- Attendance / Leave (manager-chain authority) ----------
+// The CEO decides for anyone; any ancestor in the manager_id chain (not just
+// the direct manager) may decide for a descendant; nobody decides for
+// themselves. Since the CEO is the root of every chain (org-hierarchy.ts's
+// backfill), a skip-level ancestor can always step in — "escalate to the
+// CEO if unavailable" falls out of this for free, no special-casing needed.
+// Departments/memberships are not consulted here at all.
 async function decidesFor(actor: SessionUser, subjectUserId: number): Promise<boolean> {
   // The CEO outranks everyone, including themselves — nobody else could ever
   // decide a CEO's own record, so without this it would sit pending forever.
   if (actor.isCeo) return true;
   if (subjectUserId === actor.id) return false;
-  if (actor.role !== 'head') return false;
-  const row = await db
-    .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
-    .get(subjectUserId, actor.departmentId);
-  return !!row;
+  return await isAncestor(actor.id, subjectUserId);
 }
 
 export async function canValidateAttendance(actor: SessionUser, record: { user_id: number }): Promise<boolean> {

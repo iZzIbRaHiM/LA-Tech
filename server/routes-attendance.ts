@@ -3,6 +3,7 @@ import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
 import { canValidateAttendance } from './policy.js';
 import { computeCategory, nowUtcString, type CategorySettings } from './attendance.js';
+import { resolveSchedule } from './routes-schedules.js';
 
 export const attendanceRouter = Router();
 
@@ -48,14 +49,25 @@ attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
     return res.status(409).json({ error: 'You already have an attendance record for today' });
   }
 
-  const settings = await getSettings();
-  const category = computeCategory(checkInTime, settings);
+  // Category comes from the user's assigned office timing (individual >
+  // department > company default), and the record is auto-approved — the
+  // session tracker (presence heartbeat accumulating online_minutes) is the
+  // monitor now, not a manual head/CEO validation step. Validators keep the
+  // /validate endpoint for after-the-fact corrections only.
+  const schedule = await resolveSchedule(user.id);
+  const category = computeCategory(checkInTime, schedule);
   const { note } = req.body ?? {};
   const info = await db
-    .prepare('INSERT INTO attendance (user_id, check_in, record_date, category, note) VALUES (?, ?, ?, ?, ?)')
-    .run(user.id, checkInTime, today, category, note?.trim() ?? '');
-  await logActivity(user.id, 'attendance', Number(info.lastInsertRowid), 'checked_in', { category });
-  res.json({ id: Number(info.lastInsertRowid), category });
+    .prepare(
+      `INSERT INTO attendance (user_id, check_in, record_date, category, note, validation_status, validated_at, last_active_at)
+       VALUES (?, ?, ?, ?, ?, 'approved', datetime('now'), ?)`
+    )
+    .run(user.id, checkInTime, today, category, note?.trim() ?? '', checkInTime);
+  await logActivity(user.id, 'attendance', Number(info.lastInsertRowid), 'checked_in', {
+    category,
+    schedule: schedule.schedule_name ?? 'default',
+  });
+  res.json({ id: Number(info.lastInsertRowid), category, schedule });
 });
 
 attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => {
@@ -65,32 +77,49 @@ attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => 
     .prepare('SELECT id FROM attendance WHERE user_id = ? AND check_out IS NULL AND check_in IS NOT NULL')
     .get(user.id) as { id: number } | undefined;
   if (!open) return res.status(409).json({ error: 'No open check-in' });
-  await db.prepare("UPDATE attendance SET check_out = datetime('now') WHERE id = ?").run(open.id);
-  await logActivity(user.id, 'attendance', open.id, 'checked_out');
 
-  // Tell the validator there's a completed record waiting — dept head, or
-  // the CEO if unassigned/headless (same escalation as leave requests).
-  const head = await db
+  // Finalize the session: fold in the time since the last heartbeat (capped
+  // at 5 minutes, same as the heartbeat accumulator, so idle gaps don't
+  // count), stamp check-out. The record was auto-approved at check-in — no
+  // validator round-trip.
+  // COALESCE to check_in covers records opened before session tracking
+  // shipped (their last_active_at is NULL — they still get the capped
+  // final increment instead of silently contributing zero).
+  await db
     .prepare(
-      `SELECT d.head_user_id FROM memberships m JOIN departments d ON d.id = m.department_id
-       WHERE m.user_id = ?`
+      `UPDATE attendance SET
+         online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - COALESCE(last_active_at, check_in)::timestamp)) / 60.0, 0), 5),
+         last_active_at = datetime('now'),
+         check_out = datetime('now')
+       WHERE id = ?`
     )
-    .get(user.id) as { head_user_id: number | null } | undefined;
-  let validator = head?.head_user_id && head.head_user_id !== user.id ? head.head_user_id : null;
-  if (!validator) {
-    const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
-    validator = ceo && ceo.id !== user.id ? ceo.id : null;
-  }
-  if (validator) {
-    await notify(validator, 'attendance', `${user.name} checked out — attendance awaiting validation`, '/portal/attendance');
-  }
-  res.json({ ok: true });
+    .run(open.id);
+  const finished = await db.prepare('SELECT online_minutes FROM attendance WHERE id = ?').get(open.id) as {
+    online_minutes: number;
+  };
+  await logActivity(user.id, 'attendance', open.id, 'checked_out', {
+    onlineMinutes: Math.round(Number(finished.online_minutes)),
+  });
+  res.json({ ok: true, onlineMinutes: Math.round(Number(finished.online_minutes)) });
 });
 
 // Own history + (for validators) their team's records. Ordered by
 // record_date (not check_in) since absence rows have no check_in.
 attendanceRouter.get('/attendance', requireAuth, async (req, res) => {
   const user = req.user!;
+
+  // CEO-only profile-panel lookup for one specific employee's full history —
+  // the "team" branch below is capped at 100 rows company-wide, which can
+  // miss one person's older records once the company grows.
+  const queriedUserId = req.query.userId ? Number(req.query.userId) : null;
+  if (queriedUserId) {
+    if (!user.isCeo) return res.status(403).json({ error: 'CEO only' });
+    const rows = await db
+      .prepare('SELECT * FROM attendance WHERE user_id = ? ORDER BY record_date DESC LIMIT 60')
+      .all(queriedUserId);
+    return res.json({ own: rows, team: [] });
+  }
+
   const own = await db
     .prepare('SELECT * FROM attendance WHERE user_id = ? ORDER BY record_date DESC LIMIT 60')
     .all(user.id);

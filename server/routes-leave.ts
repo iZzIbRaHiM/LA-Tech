@@ -26,14 +26,12 @@ leaveRouter.post('/leave', requireAuth, async (req, res) => {
     .run(user.id, leaveType, startDate, endDate, reason?.trim() ?? '');
   await logActivity(user.id, 'leave', Number(info.lastInsertRowid), 'requested', { startDate, endDate, type: leaveType });
 
-  // Route the request to whoever can decide it: dept head, or CEO for heads/unassigned.
-  const head = await db
-    .prepare(
-      `SELECT d.head_user_id FROM memberships m JOIN departments d ON d.id = m.department_id
-       WHERE m.user_id = ?`
-    )
-    .get(user.id) as { head_user_id: number | null } | undefined;
-  let decider = head?.head_user_id && head.head_user_id !== user.id ? head.head_user_id : null;
+  // Route the request to whoever can decide it: direct manager, or CEO if
+  // unassigned/headless (same manager-chain authority as attendance).
+  const row = await db.prepare('SELECT manager_id FROM users WHERE id = ?').get(user.id) as
+    | { manager_id: number | null }
+    | undefined;
+  let decider = row?.manager_id && row.manager_id !== user.id ? row.manager_id : null;
   if (!decider) {
     const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
     decider = ceo && ceo.id !== user.id ? ceo.id : null;

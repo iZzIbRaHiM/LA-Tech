@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
-import { api, downloadFile } from '../api';
+import { api, downloadFile, type ResolvedSchedule } from '../api';
 
 type Category = 'on_time' | 'late' | 'half_day' | 'absent' | null;
 
@@ -34,6 +34,7 @@ interface AttendanceRecord {
   category: Category;
   validation_status: 'pending' | 'approved' | 'rejected';
   note: string;
+  online_minutes?: number;
 }
 
 const STATUS_BADGE: Record<AttendanceRecord['validation_status'], string> = {
@@ -77,6 +78,11 @@ function duration(a: string | null, b: string | null): string {
 const toInputValue = (checkIn: string) => checkIn.replace(' ', 'T').slice(0, 16);
 const fromInputValue = (value: string) => `${value.replace('T', ' ')}:00`;
 
+const formatMinutes = (mins: number) => {
+  const m = Math.round(mins);
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+};
+
 export default function Attendance() {
   const { user } = useAuth();
   const [open, setOpen] = useState<AttendanceRecord | null>(null);
@@ -86,6 +92,7 @@ export default function Attendance() {
   const [checkInNote, setCheckInNote] = useState('');
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
   const [editedTime, setEditedTime] = useState('');
+  const [mySchedule, setMySchedule] = useState<ResolvedSchedule | null>(null);
 
   const load = useCallback(() => {
     api<{ open: AttendanceRecord | null }>('/attendance/status').then((r) => setOpen(r.open)).catch(() => {});
@@ -98,14 +105,23 @@ export default function Attendance() {
   }, []);
   useEffect(load, [load]);
 
+  useEffect(() => {
+    if (user?.isCeo) return;
+    api<{ schedule: ResolvedSchedule }>('/schedules/mine').then((r) => setMySchedule(r.schedule)).catch(() => {});
+  }, [user]);
+
   const punch = async (dir: 'check-in' | 'check-out') => {
     setBusy(true);
     try {
-      await api(`/attendance/${dir}`, {
+      const r = await api<{ onlineMinutes?: number }>(`/attendance/${dir}`, {
         method: 'POST',
         body: dir === 'check-in' ? { note: checkInNote } : {},
       });
-      toast.success(dir === 'check-in' ? 'Checked in — have a good day!' : 'Checked out');
+      toast.success(
+        dir === 'check-in'
+          ? 'Checked in — your session is now being tracked. Have a good day!'
+          : `Checked out — ${formatMinutes(r.onlineMinutes ?? 0)} online today`
+      );
       setCheckInNote('');
       load();
     } catch (e) {
@@ -198,9 +214,16 @@ export default function Attendance() {
                 <Clock size={13} />
                 {open ? `Checked in at ${open.check_in}` : 'Not checked in'}
               </div>
-              <div className="font-display font-bold text-xl mb-2">
+              <div className="font-display font-bold text-xl mb-1">
                 {open ? 'You are in the office' : 'Ready to start your day?'}
               </div>
+              {mySchedule && (
+                <div className="text-xs text-[#71717A] mb-2">
+                  Your office hours: {mySchedule.office_start_time}–{mySchedule.office_end_time}
+                  {mySchedule.schedule_name ? ` (${mySchedule.schedule_name})` : ' (company default)'}
+                  {open ? ` · ${formatMinutes(open.online_minutes ?? 0)} online so far` : ''}
+                </div>
+              )}
               {open ? (
                 open.note && <div className="text-sm text-[#A1A1AA]">Note: {open.note}</div>
               ) : (
@@ -366,6 +389,7 @@ export default function Attendance() {
                   <TableHead>Check in</TableHead>
                   <TableHead>Check out</TableHead>
                   <TableHead>Duration</TableHead>
+                  <TableHead>Online time</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead>Status</TableHead>
@@ -377,6 +401,9 @@ export default function Attendance() {
                     <TableCell className="text-xs">{r.check_in ?? '—'}</TableCell>
                     <TableCell className="text-xs">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
                     <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
+                    <TableCell className="text-xs">
+                      {r.check_in ? formatMinutes(r.online_minutes ?? 0) : '—'}
+                    </TableCell>
                     <TableCell>
                       <CategoryBadge category={r.category} />
                     </TableCell>
