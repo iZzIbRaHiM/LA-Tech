@@ -3,7 +3,8 @@ import { Link } from 'react-router';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
-import { featuredProjects, CATEGORY_LABELS } from '@/data/projects';
+import { featuredProjects, CATEGORY_LABELS, type Project } from '@/data/projects';
+import ProjectModal from '@/components/ProjectModal';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -52,6 +53,7 @@ export default function Portfolio() {
   const [loadedCount, setLoadedCount] = useState(0);
   const reducedMotion = useReducedMotion();
   const [dims, setDims] = useState(getCardDimensions);
+  const [selected, setSelected] = useState<Project | null>(null);
 
   // Responsive card sizing on resize
   const handleResize = useCallback(() => {
@@ -246,12 +248,19 @@ export default function Portfolio() {
                 }}
               >
                 <figure className="w-full h-full">
-                  <img
-                    src={project.image}
-                    alt={project.name}
-                    className="w-full h-full object-cover border-2 border-[#3F3F46] bg-[#09090B]"
-                    style={{ borderRadius: '0' }}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setSelected(project)}
+                    aria-label={`View ${project.name} details`}
+                    className="block w-full h-full cursor-pointer"
+                  >
+                    <img
+                      src={project.image}
+                      alt={project.name}
+                      className="w-full h-full object-cover border-2 border-[#3F3F46] bg-[#09090B] hover:border-[#DFE104] transition-colors duration-300"
+                      style={{ borderRadius: '0' }}
+                    />
+                  </button>
                   <figcaption
                     className="text-center mt-4"
                     style={{ fontSize: 'clamp(0.75rem, 1vw, 1.125rem)' }}
@@ -274,6 +283,8 @@ export default function Portfolio() {
           </div>
         </div>
       </div>
+
+      <ProjectModal project={selected} onClose={() => setSelected(null)} />
     </section>
   );
 }

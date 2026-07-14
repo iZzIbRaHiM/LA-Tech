@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router';
 
-const navLinks = [
-  { label: 'Services', href: '#services' },
-  { label: 'Work', href: '#work' },
-  { label: 'Process', href: '#process' },
-  { label: 'Contact', href: '#contact' },
+// Sections live only on the home page ("/"). From any other route these
+// must navigate home first, then scroll — a raw <a href="#hash"> or
+// window.location.href hack silently does nothing off "/".
+const sectionLinks = [
+  { label: 'Services', hash: '#services' },
+  { label: 'Work', hash: '#work' },
+  { label: 'Process', hash: '#process' },
+  { label: 'Contact', hash: '#contact' },
 ];
 
 export default function Navigation() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHome = location.pathname === '/';
+  const isPortfolio = location.pathname.startsWith('/portfolio');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,18 +27,28 @@ export default function Navigation() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    e.preventDefault();
-    const el = document.querySelector(href);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-      setMobileOpen(false);
+  const goToSection = (hash: string) => {
+    setMobileOpen(false);
+    if (isHome) {
+      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
     } else {
-      // Section anchors only exist on the home page — from /portfolio (or any
-      // other page) route back home with the hash so the section still opens.
-      window.location.href = '/' + href;
+      navigate('/' + hash);
     }
   };
+
+  const goHome = () => {
+    setMobileOpen(false);
+    if (isHome) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      navigate('/');
+    }
+  };
+
+  const navLinkClass = (active: boolean) =>
+    `font-display font-medium uppercase transition-colors duration-200 ${
+      active ? 'text-[#DFE104]' : 'text-[#A1A1AA] hover:text-[#DFE104]'
+    }`;
 
   return (
     <>
@@ -52,11 +70,7 @@ export default function Navigation() {
             href="/"
             onClick={(e) => {
               e.preventDefault();
-              if (window.location.pathname === '/') {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              } else {
-                window.location.href = '/';
-              }
+              goHome();
             }}
             aria-label="LATech Solutions — home"
           >
@@ -70,12 +84,15 @@ export default function Navigation() {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
+            {sectionLinks.map((link) => (
               <a
                 key={link.label}
-                href={link.href}
-                onClick={(e) => handleNavClick(e, link.href)}
-                className="font-display font-medium uppercase text-[#A1A1AA] hover:text-[#DFE104] transition-colors duration-200"
+                href={isHome ? link.hash : '/' + link.hash}
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToSection(link.hash);
+                }}
+                className={navLinkClass(false)}
                 style={{
                   fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
                   letterSpacing: '-0.02em',
@@ -84,19 +101,34 @@ export default function Navigation() {
                 {link.label}
               </a>
             ))}
-            <a
-              href="/portal"
-              className="font-display font-medium uppercase text-[#A1A1AA] hover:text-[#DFE104] transition-colors duration-200"
+            <Link
+              to="/portfolio"
+              onClick={() => setMobileOpen(false)}
+              aria-current={isPortfolio ? 'page' : undefined}
+              className={navLinkClass(isPortfolio)}
+              style={{
+                fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              Portfolio
+            </Link>
+            <Link
+              to="/portal"
+              className={navLinkClass(false)}
               style={{
                 fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
                 letterSpacing: '-0.02em',
               }}
             >
               Portal
-            </a>
+            </Link>
             <a
-              href="#contact"
-              onClick={(e) => handleNavClick(e, '#contact')}
+              href={isHome ? '#contact' : '/#contact'}
+              onClick={(e) => {
+                e.preventDefault();
+                goToSection('#contact');
+              }}
               className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] hover:scale-105 active:scale-95 transition-all duration-200"
               style={{
                 height: '40px',
@@ -146,11 +178,14 @@ export default function Navigation() {
       {/* Mobile Overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-[#09090B] flex flex-col items-center justify-center gap-8 md:hidden">
-          {navLinks.map((link) => (
+          {sectionLinks.map((link) => (
             <a
               key={link.label}
-              href={link.href}
-              onClick={(e) => handleNavClick(e, link.href)}
+              href={isHome ? link.hash : '/' + link.hash}
+              onClick={(e) => {
+                e.preventDefault();
+                goToSection(link.hash);
+              }}
               className="font-display font-bold uppercase text-[#FAFAFA] hover:text-[#DFE104] transition-colors duration-200"
               style={{
                 fontSize: 'clamp(2.5rem, 8vw, 8rem)',
@@ -161,9 +196,39 @@ export default function Navigation() {
               {link.label}
             </a>
           ))}
+          <Link
+            to="/portfolio"
+            onClick={() => setMobileOpen(false)}
+            aria-current={isPortfolio ? 'page' : undefined}
+            className={`font-display font-bold uppercase transition-colors duration-200 ${
+              isPortfolio ? 'text-[#DFE104]' : 'text-[#FAFAFA] hover:text-[#DFE104]'
+            }`}
+            style={{
+              fontSize: 'clamp(2.5rem, 8vw, 8rem)',
+              lineHeight: 0.85,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Portfolio
+          </Link>
+          <Link
+            to="/portal"
+            onClick={() => setMobileOpen(false)}
+            className="font-display font-bold uppercase text-[#FAFAFA] hover:text-[#DFE104] transition-colors duration-200"
+            style={{
+              fontSize: 'clamp(2.5rem, 8vw, 8rem)',
+              lineHeight: 0.85,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Portal
+          </Link>
           <a
-            href="#contact"
-            onClick={(e) => handleNavClick(e, '#contact')}
+            href={isHome ? '#contact' : '/#contact'}
+            onClick={(e) => {
+              e.preventDefault();
+              goToSection('#contact');
+            }}
             className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] mt-4 hover:scale-105 active:scale-95 transition-all duration-200"
             style={{
               height: '56px',

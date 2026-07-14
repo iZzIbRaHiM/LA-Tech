@@ -63,10 +63,10 @@ export const projects: Project[] = [
   },
   {
     slug: 'school-portal',
-    name: 'School Management Portal',
-    tagline: 'All-in-one portal for admins, teachers, students, and parents.',
+    name: 'Science Valley School',
+    tagline: 'All-in-one management portal for admins, teachers, students, and parents.',
     description:
-      'A unified school management system covering attendance, grades, fee management, and instant SMS alerts to parents — with role-scoped dashboards for every stakeholder. Live demo available on request.',
+      'A unified school management system built for Science Valley School, covering attendance, grades, fee management, and instant SMS alerts to parents — with role-scoped dashboards for every stakeholder. Live demo available on request.',
     category: 'platform',
     tech: ['React', 'Node.js', 'PostgreSQL', 'SMS Integration'],
     image: '/images/portfolio/school-portal.png',

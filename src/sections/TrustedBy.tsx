@@ -8,7 +8,7 @@ gsap.registerPlugin(ScrollTrigger);
 // Real brands from delivered work (see src/data/projects.ts) — never
 // invent client names here.
 const ROW_ONE = ['Guestpostbar', 'GainBlockX', 'Grags', 'TZ Wellness Centre', 'DRD Academy'];
-const ROW_TWO = ['Big Rafeal', 'Golden Vest', 'Al Fazal Palace', 'Atlas', 'School Portal'];
+const ROW_TWO = ['Big Rafeal', 'Golden Vest', 'Al Fazal Palace', 'Atlas', 'Science Valley School'];
 
 function BrandName({ name }: { name: string }) {
   return (
@@ -18,7 +18,7 @@ function BrandName({ name }: { name: string }) {
         style={{
           fontSize: 'clamp(1.5rem, 3vw, 2.75rem)',
           letterSpacing: '-0.02em',
-          lineHeight: 1,
+          lineHeight: 1.3,
         }}
       >
         {name}
@@ -37,26 +37,25 @@ function BrandName({ name }: { name: string }) {
 }
 
 function MarqueeRow({ names, reverse, duration }: { names: string[]; reverse?: boolean; duration: number }) {
-  const content = (
-    <>
-      {names.map((n) => (
-        <BrandName key={n} name={n} />
-      ))}
-    </>
-  );
+  // Four repeats of the same name list as siblings need distinct keys per
+  // repeat, or React sees duplicate keys across the whole row.
+  const repeats = [0, 1, 2, 3];
   return (
-    <div className="flex overflow-hidden" style={{ padding: '1.25rem 0' }}>
+    <div className="flex overflow-hidden" style={{ padding: 'clamp(1rem, 2vw, 1.75rem) 0' }}>
       <div
-        className="flex animate-marquee whitespace-nowrap"
+        className="flex items-center animate-marquee whitespace-nowrap"
         style={{
           animationDuration: `${duration}s`,
           animationDirection: reverse ? 'reverse' : 'normal',
         }}
       >
-        {content}
-        {content}
-        {content}
-        {content}
+        {repeats.map((r) => (
+          <div className="flex items-center" key={r}>
+            {names.map((n) => (
+              <BrandName key={n} name={n} />
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -149,13 +148,13 @@ export default function TrustedBy() {
           </div>
         ) : (
           <div
+            className="flex flex-col gap-2"
             style={{
               borderTop: '1px solid #27272A',
               borderBottom: '1px solid #27272A',
             }}
           >
             <MarqueeRow names={ROW_ONE} duration={38} />
-            <div style={{ borderTop: '1px solid #27272A' }} />
             <MarqueeRow names={ROW_TWO} reverse duration={46} />
           </div>
         )}

@@ -1,3 +1,5 @@
+import { Link, useLocation, useNavigate } from 'react-router';
+
 const serviceLinks = [
   'Custom Software',
   'Process Automation',
@@ -7,12 +9,12 @@ const serviceLinks = [
   'IT Support',
 ];
 
-const companyLinks = [
-  'About Us',
-  'Case Studies',
-  'Blog',
-  'Careers',
-  'Contact',
+const companyLinks: { label: string; hash?: string; to?: string; href?: string }[] = [
+  { label: 'About Us', href: '#' },
+  { label: 'Case Studies', to: '/portfolio' },
+  { label: 'Blog', href: '#' },
+  { label: 'Careers', href: '#' },
+  { label: 'Contact', hash: '#contact' },
 ];
 
 const connectLinks = [
@@ -23,6 +25,18 @@ const connectLinks = [
 ];
 
 export default function Footer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHome = location.pathname === '/';
+
+  const goToSection = (hash: string) => {
+    if (isHome) {
+      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate('/' + hash);
+    }
+  };
+
   const linkStyle = "text-[#FAFAFA] hover:text-[#DFE104] transition-colors duration-200 block";
   const linkSize = {
     fontSize: 'clamp(1rem, 1.2vw, 1.25rem)',
@@ -71,7 +85,11 @@ export default function Footer() {
           {serviceLinks.map((link) => (
             <a
               key={link}
-              href="#services"
+              href={isHome ? '#services' : '/#services'}
+              onClick={(e) => {
+                e.preventDefault();
+                goToSection('#services');
+              }}
               className={linkStyle}
               style={linkSize}
             >
@@ -83,16 +101,30 @@ export default function Footer() {
         {/* Company Column */}
         <div>
           <span className={headingStyle} style={headingSize}>Company</span>
-          {companyLinks.map((link) => (
-            <a
-              key={link}
-              href="#"
-              className={linkStyle}
-              style={linkSize}
-            >
-              {link}
-            </a>
-          ))}
+          {companyLinks.map((link) =>
+            link.to ? (
+              <Link key={link.label} to={link.to} className={linkStyle} style={linkSize}>
+                {link.label}
+              </Link>
+            ) : link.hash ? (
+              <a
+                key={link.label}
+                href={isHome ? link.hash : '/' + link.hash}
+                onClick={(e) => {
+                  e.preventDefault();
+                  goToSection(link.hash!);
+                }}
+                className={linkStyle}
+                style={linkSize}
+              >
+                {link.label}
+              </a>
+            ) : (
+              <a key={link.label} href={link.href} className={linkStyle} style={linkSize}>
+                {link.label}
+              </a>
+            )
+          )}
         </div>
 
         {/* Connect Column */}

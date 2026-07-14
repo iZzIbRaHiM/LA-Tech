@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Navigation from '@/sections/Navigation';
 import Footer from '@/sections/Footer';
 import NoiseOverlay from '@/components/NoiseOverlay';
+import ProjectModal from '@/components/ProjectModal';
 import {
   projects,
   CATEGORY_LABELS,
@@ -18,9 +19,20 @@ const FILTERS: { key: Filter; label: string }[] = [
   ),
 ];
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project, onOpen }: { project: Project; onOpen: (p: Project) => void }) {
   return (
-    <article className="group flex flex-col border-2 border-[#27272A] hover:border-[#DFE104] transition-colors duration-300 bg-[#0C0C0F]">
+    <article
+      onClick={() => onOpen(project)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(project);
+        }
+      }}
+      className="group flex flex-col border-2 border-[#27272A] hover:border-[#DFE104] transition-colors duration-300 bg-[#0C0C0F] cursor-pointer text-left"
+    >
       <div className="relative overflow-hidden aspect-video border-b-2 border-[#27272A] group-hover:border-[#DFE104] transition-colors duration-300">
         <img
           src={project.image}
@@ -62,6 +74,7 @@ function ProjectCard({ project }: { project: Project }) {
               href={project.liveUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] hover:scale-105 active:scale-95 transition-all duration-200 inline-flex items-center"
               style={{ height: '34px', padding: '0 1rem', fontSize: '0.75rem', letterSpacing: '-0.02em' }}
             >
@@ -73,6 +86,7 @@ function ProjectCard({ project }: { project: Project }) {
               href={project.storeUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] hover:scale-105 active:scale-95 transition-all duration-200 inline-flex items-center"
               style={{ height: '34px', padding: '0 1rem', fontSize: '0.75rem', letterSpacing: '-0.02em' }}
             >
@@ -84,6 +98,7 @@ function ProjectCard({ project }: { project: Project }) {
               href={project.githubUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="font-display font-bold uppercase text-[#FAFAFA] border-2 border-[#3F3F46] hover:border-[#DFE104] hover:text-[#DFE104] transition-all duration-200 inline-flex items-center"
               style={{ height: '34px', padding: '0 1rem', fontSize: '0.75rem', letterSpacing: '-0.02em' }}
             >
@@ -98,6 +113,7 @@ function ProjectCard({ project }: { project: Project }) {
 
 export default function PortfolioPage() {
   const [filter, setFilter] = useState<Filter>('all');
+  const [selected, setSelected] = useState<Project | null>(null);
 
   // SPA navigation preserves scroll position — this page should open at the top.
   useEffect(() => {
@@ -172,11 +188,12 @@ export default function PortfolioPage() {
         {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
           {visible.map((p) => (
-            <ProjectCard key={p.slug} project={p} />
+            <ProjectCard key={p.slug} project={p} onOpen={setSelected} />
           ))}
         </div>
       </main>
       <Footer />
+      <ProjectModal project={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
