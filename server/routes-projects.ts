@@ -4,6 +4,9 @@ import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
 
 export const projectsRouter = Router();
 
+// Mirrors the CHECK constraint on projects.status (db.ts).
+const PROJECT_STATUSES = ['active', 'on_hold', 'completed', 'archived'];
+
 // PRD §4.3: allow-list, not default-open. Non-granted departments must not
 // even learn a project exists — so listing filters at the query level.
 projectsRouter.get('/projects', requireAuth, async (req, res) => {
@@ -88,6 +91,9 @@ projectsRouter.patch('/projects/:id', requireAuth, requireCeo, async (req, res) 
   const { name, description, status, startDate, endDate, departmentIds } = req.body ?? {};
   if (startDate !== undefined && endDate !== undefined && startDate && endDate && String(endDate) < String(startDate)) {
     return res.status(400).json({ error: 'End date must be on or after the start date' });
+  }
+  if (status !== undefined && !PROJECT_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
   }
 
   const sets: Array<[string, unknown]> = [];

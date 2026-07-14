@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../AuthContext';
@@ -24,9 +25,9 @@ export default function Dashboard() {
   const [activity, setActivity] = useState<Activity[]>([]);
 
   useEffect(() => {
-    api<{ tasks: Task[] }>('/tasks').then((r) => setTasks(r.tasks)).catch(() => {});
-    api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch(() => {});
-    api<{ activity: Activity[] }>('/activity').then((r) => setActivity(r.activity)).catch(() => {});
+    api<{ tasks: Task[] }>('/tasks').then((r) => setTasks(r.tasks)).catch((e) => toast.error(e.message));
+    api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch((e) => toast.error(e.message));
+    api<{ activity: Activity[] }>('/activity').then((r) => setActivity(r.activity)).catch((e) => toast.error(e.message));
   }, []);
 
   const open = tasks.filter((t) => t.status !== 'done');

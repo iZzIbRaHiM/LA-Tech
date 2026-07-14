@@ -5,6 +5,12 @@ import { taskVisibilityWhere, userCanSeeProject, canManageTask } from './policy.
 
 export const tasksRouter = Router();
 
+// Mirrors the CHECK constraints on the tasks table (db.ts) — validating
+// here returns a clean 400 instead of letting a bad value hit the DB and
+// surface as a raw constraint-violation error.
+const TASK_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
+
 const TASK_SELECT = `
   SELECT t.*, u.name AS assignee_name, c.name AS creator_name, d.name AS department_name,
          p.name AS project_name
@@ -44,6 +50,9 @@ tasksRouter.post('/tasks', requireAuth, async (req, res) => {
   const user = req.user!;
   const { title, description, priority, dueDate, projectId, departmentId, assignedTo, parentTaskId } = req.body ?? {};
   if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+  if (priority !== undefined && !TASK_PRIORITIES.includes(priority)) {
+    return res.status(400).json({ error: 'Invalid priority' });
+  }
 
   let targetDept: number;
   let targetAssignee: number | null = null;
@@ -134,6 +143,12 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
   if (!canManage && !isAssignee) return res.status(403).json({ error: 'No access' });
 
   const { status, priority, dueDate, assignedTo, title, description } = req.body ?? {};
+  if (status !== undefined && !TASK_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  if (priority !== undefined && !TASK_PRIORITIES.includes(priority)) {
+    return res.status(400).json({ error: 'Invalid priority' });
+  }
 
   // Assignees can only move status; managers can edit everything. Checked
   // against undefined (not truthiness) so clearing a field to null/'' by a

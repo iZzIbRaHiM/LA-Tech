@@ -231,7 +231,9 @@ extrasRouter.get('/cron/reminders', async (req, res) => {
   const authHeader = req.headers.authorization;
   const expectedSecret = process.env.CRON_SECRET;
 
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+  // Fail closed: an unset CRON_SECRET must reject every request, not skip
+  // the check and accept them all.
+  if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
     console.warn('[cron] Unauthorized reminder check attempt.');
     return res.status(401).json({ error: 'Unauthorized' });
   }

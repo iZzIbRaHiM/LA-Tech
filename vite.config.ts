@@ -8,7 +8,7 @@ export default defineConfig({
   // Absolute base: with client-side routes like /portal/tasks/3, a relative
   // base would make built asset URLs resolve against the route path and 404.
   base: '/',
-  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
+  envPrefix: ['VITE_'],
   plugins: [inspectAttr(), react()],
   server: {
     port: 3000,

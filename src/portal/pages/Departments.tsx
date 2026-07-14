@@ -33,6 +33,7 @@ export default function Departments() {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [renaming, setRenaming] = useState<Department | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     api<{ departments: Department[] }>('/departments')
@@ -45,8 +46,12 @@ export default function Departments() {
   }, []);
   useEffect(load, [load]);
 
+  // Every mutation below shares one busy flag — the dialogs and buttons
+  // that trigger them are disabled while it's true, so a double-click
+  // can't fire the same request twice.
   const createDept = async () => {
-    if (!newDeptName.trim()) return;
+    if (!newDeptName.trim() || busy) return;
+    setBusy(true);
     try {
       await api('/departments', { method: 'POST', body: { name: newDeptName } });
       setNewDeptName('');
@@ -54,11 +59,14 @@ export default function Departments() {
       toast.success('Department created');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const addMember = async () => {
-    if (!addingTo || !selectedUserId) return;
+    if (!addingTo || !selectedUserId || busy) return;
+    setBusy(true);
     try {
       await api(`/departments/${addingTo.id}/members`, { method: 'POST', body: { userId: Number(selectedUserId) } });
       toast.success('Member assigned');
@@ -67,41 +75,56 @@ export default function Departments() {
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const assignHead = async (deptId: number, userId: number) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await api(`/departments/${deptId}/head`, { method: 'POST', body: { userId } });
       load();
       toast.success('Department head assigned');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const toggleFinance = async (userId: number, grant: boolean) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await api(`/users/${userId}/finance-access`, { method: 'POST', body: { grant } });
       load();
       toast.success(grant ? 'Finance access granted' : 'Finance access revoked');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const removeMember = async (deptId: number, userId: number) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await api(`/departments/${deptId}/members/${userId}`, { method: 'DELETE' });
       load();
       toast.success('Member removed');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const renameDept = async () => {
-    if (!renaming || !renameValue.trim()) return;
+    if (!renaming || !renameValue.trim() || busy) return;
+    setBusy(true);
     try {
       await api(`/departments/${renaming.id}`, { method: 'PATCH', body: { name: renameValue } });
       toast.success('Department renamed');
@@ -110,17 +133,22 @@ export default function Departments() {
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
   const archiveDept = async (dept: Department) => {
-    if (!confirm(`Archive "${dept.name}"? This can't be undone from here.`)) return;
+    if (busy || !confirm(`Archive "${dept.name}"? This can't be undone from here.`)) return;
+    setBusy(true);
     try {
       await api(`/departments/${dept.id}`, { method: 'PATCH', body: { archive: true } });
       toast.success('Department archived');
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -139,7 +167,7 @@ export default function Departments() {
             />
             <Button
               onClick={createDept}
-              disabled={!newDeptName.trim()}
+              disabled={!newDeptName.trim() || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               <Plus size={15} className="mr-1" /> Create
@@ -289,7 +317,7 @@ export default function Departments() {
           <DialogFooter>
             <Button
               onClick={addMember}
-              disabled={!selectedUserId}
+              disabled={!selectedUserId || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04]"
             >
               Assign
@@ -314,7 +342,7 @@ export default function Departments() {
           <DialogFooter>
             <Button
               onClick={renameDept}
-              disabled={!renameValue.trim()}
+              disabled={!renameValue.trim() || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Save

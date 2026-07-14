@@ -97,7 +97,7 @@ export async function seedCeo() {
   await db
     .prepare('INSERT INTO users (name, email, password_hash, is_ceo, must_change_password) VALUES (?, ?, ?, 1, 1)')
     .run('CEO', CEO_EMAIL, bcrypt.hashSync(CEO_PASSWORD, 12));
-  console.log(`[seed] CEO account created: ${CEO_EMAIL} / ${CEO_PASSWORD} (change after first login)`);
+  console.log(`[seed] CEO account created: ${CEO_EMAIL} (must-change-password enforced on first login)`);
 }
 
 export async function logActivity(

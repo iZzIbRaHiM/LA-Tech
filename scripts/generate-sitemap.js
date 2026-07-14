@@ -7,10 +7,11 @@ const __dirname = path.dirname(__filename);
 
 const DOMAIN = 'https://latechs.org';
 
-// Define all pages here. For now, it's a single-page app. 
-// If you add sub-pages in the future (e.g. '/about', '/blog'), simply append them to this array.
+// Define all crawlable pages here. /portal/* is excluded — it's an
+// authenticated internal tool, not a public marketing page.
 const ROUTES = [
   '/',
+  '/portfolio',
 ];
 
 const generateSitemap = () => {
