@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 110 110" width="110" height="110">
+  
+  <g fill="#BBEA00">
+    <!-- ── Strokes (rects for crisp square joins) ── -->
+    <!-- L  vertical  x=15, y=10→100 -->
+    <rect x="11"  y="10"  width="8"  height="90"/>
+    <!-- T  crossbar  y=48, x=15→95 -->
+    <rect x="11"  y="44"  width="84" height="8"/>
+    <!-- T  stem     x=55, y=48→100 -->
+    <rect x="51"  y="48"  width="8"  height="52"/>
+    <!-- L  foot     y=100, x=15→55 -->
+    <rect x="11"  y="96"  width="48" height="8"/>
+
+    <!-- ── Circuit nodes (solder pads) ── -->
+    <circle cx="15"  cy="10"  r="9"/>  <!-- top of L           -->
+    <circle cx="15"  cy="48"  r="9"/>  <!-- L-T junction        -->
+    <circle cx="95"  cy="48"  r="9"/>  <!-- right end crossbar  -->
+    <circle cx="55"  cy="48"  r="9"/>  <!-- T stem junction     -->
+    <circle cx="15"  cy="100" r="9"/>  <!-- bottom-left         -->
+    <circle cx="55"  cy="100" r="9"/>  <!-- bottom junction     -->
+  </g>
+</svg>

@@ -10,9 +10,7 @@ import Footer from '@/sections/Footer';
 import NoiseOverlay from '@/components/NoiseOverlay';
 import { Analytics } from '@vercel/analytics/react';
 
-// TrustedBy pulls in a second three.js/@react-three/fiber scene (on top of
-// Hero's) — deferring it keeps that ~800kB dependency out of the initial
-// bundle. It's also below the fold, so it has time to load before scroll.
+// Below the fold — deferring keeps it out of the initial bundle.
 const TrustedBy = lazy(() => import('@/sections/TrustedBy'));
 
 export default function App() {

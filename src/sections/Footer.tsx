@@ -48,26 +48,12 @@ export default function Footer() {
       >
         {/* Brand Column */}
         <div>
-          <span
-            className="font-display font-bold uppercase text-[#FAFAFA] block"
-            style={{
-              fontSize: 'clamp(1.5rem, 2.5vw, 2.5rem)',
-              lineHeight: 0.9,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            LATech
-          </span>
-          <span
-            className="font-display font-bold uppercase text-[#A1A1AA] block mt-1"
-            style={{
-              fontSize: 'clamp(1.5rem, 2.5vw, 2.5rem)',
-              lineHeight: 0.9,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Solutions
-          </span>
+          <img
+            src="/brand/latech-logo-primary.svg"
+            alt="LATech Solutions"
+            className="w-auto block"
+            style={{ height: 'clamp(36px, 3.5vw, 48px)' }}
+          />
           <span
             className="text-[#A1A1AA] block mt-4"
             style={{

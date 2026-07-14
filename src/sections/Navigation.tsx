@@ -54,10 +54,14 @@ export default function Navigation() {
               e.preventDefault();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="font-display font-bold uppercase tracking-tighter text-[#FAFAFA]"
-            style={{ fontSize: 'clamp(1.375rem, 2vw, 1.875rem)', lineHeight: 0.9 }}
+            aria-label="LATech Solutions — home"
           >
-            LATech
+            <img
+              src="/brand/latech-logo-primary.svg"
+              alt="LATech Solutions"
+              className="w-auto"
+              style={{ height: 'clamp(28px, 2.5vw, 36px)' }}
+            />
           </a>
 
           {/* Desktop Nav */}

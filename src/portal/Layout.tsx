@@ -142,8 +142,11 @@ export default function Layout() {
     <div className="flex h-screen bg-[#09090B] text-[#FAFAFA]">
       {/* Notion-style sidebar */}
       <aside className="w-60 shrink-0 border-r border-[#1f1f23] flex flex-col">
-        <div className="px-4 py-4 font-display font-bold uppercase tracking-tight text-lg">
-          LATech <span className="text-[#DFE104]">Portal</span>
+        <div className="px-4 py-4 flex items-center gap-2">
+          <img src="/brand/latech-symbol.svg" alt="" className="h-6 w-auto shrink-0" />
+          <span className="font-display font-bold uppercase tracking-tight text-lg">
+            LATech <span className="text-[#DFE104]">Portal</span>
+          </span>
         </div>
         <nav className="flex-1 px-2 space-y-0.5">
           {nav.map(({ to, label, icon: Icon, end }) => (

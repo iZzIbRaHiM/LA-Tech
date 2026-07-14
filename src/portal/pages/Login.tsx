@@ -47,13 +47,7 @@ export default function Login() {
       <div className="relative w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="border border-[#1f1f23] bg-[#0c0c0f]/80 backdrop-blur-md p-8 shadow-[0_0_0_1px_rgba(223,225,4,0.08),0_20px_60px_-15px_rgba(0,0,0,0.8)]">
           <div className="flex items-center gap-2.5 mb-1">
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" className="shrink-0">
-              <rect x="0.5" y="0.5" width="21" height="21" stroke="#DFE104" />
-              <circle cx="6" cy="6" r="1.4" fill="#DFE104" />
-              <circle cx="16" cy="16" r="1.4" fill="#DFE104" />
-              <circle cx="16" cy="6" r="1" fill="#3f3f27" />
-              <line x1="6" y1="6" x2="16" y2="16" stroke="#DFE104" strokeWidth="0.75" opacity="0.5" />
-            </svg>
+            <img src="/brand/latech-symbol.svg" alt="" className="h-8 w-auto shrink-0" />
             <div className="font-display font-bold uppercase text-2xl tracking-tight">
               LATech <span className="text-[#DFE104]">Portal</span>
             </div>
