@@ -1,20 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { featuredProjects, CATEGORY_LABELS } from '@/data/projects';
 
 gsap.registerPlugin(ScrollTrigger);
 
-const projects = [
-  { src: './images/portfolio-1.jpg', name: 'Hospital Management System' },
-  { src: './images/portfolio-2.jpg', name: 'Education Portal' },
-  { src: './images/portfolio-3.jpg', name: 'Enterprise ERP' },
-  { src: './images/portfolio-4.jpg', name: 'SaaS Platform' },
-  { src: './images/portfolio-5.jpg', name: 'Logistics Tracker' },
-  { src: './images/portfolio-6.jpg', name: 'Government Portal' },
-];
+const projects = featuredProjects;
 
-const numItems = 6;
+const numItems = projects.length;
 
 function radToDeg(rad: number) {
   return rad * (180 / Math.PI);
@@ -88,7 +83,7 @@ export default function Portfolio() {
         setLoadedCount(count);
         if (count === projects.length) setLoaded(true);
       };
-      img.src = project.src;
+      img.src = project.image;
     });
   }, []);
 
@@ -184,18 +179,35 @@ export default function Portfolio() {
         }}
       >
         {/* Section Title – now in normal flow and protected from GSAP style overrides */}
-        <h2
-          ref={titleRef}
-          className="font-display font-bold uppercase text-[#FAFAFA]"
-          style={{
-            fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-            lineHeight: 0.85,
-            letterSpacing: '-0.02em',
-            opacity: 0,
-          }}
-        >
-          Our Work
-        </h2>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h2
+            ref={titleRef}
+            className="font-display font-bold uppercase text-[#FAFAFA]"
+            style={{
+              fontSize: 'clamp(2.5rem, 8vw, 8rem)',
+              lineHeight: 0.85,
+              letterSpacing: '-0.02em',
+              opacity: 0,
+            }}
+          >
+            Our Work
+          </h2>
+          <Link
+            to="/portfolio"
+            className="font-display font-bold uppercase bg-[#DFE104] text-[#000000] hover:scale-105 active:scale-95 transition-all duration-200"
+            style={{
+              height: '40px',
+              padding: '0 1.5rem',
+              fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
+              letterSpacing: '-0.02em',
+              display: 'inline-flex',
+              alignItems: 'center',
+              borderRadius: '0',
+            }}
+          >
+            View All Projects →
+          </Link>
+        </div>
 
         {/* 3D Carousel – takes up remaining space and positions cards vertically separated from heading */}
         <div
@@ -232,19 +244,22 @@ export default function Portfolio() {
               >
                 <figure className="w-full h-full">
                   <img
-                    src={project.src}
+                    src={project.image}
                     alt={project.name}
-                    className="w-full h-full object-cover border-2 border-[#3F3F46]"
+                    className="w-full h-full object-cover border-2 border-[#3F3F46] bg-[#09090B]"
                     style={{ borderRadius: '0' }}
                   />
                   <figcaption
-                    className="font-display uppercase text-[#A1A1AA] text-center mt-4"
+                    className="font-display uppercase text-center mt-4"
                     style={{
                       fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
                       letterSpacing: '0.05em',
                     }}
                   >
-                    {project.name}
+                    <span className="text-[#FAFAFA]">{project.name}</span>
+                    <span className="block text-[#71717A]" style={{ fontSize: '0.75em' }}>
+                      {CATEGORY_LABELS[project.category]}
+                    </span>
                   </figcaption>
                 </figure>
               </div>

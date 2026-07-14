@@ -1,0 +1,28 @@
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#09090B"/>
+  <!-- blueprint grid -->
+  <g stroke="#1C1C21" stroke-width="1">
+    <path d="M0 100H1600M0 200H1600M0 300H1600M0 400H1600M0 500H1600M0 600H1600M0 700H1600M0 800H1600"/>
+    <path d="M100 0V900M200 0V900M300 0V900M400 0V900M500 0V900M600 0V900M700 0V900M800 0V900M900 0V900M1000 0V900M1100 0V900M1200 0V900M1300 0V900M1400 0V900M1500 0V900"/>
+  </g>
+  <!-- wireframe buildings -->
+  <g stroke="#3F3F46" stroke-width="2" fill="none">
+    <rect x="1050" y="380" width="160" height="420"/>
+    <rect x="1250" y="260" width="200" height="540"/>
+    <path d="M1080 420H1180M1080 480H1180M1080 540H1180M1080 600H1180M1080 660H1180M1080 720H1180"/>
+    <path d="M1290 310H1410M1290 380H1410M1290 450H1410M1290 520H1410M1290 590H1410M1290 660H1410M1290 730H1410"/>
+  </g>
+  <!-- crane -->
+  <g stroke="#DFE104" stroke-width="3" fill="none">
+    <path d="M960 800V300L680 300"/>
+    <path d="M960 300L1010 340M960 340V800"/>
+    <path d="M960 300L900 340M900 300L960 340M840 300L900 340M840 340L900 300M780 300L840 340M780 340L840 300M720 300L780 340M720 340L780 300M680 300L720 340"/>
+    <path d="M760 300V420"/>
+    <rect x="740" y="420" width="40" height="34"/>
+  </g>
+  <!-- title -->
+  <text x="96" y="700" fill="#FAFAFA" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="96" letter-spacing="-2">CONSTRUCTION</text>
+  <text x="96" y="800" fill="#DFE104" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="96" letter-spacing="-2">ERP</text>
+  <text x="96" y="140" fill="#A1A1AA" font-family="Arial, Helvetica, sans-serif" font-size="30" letter-spacing="8">ENTERPRISE RESOURCE PLANNING</text>
+  <rect x="96" y="170" width="120" height="6" fill="#DFE104"/>
+</svg>

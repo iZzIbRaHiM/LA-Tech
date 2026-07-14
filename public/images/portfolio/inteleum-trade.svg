@@ -1,0 +1,25 @@
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#09090B"/>
+  <g stroke="#1C1C21" stroke-width="1">
+    <path d="M0 150H1600M0 300H1600M0 450H1600M0 600H1600M0 750H1600"/>
+  </g>
+  <!-- candlesticks -->
+  <g>
+    <g stroke="#3F3F46" stroke-width="3">
+      <path d="M950 250V650M1030 200V560M1110 300V700M1190 180V520M1270 260V640M1350 140V480M1430 220V580"/>
+    </g>
+    <rect x="930" y="340" width="40" height="180" fill="#DFE104"/>
+    <rect x="1010" y="280" width="40" height="160" fill="#3F3F46"/>
+    <rect x="1090" y="400" width="40" height="200" fill="#DFE104"/>
+    <rect x="1170" y="240" width="40" height="170" fill="#DFE104"/>
+    <rect x="1250" y="360" width="40" height="180" fill="#3F3F46"/>
+    <rect x="1330" y="200" width="40" height="170" fill="#DFE104"/>
+    <rect x="1410" y="300" width="40" height="180" fill="#3F3F46"/>
+  </g>
+  <!-- trend line -->
+  <path d="M920 620L1050 480L1160 560L1300 340L1470 240" stroke="#DFE104" stroke-width="4" fill="none" opacity="0.7"/>
+  <text x="96" y="140" fill="#A1A1AA" font-family="Arial, Helvetica, sans-serif" font-size="30" letter-spacing="8">DECENTRALIZED WEB3 TRADING</text>
+  <rect x="96" y="170" width="120" height="6" fill="#DFE104"/>
+  <text x="96" y="700" fill="#FAFAFA" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="110" letter-spacing="-2">INTELEUM</text>
+  <text x="96" y="810" fill="#DFE104" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="110" letter-spacing="-2">TRADE</text>
+</svg>

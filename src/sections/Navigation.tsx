@@ -25,6 +25,10 @@ export default function Navigation() {
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
       setMobileOpen(false);
+    } else {
+      // Section anchors only exist on the home page — from /portfolio (or any
+      // other page) route back home with the hash so the section still opens.
+      window.location.href = '/' + href;
     }
   };
 

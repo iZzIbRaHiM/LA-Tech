@@ -1,0 +1,16 @@
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#09090B"/>
+  <!-- hex mesh (IPFS motif) -->
+  <g stroke="#1C1C21" stroke-width="2" fill="none">
+    <path d="M1150 120l60 35v70l-60 35-60-35v-70zM1290 200l60 35v70l-60 35-60-35v-70zM1010 200l60 35v70l-60 35-60-35v-70zM1150 280l60 35v70l-60 35-60-35v-70zM1430 280l60 35v70l-60 35-60-35v-70zM1290 360l60 35v70l-60 35-60-35v-70zM1010 360l60 35v70l-60 35-60-35v-70zM1150 440l60 35v70l-60 35-60-35v-70zM1430 440l60 35v70l-60 35-60-35v-70zM1290 520l60 35v70l-60 35-60-35v-70zM1010 520l60 35v70l-60 35-60-35v-70zM1150 600l60 35v70l-60 35-60-35v-70z"/>
+  </g>
+  <!-- shield -->
+  <g transform="translate(1160,330)">
+    <path d="M0 -140 L120 -90 V40 C120 130 60 190 0 220 C-60 190 -120 130 -120 40 V-90 Z" fill="#09090B" stroke="#DFE104" stroke-width="6"/>
+    <path d="M-50 30 L-12 70 L62 -30" stroke="#DFE104" stroke-width="10" fill="none" stroke-linecap="square"/>
+  </g>
+  <text x="96" y="140" fill="#A1A1AA" font-family="Arial, Helvetica, sans-serif" font-size="30" letter-spacing="8">IPFS + ETHEREUM ASSET CUSTODY</text>
+  <rect x="96" y="170" width="120" height="6" fill="#DFE104"/>
+  <text x="96" y="700" fill="#FAFAFA" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="110" letter-spacing="-2">ASSET</text>
+  <text x="96" y="810" fill="#DFE104" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="110" letter-spacing="-2">GUARD</text>
+</svg>
