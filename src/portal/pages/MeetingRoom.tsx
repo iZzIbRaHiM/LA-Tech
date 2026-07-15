@@ -8,9 +8,12 @@ import { useAuth } from '../AuthContext';
 import { api } from '../api';
 
 // WebRTC mesh: every participant holds one peer connection per other
-// participant. Media flows browser-to-browser (STUN only); the server just
-// relays the SDP/ICE handshake through polled /meetings/:id/signals.
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+// participant. Media flows browser-to-browser; the server just relays the
+// SDP/ICE handshake through polled /meetings/:id/signals. ICE servers come
+// from GET /meetings/ice-servers — STUN always, plus a TURN relay when the
+// server has TURN_URL/TURN_USERNAME/TURN_CREDENTIAL configured (needed for
+// pairs of networks where direct traversal fails).
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const SIGNAL_POLL_MS = 1500;
 
 interface PeerState {
@@ -45,6 +48,7 @@ export default function MeetingRoom() {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pcsRef = useRef<Map<number, RTCPeerConnection>>(new Map());
   const pendingIceRef = useRef<Map<number, RTCIceCandidateInit[]>>(new Map());
+  const iceServersRef = useRef<RTCIceServer[]>(FALLBACK_ICE_SERVERS);
   const cursorRef = useRef(0);
   const leavingRef = useRef(false);
 
@@ -81,7 +85,7 @@ export default function MeetingRoom() {
     (peerId: number): RTCPeerConnection => {
       let pc = pcsRef.current.get(peerId);
       if (pc) return pc;
-      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      pc = new RTCPeerConnection({ iceServers: iceServersRef.current });
       pcsRef.current.set(peerId, pc);
 
       localStreamRef.current?.getTracks().forEach((t) => pc!.addTrack(t, localStreamRef.current!));
@@ -206,6 +210,14 @@ export default function MeetingRoom() {
         toast.error(e instanceof Error ? e.message : 'Meeting not found');
         navigate('/portal/meetings');
         return;
+      }
+
+      // TURN relay config (if the server has one) — fall back to STUN-only.
+      try {
+        const cfg = await api<{ iceServers: RTCIceServer[] }>('/meetings/ice-servers');
+        if (cfg.iceServers?.length) iceServersRef.current = cfg.iceServers;
+      } catch {
+        /* keep fallback */
       }
 
       // Camera+mic, falling back to mic-only, falling back to receive-only.

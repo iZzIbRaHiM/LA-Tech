@@ -8,6 +8,23 @@ import { requireAuth, requireCeo } from './auth.js';
 // whole feature serverless-compatible: no websocket, no media server.
 export const meetingsRouter = Router();
 
+// ICE servers are vended by the server rather than baked into the client
+// bundle: TURN credentials stay in env vars, reach authenticated users
+// only, and can be rotated without a redeploy of the frontend.
+meetingsRouter.get('/meetings/ice-servers', requireAuth, (_req, res) => {
+  const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
+    { urls: 'stun:stun.l.google.com:19302' },
+  ];
+  if (process.env.TURN_URL) {
+    iceServers.push({
+      urls: process.env.TURN_URL,
+      username: process.env.TURN_USERNAME || undefined,
+      credential: process.env.TURN_CREDENTIAL || undefined,
+    });
+  }
+  res.json({ iceServers });
+});
+
 async function isParticipant(meetingId: number, userId: number): Promise<boolean> {
   const row = await db
     .prepare('SELECT 1 FROM meeting_participants WHERE meeting_id = ? AND user_id = ?')
