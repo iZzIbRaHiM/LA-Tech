@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
-import { ArrowLeft, Plus, Pencil } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router';
+import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,6 +47,8 @@ const STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
 export default function TaskDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
@@ -180,6 +192,17 @@ export default function TaskDetail() {
               <Pencil size={13} />
             </Button>
           )}
+          {user?.isCeo && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              className="text-[#A1A1AA] hover:text-red-400"
+              title="Delete task"
+            >
+              <Trash2 size={13} />
+            </Button>
+          )}
         </div>
         <Select value={task.status} onValueChange={setStatus}>
           <SelectTrigger className="w-36 shrink-0">
@@ -209,6 +232,38 @@ export default function TaskDetail() {
       </div>
 
       {task.description && <p className="text-sm text-[#D4D4D8] whitespace-pre-wrap mb-6">{task.description}</p>}
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{task.title}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently removes this task, its comments and attachments
+              {subtasks.length > 0
+                ? `, and its ${subtasks.length} sub-task${subtasks.length === 1 ? '' : 's'}`
+                : ''}
+              . This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await api(`/tasks/${task.id}`, { method: 'DELETE' });
+                  toast.success('Task deleted');
+                  navigate('/portal/tasks');
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Failed');
+                }
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <section className="mb-8">
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-2">Attachments</h2>

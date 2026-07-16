@@ -24,10 +24,11 @@ orgHierarchyRouter.get('/org-tree', requireAuth, requireCeo, async (_req, res) =
               u.finance_access, u.active,
               (u.last_seen_at IS NOT NULL AND u.last_seen_at::timestamp > now() - INTERVAL '75 seconds') AS online,
               m.department_id, d.name AS department_name, m.role AS membership_role,
-              (SELECT COUNT(*) FROM users r WHERE r.manager_id = u.id)::int AS direct_reports_count
+              (SELECT COUNT(*) FROM users r WHERE r.manager_id = u.id AND r.active = 1)::int AS direct_reports_count
        FROM users u
        LEFT JOIN memberships m ON m.user_id = u.id
        LEFT JOIN departments d ON d.id = m.department_id
+       WHERE u.active = 1
        ORDER BY u.name`
     )
     .all();

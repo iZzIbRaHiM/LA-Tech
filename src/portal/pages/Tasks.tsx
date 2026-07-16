@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -121,6 +131,19 @@ export default function Tasks() {
     }
   };
 
+  const [deleting, setDeleting] = useState<Task | null>(null);
+  const deleteTask = async () => {
+    if (!deleting) return;
+    try {
+      await api(`/tasks/${deleting.id}`, { method: 'DELETE' });
+      toast.success(`"${deleting.title}" deleted`);
+      setDeleting(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const TaskCard = ({ t }: { t: Task }) => (
     <Link
       to={`/portal/tasks/${t.id}`}
@@ -197,6 +220,17 @@ export default function Tasks() {
               </Link>
               <span className={`text-xs ${PRIORITY_COLOR[t.priority]}`}>{t.priority}</span>
               {t.due_date && <span className="text-xs text-[#71717A]">{t.due_date}</span>}
+              {user?.isCeo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-[#71717A] hover:text-red-400 shrink-0"
+                  title="Delete task"
+                  onClick={() => setDeleting(t)}
+                >
+                  <Trash2 size={13} />
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -213,6 +247,7 @@ export default function Tasks() {
               <TableHead>Department</TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Due</TableHead>
+              {user?.isCeo && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -233,11 +268,42 @@ export default function Tasks() {
                 <TableCell>{t.department_name}</TableCell>
                 <TableCell>{t.project_name ?? '—'}</TableCell>
                 <TableCell>{t.due_date ?? '—'}</TableCell>
+                {user?.isCeo && (
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-[#71717A] hover:text-red-400"
+                      title="Delete task"
+                      onClick={() => setDeleting(t)}
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleting?.title}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently removes this task, its comments, attachments, and any sub-tasks under it. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deleteTask} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {tasks.length === 0 && <p className="text-sm text-[#71717A] mt-6">No tasks visible to you yet.</p>}
 

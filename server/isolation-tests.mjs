@@ -473,6 +473,22 @@ async function main() {
   });
   check('sub-task with nonexistent parent rejected', crossParent.status === 404, `got ${crossParent.status}`);
 
+  console.log('\n== Destructive CRUD is CEO-only ==');
+  const headDelTask = await req('ahead', 'DELETE', `/tasks/${deptTask}`);
+  check('head DENIED deleting a task (even own-dept)', denied(headDelTask), `got ${headDelTask.status}`);
+  const memberDelTask = await req('amember', 'DELETE', `/tasks/${deptTask}`);
+  check('member DENIED deleting a task', denied(memberDelTask), `got ${memberDelTask.status}`);
+  const headDelProject = await req('ahead', 'DELETE', `/projects/${project}`);
+  check('head DENIED deleting a project (even granted)', denied(headDelProject), `got ${headDelProject.status}`);
+  const throwawayTask = (await must('ceo', 'POST', '/tasks', { title: `Iso throwaway ${TS}`, departmentId: deptA })).id;
+  const ceoDelTask = await req('ceo', 'DELETE', `/tasks/${throwawayTask}`);
+  check('CEO CAN delete a task', ceoDelTask.status === 200, `got ${ceoDelTask.status}`);
+  const throwawayProject = (
+    await must('ceo', 'POST', '/projects', { name: `Iso throwaway proj ${TS}`, departmentIds: [], startDate: '2026-01-01', endDate: '2026-12-31' })
+  ).id;
+  const ceoDelProject = await req('ceo', 'DELETE', `/projects/${throwawayProject}`);
+  check('CEO CAN delete a project', ceoDelProject.status === 200, `got ${ceoDelProject.status}`);
+
   console.log('\n== Security layer: CSRF + session revocation + headers ==');
   // Mutations without the custom header are rejected before any handler runs.
   const noCsrf = await fetch(`${BASE}/departments`, {

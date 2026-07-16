@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -35,6 +45,8 @@ interface Milestone {
 export default function ProjectDetail() {
   const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [visibility, setVisibility] = useState<Array<{ id: number; name: string }>>([]);
@@ -137,11 +149,60 @@ export default function ProjectDetail() {
         <h1 className="font-display font-bold text-2xl">{project.name}</h1>
         <Badge variant="outline" className="capitalize">{project.status.replace('_', ' ')}</Badge>
         {user?.isCeo && (
-          <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
-            <Pencil size={13} className="mr-1" /> Edit
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
+              <Pencil size={13} className="mr-1" /> Edit
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              className="text-[#A1A1AA] hover:text-red-400"
+              title="Delete project"
+            >
+              <Trash2 size={13} className="mr-1" /> Delete
+            </Button>
+          </>
         )}
       </div>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{project.name}"?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  Permanently removes this project, its milestones, its visibility grants, and its entire finance
+                  ledger (budgets, expenses, income). This cannot be undone.
+                </p>
+                <p>
+                  {tasks.length > 0
+                    ? `${tasks.length} linked task${tasks.length === 1 ? '' : 's'} will be kept and unlinked, not deleted.`
+                    : 'No tasks are linked to this project.'}
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await api(`/projects/${project.id}`, { method: 'DELETE' });
+                  toast.success('Project deleted');
+                  navigate('/portal/projects');
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Failed');
+                }
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete project
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {(project.start_date || project.end_date) && (
         <p className="text-xs text-[#71717A] mb-4">
           {project.start_date ?? '…'} → {project.end_date ?? '…'}

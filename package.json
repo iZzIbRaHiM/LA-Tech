@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "migrate": "tsx scripts/migrate.ts",
+    "cleanup:fixtures": "tsx scripts/cleanup-test-fixtures.ts",
     "build": "pnpm run migrate && tsc -b && vite build",
     "postbuild": "node scripts/generate-sitemap.js",
     "lint": "eslint .",

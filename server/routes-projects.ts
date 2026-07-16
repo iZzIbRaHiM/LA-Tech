@@ -84,6 +84,33 @@ projectsRouter.post('/projects', requireAuth, requireCeo, async (req, res) => {
   res.json({ id: projectId });
 });
 
+// Hard delete — CEO only. finance_entries, project_visibility, and
+// milestones cascade at the FK level; linked tasks survive with
+// project_id nulled (SET NULL) — deleting a project must not destroy the
+// team's work items. Attachment rows for the cascaded finance entries are
+// swept manually (polymorphic table, no FK).
+projectsRouter.delete('/projects/:id', requireAuth, requireCeo, async (req, res) => {
+  const id = Number(req.params.id);
+  const project = await db.prepare('SELECT id, name FROM projects WHERE id = ?').get(id) as
+    | { id: number; name: string }
+    | undefined;
+  if (!project) return res.status(404).json({ error: 'Not found' });
+
+  const financeCount = (await db.prepare('SELECT COUNT(*) AS c FROM finance_entries WHERE project_id = ?').get(id)) as { c: number };
+  const taskCount = (await db.prepare('SELECT COUNT(*) AS c FROM tasks WHERE project_id = ?').get(id)) as { c: number };
+
+  await db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  await db
+    .prepare("DELETE FROM attachments WHERE entity_type = 'finance' AND entity_id NOT IN (SELECT id FROM finance_entries)")
+    .run();
+  await logActivity(req.user!.id, 'project', id, 'deleted', {
+    name: project.name,
+    financeEntriesDeleted: Number(financeCount.c),
+    tasksUnlinked: Number(taskCount.c),
+  });
+  res.json({ ok: true });
+});
+
 projectsRouter.patch('/projects/:id', requireAuth, requireCeo, async (req, res) => {
   const id = Number(req.params.id);
   const project = await db.prepare('SELECT id FROM projects WHERE id = ?').get(id);

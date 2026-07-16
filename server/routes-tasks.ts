@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
-import { requireAuth } from './auth.js';
+import { requireAuth, requireCeo } from './auth.js';
 import { taskVisibilityWhere, userCanSeeProject, canManageTask } from './policy.js';
 
 export const tasksRouter = Router();
@@ -192,6 +192,26 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     await logActivity(user.id, 'task', id, 'status_changed', { from: task.status, to: status });
   }
   res.json({ ok: true });
+});
+
+// Hard delete — CEO only ("complete control"). Heads/assignees keep their
+// existing edit rights; destruction stays with the CEO. Sub-tasks go with
+// the parent (no orphans), comments cascade, attachment rows are swept
+// since the attachments table is polymorphic (no FK cascade).
+tasksRouter.delete('/tasks/:id', requireAuth, requireCeo, async (req, res) => {
+  const id = Number(req.params.id);
+  const task = await db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(id) as
+    | { id: number; title: string }
+    | undefined;
+  if (!task) return res.status(404).json({ error: 'Not found' });
+
+  const subtasks = await db.prepare('SELECT id FROM tasks WHERE parent_task_id = ?').all(id) as Array<{ id: number }>;
+  const allIds = [id, ...subtasks.map((s) => s.id)];
+  const ph = allIds.map(() => '?').join(',');
+  await db.prepare(`DELETE FROM attachments WHERE entity_type = 'task' AND entity_id IN (${ph})`).run(...allIds);
+  await db.prepare(`DELETE FROM tasks WHERE id IN (${ph})`).run(...allIds);
+  await logActivity(req.user!.id, 'task', id, 'deleted', { title: task.title, subtasksDeleted: subtasks.length });
+  res.json({ ok: true, subtasksDeleted: subtasks.length });
 });
 
 tasksRouter.post('/tasks/:id/comments', requireAuth, async (req, res) => {
