@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router';
 import {
   LayoutDashboard,
@@ -118,13 +118,40 @@ export default function Layout() {
   // Stale results are filtered at render instead of cleared in the effect.
   const shownResults = debounced.trim() ? results : { tasks: [], projects: [] };
 
+  // Track the newest notification we've already seen so fresh meeting
+  // invites can surface as an actionable toast, not just a stale badge.
+  const newestSeenRef = useRef<number | null>(null);
+
   const loadNotifications = useCallback(() => {
     api<{ notifications: Notification[] }>('/notifications')
-      .then((r) => setNotifications(r.notifications))
+      .then((r) => {
+        setNotifications(r.notifications);
+        const newest = r.notifications[0]?.id ?? 0;
+        const prevNewest = newestSeenRef.current;
+        // First load establishes the baseline silently.
+        if (prevNewest !== null && newest > prevNewest) {
+          for (const n of r.notifications) {
+            if (n.id <= prevNewest) break;
+            if (!n.read_at && n.link.startsWith('/portal/meetings/')) {
+              toast.info(n.message, {
+                action: { label: 'Join', onClick: () => navigate(n.link) },
+                duration: 15000,
+              });
+            }
+          }
+        }
+        newestSeenRef.current = newest;
+      })
       .catch(() => {});
-  }, []);
+  }, [navigate]);
 
-  useEffect(loadNotifications, [loadNotifications]);
+  // Poll so invites and mentions arrive while the tab is open — the bell
+  // count was previously loaded once and went stale for the whole session.
+  useEffect(() => {
+    loadNotifications();
+    const iv = setInterval(loadNotifications, 30000);
+    return () => clearInterval(iv);
+  }, [loadNotifications]);
 
   const unread = notifications.filter((n) => !n.read_at).length;
 
