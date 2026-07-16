@@ -40,6 +40,19 @@ First login: `ceo@latechs.org` / `ChangeMe123!` — you'll be prompted to change
 - Attachments are stored in Cloudflare R2 (S3-compatible object storage), not local disk (Vercel functions have a read-only filesystem) and not Supabase Storage (free-tier storage quota is small). Create the bucket in the Cloudflare dashboard (Storage & Databases → R2) and generate an API token (Access Key ID + Secret) under "Manage API tokens" — R2 has no bucket-level public/private toggle to worry about since every read/write in this app goes through `server/r2.ts` using those credentials, never a public URL.
 - The due-date reminder cron (`vercel.json` → `/api/cron/reminders`) runs once daily on Vercel's Hobby tier; `CRON_SECRET` must match what's configured so Vercel's automatic `Authorization: Bearer` header is accepted.
 
+## Free-tier hosting profile (Vercel Hobby + Supabase Free)
+
+The app is deliberately shaped to fit the free quotas:
+
+- **No websockets or media servers** — chat, presence, the org tree, and even video-meeting signaling are short polled HTTP requests (WebRTC media flows peer-to-peer, never through the server).
+- **Polling pauses in background tabs** (`src/portal/usePolling.ts`) — a parked tab generates zero invocations and zero DB egress; polling resumes with a fresh fetch on refocus.
+- **DB connections**: the pg pool is capped at 2 per serverless instance (`server/db.ts`) so concurrent lambdas can't exhaust the Supabase pooler.
+- **Storage growth is bounded**: meeting signals expire after 1 hour, read notifications after 30 days, login attempts after 1 day — all cleaned opportunistically on write (no cron needed).
+- **Bandwidth**: portfolio screenshots are compressed JPEG/SVG (~100–300 KB each); the heavy three.js hero is lazy-loaded and cached.
+- **Cron**: a single daily job (Hobby tier allows exactly that).
+
+After running the isolation suite against a shared database, sweep its fixtures with `pnpm run cleanup:fixtures`.
+
 ## Security tests
 
 The permission matrix is enforced server-side and verified by an isolation suite that attempts every forbidden cross-boundary access (non-CEO fetching finance, ungranted department fetching a project, head assigning outside their department, cross-department attendance validation, search leaks):

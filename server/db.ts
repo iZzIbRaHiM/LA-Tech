@@ -18,7 +18,12 @@ if (!connectionString) {
 
 export const pool = new Pool({
   connectionString,
-  max: 10,
+  // On Vercel each warm lambda instance holds its own pool; several
+  // concurrent instances × a big pool can exhaust the Supabase free-tier
+  // pooler's client limit. Two per instance is plenty for the short
+  // sequential queries these handlers run. Locally one process serves
+  // everything, so a larger pool helps there.
+  max: process.env.VERCEL ? 2 : 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });
@@ -123,7 +128,13 @@ export async function notify(userId: number, type: string, message: string, link
     message,
     link
   );
-  
+  // Opportunistic retention (same pattern as login_attempts): read
+  // notifications older than 30 days add nothing and the free-tier
+  // database is capped at 500MB — keep the table from growing forever.
+  await db
+    .prepare("DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < to_char(now() - INTERVAL '30 days', 'YYYY-MM-DD HH24:MI:SS')")
+    .run();
+
   const user = await db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
   if (user) {
     sendEmail(user.email, `LA Tech Portal — ${message}`, message, link);

@@ -45,6 +45,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { api, type OrgNode } from '../api';
+import { usePolling } from '../usePolling';
 import OrgTreeNode, { type OrgFlowNode, type OrgFlowNodeData } from '../components/org/OrgTreeNode';
 import OrgProfilePanel from '../components/org/OrgProfilePanel';
 
@@ -170,11 +171,9 @@ function OrgChartInner() {
       });
   }, []);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, POLL_MS);
-    return () => clearInterval(interval);
-  }, [load]);
+  // Visibility-aware: presence/tree polling stops entirely while the tab
+  // is hidden (free-tier friendliness) and resumes with a fresh fetch.
+  usePolling(load, POLL_MS);
 
   const toggleCollapse = useCallback((id: number) => {
     setCollapsed((prev) => {

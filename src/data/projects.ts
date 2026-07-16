@@ -69,7 +69,7 @@ export const projects: Project[] = [
       'A unified school management system built for Science Valley School, covering attendance, grades, fee management, and instant SMS alerts to parents — with role-scoped dashboards for every stakeholder. Live demo available on request.',
     category: 'platform',
     tech: ['React', 'Node.js', 'PostgreSQL', 'SMS Integration'],
-    image: '/images/portfolio/school-portal.png',
+    image: '/images/portfolio/school-portal.jpg',
     liveUrl: 'https://school-portal-virid-one.vercel.app/login',
   },
   {
@@ -104,7 +104,7 @@ export const projects: Project[] = [
       'A full e-commerce experience for a menswear brand — seasonal drops, curated collections, and a clean editorial storefront with cart, checkout, and order tracking built for conversion.',
     category: 'web',
     tech: ['React', 'E-Commerce', 'Payments'],
-    image: '/images/portfolio/grags.png',
+    image: '/images/portfolio/grags.jpg',
     liveUrl: 'https://grags.shop/',
     featured: true,
   },
@@ -116,7 +116,7 @@ export const projects: Project[] = [
       'A multi-level marketing DApp where reward and referral distribution runs entirely through smart contracts — automated, transparent, and auditable by every participant.',
     category: 'web3',
     tech: ['Solidity', 'Smart Contracts', 'Web3.js', 'React'],
-    image: '/images/portfolio/bigrafeal.png',
+    image: '/images/portfolio/bigrafeal.jpg',
     liveUrl: 'https://bigrafeal.com/',
   },
   {
@@ -149,7 +149,7 @@ export const projects: Project[] = [
       'A calm, conversion-focused website for a lifestyle-medicine practice — services, practitioner profiles, events, and appointment booking for patients managing chronic and metabolic conditions.',
     category: 'web',
     tech: ['React', 'Booking Integration', 'SEO'],
-    image: '/images/portfolio/tz-wellness.png',
+    image: '/images/portfolio/tz-wellness.jpg',
     liveUrl: 'https://tzwellnesscentre.com/',
   },
   {
@@ -160,7 +160,7 @@ export const projects: Project[] = [
       'A branded education platform for a forex market institute: program showcases, enrollment funnels, broker integration links, and WhatsApp support — built to turn visitors into enrolled students.',
     category: 'web',
     tech: ['React', 'Enrollment Funnels', 'WhatsApp API'],
-    image: '/images/portfolio/drd-academy.png',
+    image: '/images/portfolio/drd-academy.jpg',
     liveUrl: 'https://drdacademyofficial.com/',
   },
   {
@@ -171,7 +171,7 @@ export const projects: Project[] = [
       'A premium events-venue website with an editorial aesthetic — gallery, services, and direct event-booking flows for one of the region\'s signature celebration venues.',
     category: 'web',
     tech: ['React', 'Gallery', 'Booking'],
-    image: '/images/portfolio/alfazal-palace.png',
+    image: '/images/portfolio/alfazal-palace.jpg',
     liveUrl: 'https://alfazalpalacemarquee.com/',
   },
   {

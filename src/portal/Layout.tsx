@@ -44,6 +44,7 @@ import {
 import { Kbd } from '@/components/ui/kbd';
 import { useAuth } from './AuthContext';
 import { api } from './api';
+import { usePolling } from './usePolling';
 
 interface Notification {
   id: number;
@@ -147,11 +148,8 @@ export default function Layout() {
 
   // Poll so invites and mentions arrive while the tab is open — the bell
   // count was previously loaded once and went stale for the whole session.
-  useEffect(() => {
-    loadNotifications();
-    const iv = setInterval(loadNotifications, 30000);
-    return () => clearInterval(iv);
-  }, [loadNotifications]);
+  // Visibility-aware: a backgrounded tab polls nothing (free-tier quotas).
+  usePolling(loadNotifications, 30000);
 
   const unread = notifications.filter((n) => !n.read_at).length;
 

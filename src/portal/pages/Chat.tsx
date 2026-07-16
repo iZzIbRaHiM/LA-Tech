@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare, Plus, Pencil, Trash2, Send, Paperclip, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile } from '../api';
+import { usePolling } from '../usePolling';
 import type { PortalUser } from './People';
 
 interface ChatGroup {
@@ -73,17 +74,17 @@ export default function Chat() {
     api<{ users: PortalUser[] }>('/users').then((r) => setAllUsers(r.users)).catch(() => {});
   }, [user]);
 
-  useEffect(() => {
+  const loadMessages = useCallback(() => {
     if (!activeId) return;
-    const load = () => {
-      api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`)
-        .then((r) => setMessages(r.messages))
-        .catch(() => {});
-    };
-    load();
-    const interval = setInterval(load, POLL_MS);
-    return () => clearInterval(interval);
+    api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`)
+      .then((r) => setMessages(r.messages))
+      .catch(() => {});
   }, [activeId]);
+
+  // Instant load when switching groups; visibility-aware refresh after —
+  // a backgrounded chat tab generates zero requests.
+  useEffect(loadMessages, [loadMessages]);
+  usePolling(loadMessages, POLL_MS);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });

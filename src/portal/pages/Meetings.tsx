@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuth } from '../AuthContext';
 import { api, type Meeting } from '../api';
+import { usePolling } from '../usePolling';
 import type { PortalUser } from './People';
 
 export default function Meetings() {
@@ -32,11 +33,7 @@ export default function Meetings() {
     api<{ meetings: Meeting[] }>('/meetings').then((r) => setMeetings(r.meetings)).catch((e) => toast.error(e.message));
   }, []);
 
-  useEffect(() => {
-    load();
-    const iv = setInterval(load, 6000);
-    return () => clearInterval(iv);
-  }, [load]);
+  usePolling(load, 6000);
 
   const openCreate = () => {
     setTitle('');
