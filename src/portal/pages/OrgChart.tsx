@@ -44,7 +44,14 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { api, type OrgNode } from '../api';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { api, type OrgNode, type Department } from '../api';
 import { usePolling } from '../usePolling';
 import OrgTreeNode, { type OrgFlowNode, type OrgFlowNodeData } from '../components/org/OrgTreeNode';
 import OrgProfilePanel from '../components/org/OrgProfilePanel';
@@ -145,7 +152,8 @@ function OrgChartInner() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createManagerId, setCreateManagerId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', title: '' });
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [form, setForm] = useState({ name: '', email: '', password: '', title: '', departmentId: '' });
   const [busy, setBusy] = useState(false);
   // A drag-drop reassignment staged for confirmation: nothing is sent to the
   // server until the CEO confirms in the dialog below.
@@ -307,8 +315,9 @@ function OrgChartInner() {
 
   const openCreate = (managerId: number | null) => {
     setCreateManagerId(managerId);
-    setForm({ name: '', email: '', password: '', title: '' });
+    setForm({ name: '', email: '', password: '', title: '', departmentId: '' });
     setCreating(true);
+    api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
   };
 
   const canCreate = form.name.trim() !== '' && form.email.trim() !== '' && passwordPolicyOk(form.password);
@@ -319,7 +328,11 @@ function OrgChartInner() {
     try {
       await api('/users', {
         method: 'POST',
-        body: { ...form, managerId: createManagerId ?? undefined },
+        body: {
+          ...form,
+          managerId: createManagerId ?? undefined,
+          departmentId: form.departmentId ? Number(form.departmentId) : undefined,
+        },
       });
       toast.success(
         `${form.name} created — temp password: ${form.password}. Share it once; they'll be asked to change it.`
@@ -499,6 +512,22 @@ function OrgChartInner() {
             <div className="space-y-1.5">
               <Label>Role / title</Label>
               <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Overall Manager" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department (optional)</Label>
+              <Select value={form.departmentId} onValueChange={(v) => setForm({ ...form, departmentId: v === '0' ? '' : v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Unassigned</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Temporary password <span className="text-red-500">*</span> (shown once)</Label>

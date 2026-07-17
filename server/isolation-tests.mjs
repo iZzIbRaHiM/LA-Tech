@@ -283,6 +283,67 @@ async function main() {
   const internLeak = (amemberTasks.json?.tasks ?? []).some((t) => t.id === internTask.id);
   check("intern's task does not leak to an unrelated department member", !internLeak, `leak=${internLeak}`);
 
+  console.log('\n== Self profile: read own, change contact info only ==');
+  const myProfile = await req('amember', 'GET', '/me/profile');
+  check('member CAN read own profile', myProfile.status === 200 && myProfile.json?.profile != null, `got ${myProfile.status}`);
+  check(
+    "profile shows the member's manager from the chain",
+    myProfile.json?.profile?.manager_id === aHead,
+    `manager_id=${myProfile.json?.profile?.manager_id}`
+  );
+  // Escalation attempt: smuggle privileged fields alongside phone — only
+  // the phone may change.
+  const smuggle = await req('amember', 'PATCH', '/me/profile', {
+    phone: '+92 300 0000000',
+    title: 'Chief Hacker',
+    managerId: null,
+    financeAccess: true,
+    is_ceo: 1,
+  });
+  check('own-profile PATCH accepted for phone', smuggle.status === 200, `got ${smuggle.status}`);
+  const afterSmuggle = await must('amember', 'GET', '/me/profile');
+  const meAfter = await must('amember', 'GET', '/auth/me');
+  check('phone updated via self-service', afterSmuggle.profile.phone === '+92 300 0000000', `got ${afterSmuggle.profile.phone}`);
+  check('smuggled title ignored', afterSmuggle.profile.title !== 'Chief Hacker', `got ${afterSmuggle.profile.title}`);
+  check('smuggled manager change ignored', afterSmuggle.profile.manager_id === aHead, `got ${afterSmuggle.profile.manager_id}`);
+  check('smuggled finance access ignored', meAfter.user.financeAccess === false, `got ${meAfter.user.financeAccess}`);
+  const badPhone = await req('amember', 'PATCH', '/me/profile', { phone: 12345 });
+  check('non-string phone rejected', badPhone.status === 400, `got ${badPhone.status}`);
+
+  console.log('\n== One-dialog onboarding (POST /users with departmentId) ==');
+  const onboarded = (
+    await must('ceo', 'POST', '/users', {
+      name: 'Iso Onboarded',
+      email: `iso.onboarded.${TS}@latechs.org`,
+      password: PW,
+      title: 'Junior Dev',
+      departmentId: deptB,
+    })
+  ).id;
+  await login('onboarded', `iso.onboarded.${TS}@latechs.org`, PW);
+  const onboardedProfile = await must('onboarded', 'GET', '/me/profile');
+  check(
+    'new user lands with department + title + CEO manager in one call',
+    onboardedProfile.profile.department_name?.startsWith('IsoTest Mkt') &&
+      onboardedProfile.profile.title === 'Junior Dev' &&
+      onboardedProfile.profile.manager_name != null,
+    JSON.stringify({ d: onboardedProfile.profile.department_name, t: onboardedProfile.profile.title })
+  );
+  const badDept = await req('ceo', 'POST', '/users', {
+    name: 'Iso BadDept',
+    email: `iso.baddept.${TS}@latechs.org`,
+    password: PW,
+    departmentId: 999999,
+  });
+  check('creating a user into a nonexistent department rejected', badDept.status === 400, `got ${badDept.status}`);
+  const onboardedSched = await req('onboarded', 'GET', '/schedules/mine');
+  check(
+    'brand-new user resolves a valid (default) office timing',
+    onboardedSched.status === 200 && onboardedSched.json?.schedule?.office_start_time != null,
+    `got ${onboardedSched.status}`
+  );
+  void onboarded;
+
   console.log('\n== Meetings: participant-only access ==');
   const meetingId = (await must('ceo', 'POST', '/meetings', { title: `Iso meeting ${TS}`, participantIds: [aMember] })).id;
   const nonCeoCreate = await req('ahead', 'POST', '/meetings', { title: 'x', participantIds: [aMember] });

@@ -19,8 +19,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
-import { api } from '../api';
+import { api, type Department } from '../api';
 
 export interface PortalUser {
   id: number;
@@ -39,7 +46,8 @@ export default function People() {
   const [users, setUsers] = useState<PortalUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState<PortalUser | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [form, setForm] = useState({ name: '', email: '', password: '', title: '', departmentId: '' });
   const [resetPw, setResetPw] = useState('');
 
   const passwordPolicyOk = (pw: string) =>
@@ -53,15 +61,29 @@ export default function People() {
   }, []);
   useEffect(load, [load]);
 
+  const openCreate = () => {
+    setForm({ name: '', email: '', password: '', title: '', departmentId: '' });
+    setCreating(true);
+    api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
+  };
+
   const createUser = async () => {
     if (!canCreateUser) return;
     try {
-      await api('/users', { method: 'POST', body: form });
+      await api('/users', {
+        method: 'POST',
+        body: {
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          title: form.title,
+          departmentId: form.departmentId ? Number(form.departmentId) : undefined,
+        },
+      });
       toast.success(
         `${form.name} created — temp password: ${form.password}. Share it once; they'll be asked to change it.`
       );
       setCreating(false);
-      setForm({ name: '', email: '', password: '' });
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -105,7 +127,7 @@ export default function People() {
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-2">
         <h1 className="font-display font-bold text-2xl">People</h1>
-        <Button onClick={() => setCreating(true)} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+        <Button onClick={openCreate} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
           <Plus size={15} className="mr-1" /> New user
         </Button>
       </div>
@@ -212,6 +234,26 @@ export default function People() {
             <div className="space-y-1.5">
               <Label>Email <span className="text-red-500">*</span></Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Role / title</Label>
+              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Frontend Developer" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department (optional)</Label>
+              <Select value={form.departmentId} onValueChange={(v) => setForm({ ...form, departmentId: v === '0' ? '' : v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Unassigned</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={String(d.id)}>
+                      {d.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Temporary password <span className="text-red-500">*</span> (shown once)</Label>

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, issueSession, logoutAndRevoke, loadSessionUser, bumpTokenVersion } from './auth.js';
 import { passwordPolicyError } from './validation.js';
+import { resolveSchedule } from './routes-schedules.js';
 
 export const orgRouter = Router();
 
@@ -81,6 +82,41 @@ orgRouter.post('/auth/change-password', requireAuth, async (req, res) => {
   await bumpTokenVersion(req.user!.id);
   await issueSession(res, req.user!.id);
   await logActivity(req.user!.id, 'auth', req.user!.id, 'password_changed');
+  res.json({ ok: true });
+});
+
+// ---------- Self profile (any signed-in user, self-scoped only) ----------
+// Everything a new employee needs to orient themselves: who their manager
+// is, where they sit, and what office hours apply to them. Strictly reads
+// the requester's own row — there is no id parameter to tamper with.
+orgRouter.get('/me/profile', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const row = await db
+    .prepare(
+      `SELECT u.title, u.phone, u.created_at, u.manager_id,
+              mgr.name AS manager_name, mgr.title AS manager_title,
+              d.name AS department_name, m.role AS membership_role
+       FROM users u
+       LEFT JOIN users mgr ON mgr.id = u.manager_id
+       LEFT JOIN memberships m ON m.user_id = u.id
+       LEFT JOIN departments d ON d.id = m.department_id
+       WHERE u.id = ?`
+    )
+    .get(user.id);
+  const schedule = user.isCeo ? null : await resolveSchedule(user.id);
+  res.json({ profile: row, schedule });
+});
+
+// Self-service is deliberately limited to contact info: title, manager,
+// department, and access flags are org structure — CEO-controlled. Any
+// other field in the body is ignored, never applied.
+orgRouter.patch('/me/profile', requireAuth, async (req, res) => {
+  const phone = req.body?.phone;
+  if (typeof phone !== 'string' || phone.length > 40) {
+    return res.status(400).json({ error: 'phone must be a string (max 40 chars)' });
+  }
+  await db.prepare('UPDATE users SET phone = ? WHERE id = ?').run(phone.trim(), req.user!.id);
+  await logActivity(req.user!.id, 'user', req.user!.id, 'own_phone_updated');
   res.json({ ok: true });
 });
 
@@ -268,7 +304,7 @@ orgRouter.get('/users', requireAuth, requireCeo, async (_req, res) => {
 });
 
 orgRouter.post('/users', requireAuth, requireCeo, async (req, res) => {
-  const { name, email, password, managerId, title, phone } = req.body ?? {};
+  const { name, email, password, managerId, title, phone, departmentId } = req.body ?? {};
   if (!name?.trim() || !email?.trim()) return res.status(400).json({ error: 'Name and email required' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return res.status(400).json({ error: 'Invalid email' });
   const createPolicyError = passwordPolicyError(password);
@@ -291,13 +327,32 @@ orgRouter.post('/users', requireAuth, requireCeo, async (req, res) => {
     resolvedManagerId = ceo?.id ?? null;
   }
 
+  // Optional one-step department placement so onboarding doesn't require a
+  // second trip to the Departments page. Validated before the user row is
+  // created so a bad department can't leave a half-onboarded account.
+  let resolvedDeptId: number | null = null;
+  if (departmentId !== undefined && departmentId !== null && Number(departmentId) !== 0) {
+    const dept = await db
+      .prepare('SELECT id FROM departments WHERE id = ? AND archived_at IS NULL')
+      .get(Number(departmentId));
+    if (!dept) return res.status(400).json({ error: 'Department not found' });
+    resolvedDeptId = Number(departmentId);
+  }
+
   const info = await db
     .prepare(
       'INSERT INTO users (name, email, password_hash, must_change_password, manager_id, title, phone) VALUES (?, ?, ?, 1, ?, ?, ?)'
     )
     .run(name.trim(), email.trim(), bcrypt.hashSync(String(password), 12), resolvedManagerId, title?.trim() ?? '', phone?.trim() ?? '');
-  await logActivity(req.user!.id, 'user', Number(info.lastInsertRowid), 'created', { email: email.trim() });
-  res.json({ id: Number(info.lastInsertRowid) });
+  const newUserId = Number(info.lastInsertRowid);
+  if (resolvedDeptId) {
+    await db
+      .prepare('INSERT INTO memberships (user_id, department_id, role) VALUES (?, ?, ?)')
+      .run(newUserId, resolvedDeptId, 'member');
+    await logActivity(req.user!.id, 'department', resolvedDeptId, 'member_added', { userId: newUserId });
+  }
+  await logActivity(req.user!.id, 'user', newUserId, 'created', { email: email.trim(), departmentId: resolvedDeptId });
+  res.json({ id: newUserId });
 });
 
 // Reset password: the only recovery path (no email-based reset by design —
