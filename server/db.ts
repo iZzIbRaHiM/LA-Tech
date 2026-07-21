@@ -26,14 +26,17 @@ export const pool = new Pool({
   max: process.env.VERCEL ? 2 : 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-});
-
-// All "datetime now" columns are plain TEXT (SQLite-compat), so the client
-// (attendance duration math, etc.) treats every stored timestamp as UTC.
-// Force the session timezone rather than relying on the database's default
-// staying UTC forever.
-pool.on('connect', (client) => {
-  client.query("SET TIME ZONE 'UTC'").catch((err) => console.error('[DATABASE] Failed to set session timezone:', err));
+  // All "datetime now" columns are plain TEXT (SQLite-compat), so the client
+  // (attendance duration math, etc.) treats every stored timestamp as UTC.
+  // Force the session timezone rather than relying on the database's default
+  // staying UTC forever. Set via the connection startup packet (not a
+  // follow-up query on 'connect') — a fire-and-forget query fired from a
+  // 'connect' listener isn't awaited by pg-pool before the client is handed
+  // out, so under a burst of concurrent new connections (e.g. boot-time
+  // reminder/absence-sweep jobs racing an incoming request) it could leave a
+  // client mid-query when reused, corrupting that connection's protocol
+  // stream — this avoids the extra query entirely.
+  options: '-c TimeZone=UTC',
 });
 
 export function translateQuery(sql: string): string {
