@@ -64,7 +64,7 @@ export default function Projects() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="font-display font-bold text-2xl">Projects</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">Projects</h1>
         {user?.isCeo && (
           <Button onClick={() => setCreating(true)} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
             <Plus size={15} className="mr-1" /> New project
@@ -72,12 +72,12 @@ export default function Projects() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 stagger">
         {projects.map((p) => (
           <Link
             key={p.id}
             to={`/portal/projects/${p.id}`}
-            className="bg-[#0f0f12] border border-[#1f1f23] hover:border-[#333] transition-colors p-4"
+            className="pcard pcard-hover press p-4"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-medium">{p.name}</span>

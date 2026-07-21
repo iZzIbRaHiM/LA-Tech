@@ -410,20 +410,39 @@ export default function MeetingRoom() {
       </div>
 
       {/* Controls */}
-      <div className="shrink-0 border-t border-[#1f1f23] px-4 py-3 flex flex-wrap items-center justify-center gap-2">
-        <Button variant="outline" size="sm" onClick={toggleMic} className={micOn ? '' : 'text-red-400 border-red-900'}>
+      <div className="shrink-0 border-t border-[#1f1f23] px-4 py-3 flex flex-wrap items-center justify-center gap-2 shadow-[0_-4px_20px_rgb(0_0_0/0.5)] relative z-10 bg-[#09090B]">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleMic}
+          className={micOn ? '' : 'text-red-400 border-red-900 shadow-[0_0_14px_rgb(239_68_68/0.25)]'}
+        >
           {micOn ? <Mic size={15} /> : <MicOff size={15} />}
           <span className="ml-1.5 hidden sm:inline">{micOn ? 'Mute' : 'Unmute'}</span>
         </Button>
-        <Button variant="outline" size="sm" onClick={toggleCam} className={camOn ? '' : 'text-red-400 border-red-900'}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={toggleCam}
+          className={camOn ? '' : 'text-red-400 border-red-900 shadow-[0_0_14px_rgb(239_68_68/0.25)]'}
+        >
           {camOn ? <VideoIcon size={15} /> : <VideoOff size={15} />}
           <span className="ml-1.5 hidden sm:inline">{camOn ? 'Camera off' : 'Camera on'}</span>
         </Button>
-        <Button variant="outline" size="sm" onClick={sharing ? stopShare : startShare} className={sharing ? 'text-[#DFE104] border-[#DFE104]/50' : ''}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={sharing ? stopShare : startShare}
+          className={sharing ? 'text-[#DFE104] border-[#DFE104]/50 shadow-[0_0_16px_rgb(223_225_4/0.3)] glow-pulse' : ''}
+        >
           {sharing ? <MonitorX size={15} /> : <MonitorUp size={15} />}
           <span className="ml-1.5 hidden sm:inline">{sharing ? 'Stop sharing' : 'Share screen'}</span>
         </Button>
-        <Button size="sm" onClick={() => void leave()} className="bg-red-600 text-white hover:bg-red-700">
+        <Button
+          size="sm"
+          onClick={() => void leave()}
+          className="bg-red-600 text-white hover:bg-red-700 hover:shadow-[0_0_18px_rgb(239_68_68/0.45)] transition-shadow"
+        >
           <PhoneOff size={15} />
           <span className="ml-1.5">Leave</span>
         </Button>

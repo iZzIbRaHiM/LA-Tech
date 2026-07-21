@@ -73,7 +73,7 @@ export default function Meetings() {
   return (
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="font-display font-bold text-2xl">Meetings</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">Meetings</h1>
         {user?.isCeo && (
           <Button onClick={openCreate} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
             <Plus size={15} className="mr-1" /> New meeting
@@ -87,12 +87,23 @@ export default function Meetings() {
       {meetings.length === 0 ? (
         <p className="text-sm text-[#71717A]">No meetings yet.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 stagger">
           {meetings.map((m) => {
             const live = !m.ended_at;
             return (
-              <div key={m.id} className="flex flex-wrap items-center gap-3 border border-[#1f1f23] bg-[#0f0f12] px-4 py-3">
-                <Video size={16} className={live ? 'text-[#DFE104]' : 'text-[#3f3f46]'} />
+              <div
+                key={m.id}
+                className={`prow flex flex-wrap items-center gap-3 border border-[#1f1f23] bg-[#0f0f12] px-4 py-3 ${
+                  live ? 'pcard-glow' : ''
+                }`}
+              >
+                {live ? (
+                  <span className="glow-pulse rounded-full flex">
+                    <Video size={16} className="text-[#DFE104]" />
+                  </span>
+                ) : (
+                  <Video size={16} className="text-[#3f3f46]" />
+                )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{m.title}</div>
                   <div className="text-xs text-[#71717A]">
@@ -105,7 +116,11 @@ export default function Meetings() {
                   </Badge>
                 )}
                 {live ? (
-                  <Button size="sm" onClick={() => navigate(`/portal/meetings/${m.id}`)} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/portal/meetings/${m.id}`)}
+                    className="press bg-[#DFE104] text-black hover:bg-[#c9cb04] hover:shadow-[0_0_16px_rgb(223_225_4/0.4)] transition-shadow"
+                  >
                     Join
                   </Button>
                 ) : (

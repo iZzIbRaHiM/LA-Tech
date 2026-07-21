@@ -186,7 +186,7 @@ export default function TaskDetail() {
 
       <div className="flex items-start justify-between gap-4 mb-2">
         <div className="flex items-center gap-2">
-          <h1 className="font-display font-bold text-2xl">{task.title}</h1>
+          <h1 className="ptitle font-display font-bold text-2xl">{task.title}</h1>
           {canDelegate && (
             <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
               <Pencil size={13} />
@@ -279,7 +279,7 @@ export default function TaskDetail() {
             <Link
               key={s.id}
               to={`/portal/tasks/${s.id}`}
-              className="flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23] hover:border-[#333] text-sm"
+              className="prow flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23] text-sm"
             >
               <span>{s.title}</span>
               <span className="text-xs text-[#71717A]">
@@ -319,7 +319,7 @@ export default function TaskDetail() {
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Comments</h2>
         <div className="space-y-3 mb-4">
           {comments.map((c) => (
-            <div key={c.id} className="bg-[#0f0f12] border border-[#1f1f23] px-3 py-2">
+            <div key={c.id} className="pcard animate-fade-up px-3 py-2">
               <div className="text-xs text-[#71717A] mb-1">
                 {c.author_name} · {c.created_at}
               </div>

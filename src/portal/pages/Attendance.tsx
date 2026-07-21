@@ -197,12 +197,16 @@ export default function Attendance() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="font-display font-bold text-2xl mb-8">Attendance</h1>
+      <h1 className="ptitle font-display font-bold text-2xl mb-8">Attendance</h1>
 
       {/* Check in/out card — doesn't apply to the CEO at all (there's only
           one, and attendance tracking is scoped to everyone else) */}
       {!user?.isCeo && (
-        <div className="relative overflow-hidden border border-[#1f1f23] mb-10">
+        <div
+          className={`pcard animate-fade-up relative overflow-hidden mb-10 ${
+            open ? 'pcard-glow' : ''
+          }`}
+        >
           <img
             src="/images/hero-network-fallback.webp"
             alt=""
@@ -244,7 +248,7 @@ export default function Attendance() {
                 onClick={() => punch('check-in')}
                 disabled={busy}
                 size="lg"
-                className="bg-[#DFE104] text-black hover:bg-[#c9cb04] shrink-0"
+                className="press bg-[#DFE104] text-black hover:bg-[#c9cb04] hover:shadow-[0_0_20px_rgb(223_225_4/0.45)] transition-shadow shrink-0"
               >
                 <LogIn size={15} className="mr-1.5" /> Check in
               </Button>

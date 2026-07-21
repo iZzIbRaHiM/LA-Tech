@@ -146,7 +146,7 @@ export default function ProjectDetail() {
       </Link>
 
       <div className="flex items-center gap-3 mb-2">
-        <h1 className="font-display font-bold text-2xl">{project.name}</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">{project.name}</h1>
         <Badge variant="outline" className="capitalize">{project.status.replace('_', ' ')}</Badge>
         {user?.isCeo && (
           <>
@@ -215,7 +215,7 @@ export default function ProjectDetail() {
           <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <Eye size={13} /> Department visibility
           </h2>
-          <div className="space-y-2 border border-[#1f1f23] bg-[#0f0f12] p-3 max-w-sm">
+          <div className="pcard space-y-2 p-3 max-w-sm">
             {departments.map((d) => (
               <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox
@@ -329,7 +329,7 @@ export default function ProjectDetail() {
             <Link
               key={t.id}
               to={`/portal/tasks/${t.id}`}
-              className="flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23] hover:border-[#333] text-sm"
+              className="prow flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23] text-sm"
             >
               <span>{t.title}</span>
               <Badge variant="outline" className="text-xs capitalize">

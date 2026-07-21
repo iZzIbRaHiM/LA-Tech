@@ -56,3 +56,348 @@
     color-scheme: dark;
   }
 }
+
+/* ---------- Portal design layer: depth, glow, and motion ---------- */
+
+@layer components {
+  /* Card with layered depth that lifts and glows on hover. */
+  .pcard {
+    background-color: #0f0f12;
+    border: 1px solid #1f1f23;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.5),
+      0 4px 16px rgb(0 0 0 / 0.35);
+    transition:
+      transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+  .pcard-hover:hover {
+    transform: translateY(-2px);
+    border-color: #34343a;
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.5),
+      0 12px 32px rgb(0 0 0 / 0.5),
+      0 0 0 1px rgb(223 225 4 / 0.12),
+      0 0 28px rgb(223 225 4 / 0.07);
+  }
+  .pcard-glow {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.5),
+      0 4px 16px rgb(0 0 0 / 0.35),
+      0 0 0 1px rgb(223 225 4 / 0.14),
+      0 0 24px rgb(223 225 4 / 0.08);
+  }
+
+  /* List/table row: accent bar slides in from the left on hover. */
+  .prow {
+    position: relative;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+  .prow::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #DFE104;
+    transform: scaleY(0);
+    transform-origin: center;
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .prow:hover::before {
+    transform: scaleY(1);
+  }
+  .prow:hover {
+    background-color: #141417;
+    border-color: #2c2c31;
+    transform: translateX(2px);
+  }
+
+  /* Press feedback for anything clickable. */
+  .press {
+    transition: transform 0.12s ease;
+  }
+  .press:active {
+    transform: scale(0.97);
+  }
+
+  /* Staggered entrance for direct children (first 12). */
+  .stagger > * {
+    opacity: 0;
+    animation: p-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .stagger > *:nth-child(1)  { animation-delay: 0.02s; }
+  .stagger > *:nth-child(2)  { animation-delay: 0.07s; }
+  .stagger > *:nth-child(3)  { animation-delay: 0.12s; }
+  .stagger > *:nth-child(4)  { animation-delay: 0.17s; }
+  .stagger > *:nth-child(5)  { animation-delay: 0.22s; }
+  .stagger > *:nth-child(6)  { animation-delay: 0.27s; }
+  .stagger > *:nth-child(7)  { animation-delay: 0.32s; }
+  .stagger > *:nth-child(8)  { animation-delay: 0.37s; }
+  .stagger > *:nth-child(9)  { animation-delay: 0.42s; }
+  .stagger > *:nth-child(10) { animation-delay: 0.47s; }
+  .stagger > *:nth-child(11) { animation-delay: 0.52s; }
+  .stagger > *:nth-child(12) { animation-delay: 0.57s; }
+
+  .animate-fade-up {
+    animation: p-fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-scale-in {
+    animation: p-scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Pulsing accent glow — live/attention states (bell badge, live meeting). */
+  .glow-pulse {
+    animation: p-glow-pulse 2.2s ease-in-out infinite;
+  }
+
+  /* Shimmer sweep across text or skeleton surfaces. */
+  .shimmer {
+    background: linear-gradient(
+      100deg,
+      transparent 30%,
+      rgb(223 225 4 / 0.08) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    animation: p-shimmer 2.4s linear infinite;
+  }
+
+  /* Sidebar nav item: sliding accent bar + icon nudge. */
+  .pnav {
+    position: relative;
+    overflow: hidden;
+  }
+  .pnav::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #DFE104;
+    transform: scaleY(0);
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .pnav:hover::before,
+  .pnav-active::before {
+    transform: scaleY(1);
+  }
+  .pnav svg {
+    transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), color 0.2s ease;
+  }
+  .pnav:hover svg {
+    transform: translateX(2px);
+    color: #DFE104;
+  }
+  .pnav-active svg {
+    color: #DFE104;
+  }
+
+  /* Inputs breathe on focus: accent ring + soft outer glow. */
+  input[data-slot='input']:focus-visible,
+  textarea[data-slot='textarea']:focus-visible {
+    border-color: rgb(223 225 4 / 0.55);
+    box-shadow:
+      0 0 0 1px rgb(223 225 4 / 0.35),
+      0 0 18px rgb(223 225 4 / 0.12);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+
+  /* Page-title signature: an accent bar that sweeps in under every h1. */
+  .ptitle {
+    position: relative;
+    width: fit-content;
+    padding-bottom: 6px;
+  }
+  .ptitle::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    width: 34px;
+    background: #DFE104;
+    box-shadow: 0 0 12px rgb(223 225 4 / 0.5);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: p-sweep-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.15s forwards;
+  }
+
+  /* Cursor-tracking spotlight: pcard-hover surfaces get a radial highlight
+     that follows the mouse (coordinates set by a delegated listener in
+     Layout via --mx/--my custom properties). */
+  .pcard-hover {
+    position: relative;
+  }
+  .pcard-hover::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(
+      180px circle at var(--mx, 50%) var(--my, 50%),
+      rgb(223 225 4 / 0.06),
+      transparent 70%
+    );
+  }
+  .pcard-hover:hover::after {
+    opacity: 1;
+  }
+
+  /* Shimmering skeleton placeholder for loading states. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: #141417;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.04) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: p-shimmer 1.6s linear infinite;
+  }
+
+  /* Overlay surfaces (dialogs, popovers, dropdowns) cast real depth. */
+  [data-slot='dialog-content'],
+  [data-slot='alert-dialog-content'] {
+    box-shadow:
+      0 8px 40px rgb(0 0 0 / 0.7),
+      0 0 0 1px rgb(223 225 4 / 0.08),
+      0 0 60px rgb(223 225 4 / 0.04);
+  }
+  [data-slot='popover-content'],
+  [data-slot='dropdown-menu-content'],
+  [data-slot='select-content'],
+  [data-slot='sheet-content'] {
+    box-shadow:
+      0 6px 28px rgb(0 0 0 / 0.6),
+      0 0 0 1px rgb(255 255 255 / 0.03);
+  }
+}
+
+@keyframes p-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes p-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes p-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(223 225 4 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(223 225 4 / 0);
+  }
+}
+
+@keyframes p-sweep-in {
+  to { transform: scaleX(1); }
+}
+
+@keyframes p-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+@keyframes p-breathe {
+  0%, 100% { opacity: 0.07; transform: scale(1); }
+  50% { opacity: 0.12; transform: scale(1.08); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-12deg); }
+  40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); }
+  80% { transform: rotate(3deg); }
+}
+
+@keyframes p-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Slim, dark scrollbars with an accent hover — the default chunky gray
+   scrollbar is the single loudest "unstyled app" tell on Windows. */
+.portal-scroll ::-webkit-scrollbar,
+.portal-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.portal-scroll ::-webkit-scrollbar-track,
+.portal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.portal-scroll ::-webkit-scrollbar-thumb,
+.portal-scroll::-webkit-scrollbar-thumb {
+  background: #26262b;
+  border-radius: 0;
+  border: 2px solid #09090B;
+}
+.portal-scroll ::-webkit-scrollbar-thumb:hover,
+.portal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #3a3a40;
+}
+.portal-scroll * {
+  scrollbar-width: thin;
+  scrollbar-color: #26262b transparent;
+}
+
+/* Ambient depth behind page content: a faint accent bloom at the top of the
+   work area so pages sit in a lit space instead of on flat black. */
+.portal-main {
+  background:
+    radial-gradient(55% 260px at 50% 0%, rgb(223 225 4 / 0.035), transparent 70%),
+    radial-gradient(40% 200px at 100% 100%, rgb(255 255 255 / 0.015), transparent 70%),
+    #09090B;
+}
+
+/* Respect users who opt out of motion. */
+@media (prefers-reduced-motion: reduce) {
+  .stagger > *,
+  .animate-fade-up,
+  .animate-scale-in,
+  .glow-pulse,
+  .shimmer {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  .pcard,
+  .pcard-hover,
+  .prow,
+  .press,
+  .pnav svg {
+    transition: none !important;
+  }
+}

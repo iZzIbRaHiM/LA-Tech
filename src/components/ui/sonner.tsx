@@ -24,12 +24,18 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
+          "--normal-bg": "#0f0f12",
+          "--normal-text": "#FAFAFA",
+          "--normal-border": "#2a2a30",
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
+      toastOptions={{
+        classNames: {
+          toast:
+            "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(223_225_4/0.08)] !backdrop-blur-sm",
+        },
+      }}
       {...props}
     />
   )

@@ -81,7 +81,7 @@ function KpiCard({
   trend?: 'up' | 'down';
 }) {
   return (
-    <Card className="relative overflow-hidden bg-[#0f0f12] border-[#1f1f23]">
+    <Card className="pcard pcard-hover relative overflow-hidden">
       <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full blur-2xl opacity-20" style={{ background: glow }} />
       <CardHeader className="pb-2 relative">
         <CardTitle className="text-sm text-[#A1A1AA] font-normal flex items-center gap-1.5">
@@ -171,7 +171,7 @@ export default function CeoInsights() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
+        <Card className="pcard pcard-hover">
           <CardHeader>
             <CardTitle className="text-sm text-[#A1A1AA] font-normal">Revenue vs expenses by project</CardTitle>
           </CardHeader>
@@ -195,7 +195,7 @@ export default function CeoInsights() {
           </CardContent>
         </Card>
 
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
+        <Card className="pcard pcard-hover">
           <CardHeader>
             <CardTitle className="text-sm text-[#A1A1AA] font-normal">Payroll trend</CardTitle>
           </CardHeader>
@@ -222,7 +222,7 @@ export default function CeoInsights() {
           </CardContent>
         </Card>
 
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
+        <Card className="pcard pcard-hover">
           <CardHeader>
             <CardTitle className="text-sm text-[#A1A1AA] font-normal">Task status (all departments)</CardTitle>
           </CardHeader>
@@ -248,7 +248,7 @@ export default function CeoInsights() {
           </CardContent>
         </Card>
 
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
+        <Card className="pcard pcard-hover">
           <CardHeader>
             <CardTitle className="text-sm text-[#A1A1AA] font-normal">Attendance this month</CardTitle>
           </CardHeader>

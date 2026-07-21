@@ -75,7 +75,10 @@ function MonthCalendar({ leaves, month }: { leaves: LeaveRequest[]; month: strin
         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
           const people = onLeave(day);
           return (
-            <div key={day} className="bg-[#0f0f12] min-h-16 p-1.5">
+            <div
+              key={day}
+              className="bg-[#0f0f12] min-h-16 p-1.5 transition-all duration-200 hover:bg-[#141417] hover:shadow-[inset_0_0_0_1px_rgb(223_225_4/0.25)]"
+            >
               <div className="text-xs text-[#71717A]">{day}</div>
               {people.slice(0, 3).map((p, i) => (
                 <div key={i} className="text-[10px] bg-[#DFE104]/15 text-[#DFE104] px-1 mt-0.5 truncate" title={p}>
@@ -154,7 +157,7 @@ export default function Leave() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="font-display font-bold text-2xl">Leave</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">Leave</h1>
         <Button onClick={() => setCreating(true)} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
           <Plus size={15} className="mr-1" /> Request leave
         </Button>

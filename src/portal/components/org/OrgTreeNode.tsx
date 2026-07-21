@@ -28,8 +28,10 @@ export default function OrgTreeNode({ data, selected }: NodeProps<OrgFlowNode>) 
 
   return (
     <div
-      className={`w-64 border-2 bg-[#0f0f12] px-3 py-2.5 transition-colors ${
-        selected ? 'border-[#DFE104]' : 'border-[#1f1f23]'
+      className={`w-64 border-2 bg-[#0f0f12] px-3 py-2.5 transition-all duration-200 hover:-translate-y-0.5 ${
+        selected
+          ? 'border-[#DFE104] shadow-[0_0_0_1px_rgb(223_225_4/0.3),0_0_28px_rgb(223_225_4/0.15),0_8px_24px_rgb(0_0_0/0.5)]'
+          : 'border-[#1f1f23] shadow-[0_2px_10px_rgb(0_0_0/0.4)] hover:border-[#3a3a40] hover:shadow-[0_6px_24px_rgb(0_0_0/0.55),0_0_18px_rgb(223_225_4/0.06)]'
       } ${inactive ? 'opacity-50' : ''}`}
     >
       <Handle type="target" position={Position.Top} className="!bg-[#3f3f46]" />
@@ -41,7 +43,7 @@ export default function OrgTreeNode({ data, selected }: NodeProps<OrgFlowNode>) 
           {!inactive && (
             <span
               className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0f0f12] ${
-                employee.online ? 'bg-emerald-400' : 'bg-[#3f3f46]'
+                employee.online ? 'bg-emerald-400 shadow-[0_0_8px_rgb(52_211_153/0.7)]' : 'bg-[#3f3f46]'
               }`}
               title={employee.online ? 'Online' : 'Offline'}
             />

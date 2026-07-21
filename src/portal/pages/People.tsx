@@ -126,7 +126,7 @@ export default function People() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="font-display font-bold text-2xl">People</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">People</h1>
         <Button onClick={openCreate} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
           <Plus size={15} className="mr-1" /> New user
         </Button>

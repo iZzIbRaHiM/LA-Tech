@@ -155,7 +155,7 @@ export default function Departments() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="font-display font-bold text-2xl">Departments</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">Departments</h1>
         {user?.isCeo && (
           <div className="flex gap-2">
             <Input
@@ -176,9 +176,9 @@ export default function Departments() {
         )}
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-6 stagger">
         {departments.map((d) => (
-          <div key={d.id} className="border border-[#1f1f23] bg-[#0f0f12]">
+          <div key={d.id} className="pcard pcard-hover">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#1f1f23]">
               <div className="flex items-center gap-3">
                 <span className="font-medium">{d.name}</span>

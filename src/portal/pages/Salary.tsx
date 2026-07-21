@@ -106,7 +106,7 @@ export default function Salary() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="font-display font-bold text-2xl mb-1">Salary</h1>
+      <h1 className="ptitle font-display font-bold text-2xl mb-1">Salary</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">Visible only to the CEO.</p>
 
       <Table>
@@ -287,7 +287,7 @@ function PaymentDialog({
             <>
               <div className="text-sm text-[#A1A1AA]">Base salary: <span className="text-[#FAFAFA]">{fmt(preview.baseSalary)}</span></div>
 
-              <div className="space-y-2 border border-[#1f1f23] p-3">
+              <div className="pcard space-y-2 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <label className="flex items-center gap-2 text-sm cursor-pointer">
                     <Checkbox checked={applyLate} onCheckedChange={(c) => setApplyLate(!!c)} />

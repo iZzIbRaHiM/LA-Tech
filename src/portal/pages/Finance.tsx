@@ -83,12 +83,12 @@ export function FinanceOverview() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="font-display font-bold text-2xl mb-1">Finance</h1>
+      <h1 className="ptitle font-display font-bold text-2xl mb-1">Finance</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">
         {user?.isCeo ? 'Visible only to the CEO and finance delegates.' : 'You have finance delegate access.'}
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 stagger">
         {(
           [
             ['Total budget', totals.budget, ''],
@@ -96,7 +96,7 @@ export function FinanceOverview() {
             ['Total income', totals.income, 'text-emerald-400'],
           ] as const
         ).map(([label, value, cls]) => (
-          <Card key={label} className="bg-[#0f0f12] border-[#1f1f23]">
+          <Card key={label} className="pcard pcard-hover">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm text-[#A1A1AA] font-normal">{label}</CardTitle>
             </CardHeader>
@@ -147,13 +147,13 @@ export function FinanceOverview() {
               isCeo-gated, so finance delegates never see payroll magnitude
               even though they can see the project totals above. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 max-w-xl">
-            <Card className="bg-[#0f0f12] border-[#1f1f23]">
+            <Card className="pcard pcard-hover">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-[#A1A1AA] font-normal">Total payroll paid (all time)</CardTitle>
               </CardHeader>
               <CardContent className="text-2xl font-display font-bold">{fmt(salaryTotal)}</CardContent>
             </Card>
-            <Card className="bg-[#0f0f12] border-[#1f1f23]">
+            <Card className="pcard pcard-hover">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm text-[#A1A1AA] font-normal">Net profit (incl. payroll)</CardTitle>
               </CardHeader>
@@ -253,7 +253,7 @@ export function FinanceLedger() {
         <ArrowLeft size={14} /> Finance
       </Link>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="font-display font-bold text-2xl">{name} — Ledger</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">{name} — Ledger</h1>
         <Button variant="outline" size="sm" onClick={downloadCsv}>
           <Download size={14} className="mr-1" /> CSV
         </Button>

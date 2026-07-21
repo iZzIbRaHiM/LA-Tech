@@ -40,8 +40,8 @@ export default function Login() {
       />
       {/* Faint brand-yellow glow behind the card for depth, not just a flat panel on the backdrop */}
       <div
-        className="absolute w-[520px] h-[520px] rounded-full pointer-events-none blur-3xl opacity-[0.07]"
-        style={{ background: '#DFE104' }}
+        className="absolute w-[520px] h-[520px] rounded-full pointer-events-none blur-3xl"
+        style={{ background: '#DFE104', animation: 'p-breathe 5s ease-in-out infinite' }}
       />
 
       <div className="relative w-full max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -87,7 +87,10 @@ export default function Login() {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 text-sm text-red-400 bg-red-950/30 border border-red-900/50 px-3 py-2">
+              <div
+                className="flex items-start gap-2 text-sm text-red-400 bg-red-950/30 border border-red-900/50 px-3 py-2 shadow-[0_0_16px_rgb(239_68_68/0.1)]"
+                style={{ animation: 'p-shake 0.4s ease-in-out' }}
+              >
                 <TriangleAlert size={15} className="shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>

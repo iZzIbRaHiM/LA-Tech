@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import {
   LayoutDashboard,
   Users,
@@ -66,6 +66,7 @@ function useDebounced<T>(value: T, ms: number): T {
 export default function Layout() {
   const { user, logout, refresh } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const debounced = useDebounced(query, 200);
@@ -109,6 +110,20 @@ export default function Layout() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Cursor-tracking spotlight on .pcard-hover surfaces: one delegated
+  // listener feeds --mx/--my to the CSS radial highlight (see index.css).
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const card = (e.target as Element | null)?.closest?.('.pcard-hover') as HTMLElement | null;
+      if (!card) return;
+      const rect = card.getBoundingClientRect();
+      card.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+      card.style.setProperty('--my', `${e.clientY - rect.top}px`);
+    };
+    document.addEventListener('mousemove', onMove, { passive: true });
+    return () => document.removeEventListener('mousemove', onMove);
   }, []);
 
   useEffect(() => {
@@ -180,9 +195,9 @@ export default function Layout() {
             end={end}
             onClick={onNavigate}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
+              `pnav press flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
                 isActive
-                  ? 'bg-[#1c1c20] text-[#FAFAFA]'
+                  ? 'pnav-active bg-[#1c1c20] text-[#FAFAFA] shadow-[inset_0_1px_0_rgb(255_255_255/0.03)]'
                   : 'text-[#A1A1AA] hover:bg-[#141417] hover:text-[#FAFAFA]'
               }`
             }
@@ -215,11 +230,15 @@ export default function Layout() {
   );
 
   return (
-    <div className="flex h-screen bg-[#09090B] text-[#FAFAFA]">
+    <div className="portal-scroll flex h-screen bg-[#09090B] text-[#FAFAFA]">
       {/* Notion-style sidebar — desktop only; mobile gets the drawer below */}
       <aside className="hidden md:flex w-60 shrink-0 border-r border-[#1f1f23] flex-col">
-        <div className="px-4 py-4 flex items-center gap-2">
-          <img src="/brand/latech-symbol.svg" alt="" className="h-6 w-auto shrink-0" />
+        <div className="px-4 py-4 flex items-center gap-2 group cursor-default">
+          <img
+            src="/brand/latech-symbol.svg"
+            alt=""
+            className="h-6 w-auto shrink-0 transition-all duration-300 group-hover:drop-shadow-[0_0_8px_rgb(223_225_4/0.6)] group-hover:rotate-[8deg]"
+          />
           <span className="font-display font-bold uppercase tracking-tight text-lg">
             LATech <span className="text-[#DFE104]">Portal</span>
           </span>
@@ -242,7 +261,7 @@ export default function Layout() {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-12 shrink-0 border-b border-[#1f1f23] flex items-center justify-between px-4 gap-3">
+        <header className="h-12 shrink-0 border-b border-[#1f1f23] flex items-center justify-between px-4 gap-3 shadow-[0_2px_12px_rgb(0_0_0/0.4)] relative z-10 bg-[#09090B]">
           <div className="flex items-center gap-2 min-w-0">
             <Button
               variant="ghost"
@@ -268,10 +287,10 @@ export default function Layout() {
             }
           }}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell size={15} />
+              <Button variant="ghost" size="icon" className="relative press">
+                <Bell size={15} className={unread > 0 ? 'animate-[wiggle_0.8s_ease-in-out]' : ''} />
                 {unread > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 bg-[#DFE104] text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className="glow-pulse absolute -top-0.5 -right-0.5 bg-[#DFE104] text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                     {unread}
                   </span>
                 )}
@@ -286,10 +305,15 @@ export default function Layout() {
                 {notifications.map((n) => (
                   <button
                     key={n.id}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#141417] border-b border-[#141417]"
+                    className="prow w-full text-left px-3 py-2 text-sm border-b border-[#141417]"
                     onClick={() => n.link && navigate(n.link.replace(/^\/portal/, '/portal'))}
                   >
-                    <div className={n.read_at ? 'text-[#A1A1AA]' : ''}>{n.message}</div>
+                    <div className={`flex items-start gap-2 ${n.read_at ? 'text-[#A1A1AA]' : ''}`}>
+                      {!n.read_at && (
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFE104] shadow-[0_0_6px_rgb(223_225_4/0.6)]" />
+                      )}
+                      <span>{n.message}</span>
+                    </div>
                     <div className="text-xs text-[#71717A] mt-0.5">{n.created_at}</div>
                   </button>
                 ))}
@@ -312,8 +336,15 @@ export default function Layout() {
             </Button>
           </div>
         )}
-        <main className="flex-1 overflow-auto">
-          <Outlet />
+        <main className="portal-main flex-1 overflow-auto">
+          {/* Keyed by path so every route change re-triggers the entrance
+              animation. h-full (not min-h-full): full-height pages (OrgChart,
+              Chat, MeetingRoom) size themselves with percentage heights, which
+              need a definite parent height; taller pages simply overflow this
+              wrapper and scroll via <main>. */}
+          <div key={location.pathname} className="animate-fade-up h-full">
+            <Outlet />
+          </div>
         </main>
       </div>
 

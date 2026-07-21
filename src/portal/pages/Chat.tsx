@@ -233,8 +233,8 @@ export default function Chat() {
           {groups.map((g) => (
             <div
               key={g.id}
-              className={`flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm border-b border-[#141417] ${
-                activeId === g.id ? 'bg-[#1c1c20]' : 'hover:bg-[#141417]'
+              className={`prow flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm border-b border-[#141417] ${
+                activeId === g.id ? 'bg-[#1c1c20] shadow-[inset_2px_0_0_#DFE104]' : ''
               }`}
               onClick={() => setActiveId(g.id)}
             >
@@ -282,8 +282,10 @@ export default function Chat() {
               {messages.map((m) => (
                 <div key={m.id} className={m.sender_id === user?.id ? 'flex justify-end' : 'flex justify-start'}>
                   <div
-                    className={`max-w-md px-3 py-2 text-sm ${
-                      m.sender_id === user?.id ? 'bg-[#DFE104] text-black' : 'bg-[#141417] text-[#FAFAFA]'
+                    className={`animate-scale-in max-w-md px-3 py-2 text-sm transition-shadow ${
+                      m.sender_id === user?.id
+                        ? 'bg-[#DFE104] text-black shadow-[0_2px_12px_rgb(223_225_4/0.15)] hover:shadow-[0_2px_18px_rgb(223_225_4/0.3)]'
+                        : 'bg-[#141417] text-[#FAFAFA] shadow-[0_2px_8px_rgb(0_0_0/0.4)] hover:shadow-[0_2px_14px_rgb(0_0_0/0.6)]'
                     }`}
                   >
                     {m.sender_id !== user?.id && (

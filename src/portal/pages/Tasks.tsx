@@ -147,7 +147,7 @@ export default function Tasks() {
   const TaskCard = ({ t }: { t: Task }) => (
     <Link
       to={`/portal/tasks/${t.id}`}
-      className="block bg-[#0f0f12] border border-[#1f1f23] hover:border-[#333] transition-colors p-3"
+      className="pcard pcard-hover press block p-3"
     >
       <div className="text-sm mb-1.5">{t.title}</div>
       <div className="flex items-center gap-2 text-xs text-[#71717A]">
@@ -162,7 +162,7 @@ export default function Tasks() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display font-bold text-2xl">Tasks</h1>
+        <h1 className="ptitle font-display font-bold text-2xl">Tasks</h1>
         <div className="flex items-center gap-3">
           <Tabs value={view} onValueChange={setView}>
             <TabsList>
@@ -180,7 +180,7 @@ export default function Tasks() {
       </div>
 
       {view === 'board' && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 stagger">
           {STATUSES.map((s) => (
             <div key={s.key}>
               <div className="text-xs uppercase tracking-wide text-[#A1A1AA] mb-2 flex items-center justify-between">
@@ -202,7 +202,7 @@ export default function Tasks() {
       {view === 'list' && (
         <div className="space-y-1 max-w-3xl">
           {tasks.map((t) => (
-            <div key={t.id} className="flex items-center gap-3 px-3 py-2 bg-[#0f0f12] border border-[#1f1f23]">
+            <div key={t.id} className="prow flex items-center gap-3 px-3 py-2 bg-[#0f0f12] border border-[#1f1f23]">
               <Select value={t.status} onValueChange={(v) => setStatus(t, v)}>
                 <SelectTrigger className="w-32 h-7 text-xs shrink-0">
                   <SelectValue />

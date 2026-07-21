@@ -61,7 +61,7 @@ export default function Audit() {
     <div className="p-8 max-w-5xl">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-display font-bold text-2xl mb-1">Audit Log</h1>
+          <h1 className="ptitle font-display font-bold text-2xl mb-1">Audit Log</h1>
           <p className="text-sm text-[#A1A1AA]">Every org, task, project, finance, and attendance mutation.</p>
         </div>
         <Select

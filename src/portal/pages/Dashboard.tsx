@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../AuthContext';
 import { api, type Task, type Project, type ResolvedSchedule } from '../api';
+import TodayStrip from '../components/TodayStrip';
+import { useCountUp } from '../useCountUp';
 
 // recharts is a heavy dependency used nowhere else in the app — lazy-load
 // it so only a CEO's browser ever downloads it, not every portal user.
@@ -45,6 +47,7 @@ export default function Dashboard() {
   const [checklistDismissed, setChecklistDismissed] = useState(
     () => localStorage.getItem('portal-onboarding-dismissed') === '1'
   );
+  const [tasksLoaded, setTasksLoaded] = useState(false);
 
   const loadProfile = useCallback(() => {
     api<{ profile: MyProfile; schedule: ResolvedSchedule | null }>('/me/profile')
@@ -56,7 +59,10 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    api<{ tasks: Task[] }>('/tasks').then((r) => setTasks(r.tasks)).catch((e) => toast.error(e.message));
+    api<{ tasks: Task[] }>('/tasks')
+      .then((r) => setTasks(r.tasks))
+      .catch((e) => toast.error(e.message))
+      .finally(() => setTasksLoaded(true));
     api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch((e) => toast.error(e.message));
     api<{ activity: Activity[] }>('/activity').then((r) => setActivity(r.activity)).catch((e) => toast.error(e.message));
     loadProfile();
@@ -80,6 +86,9 @@ export default function Dashboard() {
 
   const open = tasks.filter((t) => t.status !== 'done');
   const overdue = open.filter((t) => t.due_date && t.due_date < new Date().toISOString().slice(0, 10));
+  const openCount = useCountUp(open.length);
+  const overdueCount = useCountUp(overdue.length);
+  const projectCount = useCountUp(projects.length);
 
   // First-run checklist for non-CEO users — auto-detects real completion
   // where it can, and disappears once everything is done (or dismissed).
@@ -94,18 +103,22 @@ export default function Dashboard() {
   const showChecklist = !user?.isCeo && !checklistDismissed && !checklistComplete && checkedInToday !== null;
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl">
-      <h1 className="font-display font-bold text-2xl mb-1">
-        Welcome back, {user?.name?.split(' ')[0]}
-      </h1>
-      <p className="text-sm text-[#A1A1AA] mb-6 capitalize">
-        {profile?.title || user?.role}
-        {profile?.department_name ? ` · ${profile.department_name}` : ''}
-      </p>
+    <div className="p-4 sm:p-8 max-w-6xl stagger">
+      <div>
+        <h1 className="ptitle font-display font-bold text-2xl mb-1">
+          Welcome back, {user?.name?.split(' ')[0]}
+        </h1>
+        <p className="text-sm text-[#A1A1AA] mb-6 capitalize">
+          {profile?.title || user?.role}
+          {profile?.department_name ? ` · ${profile.department_name}` : ''}
+        </p>
+      </div>
+
+      <TodayStrip tasks={tasks} />
 
       {/* Getting-started checklist (new users) */}
       {showChecklist && (
-        <div className="mb-6 border border-[#DFE104]/30 bg-[#DFE104]/5 px-4 py-3">
+        <div className="animate-scale-in mb-6 border border-[#DFE104]/30 bg-[#DFE104]/5 px-4 py-3 shadow-[0_0_24px_rgb(223_225_4/0.06)]">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-[#DFE104]">Getting started</span>
             <button
@@ -137,7 +150,7 @@ export default function Dashboard() {
 
       {/* My profile card (everyone but the CEO, who has the whole org tree) */}
       {!user?.isCeo && profile && (
-        <div className="mb-8 border border-[#1f1f23] bg-[#0f0f12] px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+        <div className="pcard mb-8 px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
           <span className="flex items-center gap-2 text-[#A1A1AA]">
             <UserRound size={14} className="text-[#DFE104]" />
             Reports to{' '}
@@ -193,28 +206,45 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-[#A1A1AA] font-normal">Open tasks</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-display font-bold">{open.length}</CardContent>
-        </Card>
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-[#A1A1AA] font-normal">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent className={`text-3xl font-display font-bold ${overdue.length ? 'text-red-400' : ''}`}>
-            {overdue.length}
-          </CardContent>
-        </Card>
-        <Card className="bg-[#0f0f12] border-[#1f1f23]">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-[#A1A1AA] font-normal">
-              {user?.isCeo ? 'Projects' : 'Shared projects'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-display font-bold">{projects.length}</CardContent>
-        </Card>
+        <Link to="/portal/tasks" className="block group">
+          <Card className="pcard pcard-hover press h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
+                Open tasks
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-display font-bold tabular-nums">
+              {openCount}
+              <span className="block h-0.5 w-0 group-hover:w-10 bg-[#DFE104] transition-all duration-300 mt-2" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/portal/tasks" className="block group">
+          <Card className={`pcard pcard-hover press h-full ${overdue.length ? 'border-red-900/60' : ''}`}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
+                Overdue
+              </CardTitle>
+            </CardHeader>
+            <CardContent className={`text-3xl font-display font-bold tabular-nums ${overdue.length ? 'text-red-400' : ''}`}>
+              {overdueCount}
+              <span className={`block h-0.5 w-0 group-hover:w-10 transition-all duration-300 mt-2 ${overdue.length ? 'bg-red-400' : 'bg-[#DFE104]'}`} />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/portal/projects" className="block group">
+          <Card className="pcard pcard-hover press h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
+                {user?.isCeo ? 'Projects' : 'Shared projects'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-display font-bold tabular-nums">
+              {projectCount}
+              <span className="block h-0.5 w-0 group-hover:w-10 bg-[#DFE104] transition-all duration-300 mt-2" />
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {user?.isCeo && (
@@ -227,11 +257,15 @@ export default function Dashboard() {
         <section>
           <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My open tasks</h2>
           <div className="space-y-1">
+            {!tasksLoaded &&
+              [0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-9 border border-[#1f1f23]" style={{ animationDelay: `${i * 0.1}s` }} />
+              ))}
             {open.slice(0, 8).map((t) => (
               <Link
                 key={t.id}
                 to={`/portal/tasks/${t.id}`}
-                className="flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23] hover:border-[#333] transition-colors"
+                className="prow flex items-center justify-between px-3 py-2 bg-[#0f0f12] border border-[#1f1f23]"
               >
                 <span className="text-sm truncate">{t.title}</span>
                 <Badge variant="outline" className="ml-2 shrink-0 text-xs capitalize">
@@ -239,7 +273,7 @@ export default function Dashboard() {
                 </Badge>
               </Link>
             ))}
-            {open.length === 0 && (
+            {tasksLoaded && open.length === 0 && (
               <p className="text-sm text-[#71717A]">
                 {user?.isCeo
                   ? 'No open tasks — create one from the Tasks page.'
