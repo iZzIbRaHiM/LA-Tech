@@ -351,10 +351,13 @@ export default function Chat() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <MessageSquare size={16} />
+            </span>
             <DialogTitle>New group</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Name <span className="text-red-500">*</span></Label>
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} />

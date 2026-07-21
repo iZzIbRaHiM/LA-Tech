@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, KeyRound, UserX, UserCheck, Wallet } from 'lucide-react';
+import { Plus, KeyRound, UserX, UserCheck, Wallet, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -223,10 +224,16 @@ export default function People() {
       {/* Create user */}
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>New user</DialogTitle>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <UserPlus size={16} />
+            </span>
+            <div>
+              <DialogTitle>New user</DialogTitle>
+              <DialogDescription className="mt-0.5">Issues a temporary password on creation.</DialogDescription>
+            </div>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Full name <span className="text-red-500">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

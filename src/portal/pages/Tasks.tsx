@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, CheckSquare, CalendarDays, Users2, FolderKanban } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -55,6 +56,13 @@ const PRIORITY_COLOR: Record<Task['priority'], string> = {
   medium: 'text-[#A1A1AA]',
   high: 'text-[#DFE104]',
   urgent: 'text-red-400',
+};
+
+const PRIORITY_PILL_ACTIVE: Record<string, string> = {
+  low: 'bg-[#3f3f46] border-[#3f3f46]',
+  medium: 'bg-[#6b6b76] border-[#6b6b76]',
+  high: 'bg-[#DFE104] border-[#DFE104] shadow-[0_0_14px_rgb(223_225_4/0.4)]',
+  urgent: 'bg-red-500 border-red-500 shadow-[0_0_14px_rgb(239_68_68/0.4)]',
 };
 
 export default function Tasks() {
@@ -306,13 +314,16 @@ export default function Tasks() {
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
             <AlertDialogTitle>Delete "{deleting?.title}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Permanently removes this task, its comments, attachments, and any sub-tasks under it. This cannot be
-              undone.
-            </AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogDescription>
+            Permanently removes this task, its comments, attachments, and any sub-tasks under it. This cannot be
+            undone.
+          </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={deleteTask} className="bg-red-600 text-white hover:bg-red-700">
@@ -326,13 +337,26 @@ export default function Tasks() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New task</DialogTitle>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <CheckSquare size={16} />
+            </span>
+            <div>
+              <DialogTitle>New task</DialogTitle>
+              <DialogDescription className="mt-0.5">
+                {user?.isCeo ? 'Route it to a department and (optionally) a project.' : 'Assign it to your team.'}
+              </DialogDescription>
+            </div>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-4 stagger">
             <div className="space-y-1.5">
               <Label>Title <span className="text-red-500">*</span></Label>
-              <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <Input
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="What needs to get done?"
+                autoFocus
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Description</Label>
@@ -340,26 +364,32 @@ export default function Tasks() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={3}
+                placeholder="Any context the assignee will need (optional)"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Priority</Label>
-                <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {['low', 'medium', 'high', 'urgent'].map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1">
+                  {(['low', 'medium', 'high', 'urgent'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`pill-option ${p === 'high' || p === 'urgent' ? '' : 'text-[#FAFAFA]'} ${
+                        form.priority === p ? PRIORITY_PILL_ACTIVE[p] : ''
+                      }`}
+                      data-active={form.priority === p}
+                      onClick={() => setForm({ ...form, priority: p })}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="space-y-1.5">
-                <Label>Due date</Label>
+                <Label className="flex items-center gap-1.5">
+                  <CalendarDays size={12} className="text-[#71717A]" /> Due date
+                </Label>
                 <Input
                   type="date"
                   value={form.dueDate}
@@ -367,66 +397,80 @@ export default function Tasks() {
                 />
               </div>
             </div>
-            {user?.isCeo && (
-              <div className="space-y-1.5">
-                <Label>Department (assigns to its head unless you pick someone) <span className="text-red-500">*</span></Label>
-                <Select
-                  value={form.departmentId}
-                  onValueChange={(v) => setForm({ ...form, departmentId: v, assignedTo: '', projectId: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {departments.map((d) => (
-                      <SelectItem key={d.id} value={String(d.id)}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {(user?.role === 'head' || (user?.isCeo && form.departmentId)) && (
-              <div className="space-y-1.5">
-                <Label>{user?.isCeo ? 'Assignee (optional — defaults to head)' : 'Assign to team member'}</Label>
-                <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assignableMembers.map((m) => (
-                      <SelectItem key={m.id} value={String(m.id)}>
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {(!user?.isCeo || form.departmentId) && (
-              <div className="space-y-1.5">
-                <Label>Project (optional)</Label>
-                <Select
-                  value={form.projectId}
-                  onValueChange={(v) => setForm({ ...form, projectId: v })}
-                  disabled={projects.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        projects.length === 0 ? "No projects visible to this department" : 'No project'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={String(p.id)}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+            {(user?.isCeo || user?.role === 'head') && (
+              <div className="field-group">
+                <div className="field-group-label">
+                  <Users2 size={12} /> Assignment
+                </div>
+                {user?.isCeo && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      Department (assigns to its head unless you pick someone) <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={form.departmentId}
+                      onValueChange={(v) => setForm({ ...form, departmentId: v, assignedTo: '', projectId: '' })}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((d) => (
+                          <SelectItem key={d.id} value={String(d.id)}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(user?.role === 'head' || (user?.isCeo && form.departmentId)) && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      {user?.isCeo ? 'Assignee (optional — defaults to head)' : 'Assign to team member'}
+                    </Label>
+                    <Select value={form.assignedTo} onValueChange={(v) => setForm({ ...form, assignedTo: v })}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {assignableMembers.map((m) => (
+                          <SelectItem key={m.id} value={String(m.id)}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(!user?.isCeo || form.departmentId) && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs flex items-center gap-1.5">
+                      <FolderKanban size={12} className="text-[#71717A]" /> Project (optional)
+                    </Label>
+                    <Select
+                      value={form.projectId}
+                      onValueChange={(v) => setForm({ ...form, projectId: v })}
+                      disabled={projects.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue
+                          placeholder={
+                            projects.length === 0 ? "No projects visible to this department" : 'No project'
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 {user?.isCeo && projects.length === 0 && (
                   <p className="text-xs text-[#71717A]">
                     This department hasn't been granted visibility into any project yet.

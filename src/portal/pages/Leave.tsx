@@ -15,6 +15,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -299,10 +300,16 @@ export default function Leave() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Request leave</DialogTitle>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <CalendarDays size={16} />
+            </span>
+            <div>
+              <DialogTitle>Request leave</DialogTitle>
+              <DialogDescription className="mt-0.5">Sent to your manager for approval.</DialogDescription>
+            </div>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Type</Label>
               <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>

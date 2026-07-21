@@ -10,6 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -134,8 +135,14 @@ export default function Meetings() {
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>New meeting</DialogTitle>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Video size={16} />
+            </span>
+            <div>
+              <DialogTitle>New meeting</DialogTitle>
+              <DialogDescription className="mt-0.5">Starts instantly once created.</DialogDescription>
+            </div>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
