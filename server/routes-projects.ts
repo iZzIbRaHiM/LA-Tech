@@ -12,7 +12,19 @@ const PROJECT_STATUSES = ['active', 'on_hold', 'completed', 'archived'];
 projectsRouter.get('/projects', requireAuth, async (req, res) => {
   const user = req.user!;
   let rows;
-  if (user.isCeo) {
+  // CEO can optionally scope the list to what a specific department can
+  // see — used by the New Task form so the project picker only offers
+  // projects the target department is actually allow-listed for.
+  const scopedDeptId = user.isCeo && req.query.departmentId ? Number(req.query.departmentId) : null;
+  if (scopedDeptId) {
+    rows = await db
+      .prepare(
+        `SELECT p.* FROM projects p
+         JOIN project_visibility pv ON pv.project_id = p.id AND pv.department_id = ?
+         ORDER BY p.created_at DESC`
+      )
+      .all(scopedDeptId);
+  } else if (user.isCeo) {
     rows = await db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
   } else if (user.departmentId != null) {
     rows = await db

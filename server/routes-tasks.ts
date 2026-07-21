@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
-import { taskVisibilityWhere, userCanSeeProject, canManageTask } from './policy.js';
+import { taskVisibilityWhere, userCanSeeProject, canManageTask, departmentCanSeeProject } from './policy.js';
 
 export const tasksRouter = Router();
 
@@ -89,9 +89,18 @@ tasksRouter.post('/tasks', requireAuth, async (req, res) => {
     if (!ok) return res.status(400).json({ error: 'Assignee does not belong to the task department' });
   }
 
-  // Linking a project requires the creator to be able to see it.
-  if (projectId && !(await userCanSeeProject(user, Number(projectId)))) {
-    return res.status(403).json({ error: 'No access to that project' });
+  // Linking a project requires the creator to be able to see it, AND the
+  // task's own department to be granted visibility — otherwise a CEO could
+  // point a department's task at a project that department was never
+  // allow-listed for (PRD §4.3: project existence itself is confidential),
+  // so the assignee would see a project name/reference they have no access to.
+  if (projectId) {
+    if (!(await userCanSeeProject(user, Number(projectId)))) {
+      return res.status(403).json({ error: 'No access to that project' });
+    }
+    if (!(await departmentCanSeeProject(targetDept, Number(projectId)))) {
+      return res.status(400).json({ error: "That project isn't visible to the task's department" });
+    }
   }
 
   // A sub-task must hang off a task in the same department — otherwise the

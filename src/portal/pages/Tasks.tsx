@@ -84,8 +84,25 @@ export default function Tasks() {
   useEffect(() => {
     if (!canCreate) return;
     api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
-    api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch(() => {});
   }, [canCreate]);
+
+  // Projects are scoped to the task's department (PRD §4.3: project
+  // existence is confidential outside its allow-list) — a head's own
+  // department is fixed, so their list loads once; a CEO's list is re-fetched
+  // per chosen department so the picker never offers a project that
+  // department can't actually see.
+  useEffect(() => {
+    if (!canCreate) return;
+    if (user?.isCeo) {
+      if (!form.departmentId) {
+        setProjects([]);
+        return;
+      }
+      api<{ projects: Project[] }>(`/projects?departmentId=${form.departmentId}`).then((r) => setProjects(r.projects)).catch(() => {});
+    } else {
+      api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch(() => {});
+    }
+  }, [canCreate, user?.isCeo, form.departmentId]);
 
   // Head assigns within own department; CEO picks a department.
   const assignableMembers = useMemo(() => {
@@ -355,7 +372,7 @@ export default function Tasks() {
                 <Label>Department (assigns to its head unless you pick someone) <span className="text-red-500">*</span></Label>
                 <Select
                   value={form.departmentId}
-                  onValueChange={(v) => setForm({ ...form, departmentId: v, assignedTo: '' })}
+                  onValueChange={(v) => setForm({ ...form, departmentId: v, assignedTo: '', projectId: '' })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select department" />
@@ -387,12 +404,20 @@ export default function Tasks() {
                 </Select>
               </div>
             )}
-            {projects.length > 0 && (
+            {(!user?.isCeo || form.departmentId) && (
               <div className="space-y-1.5">
                 <Label>Project (optional)</Label>
-                <Select value={form.projectId} onValueChange={(v) => setForm({ ...form, projectId: v })}>
+                <Select
+                  value={form.projectId}
+                  onValueChange={(v) => setForm({ ...form, projectId: v })}
+                  disabled={projects.length === 0}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="No project" />
+                    <SelectValue
+                      placeholder={
+                        projects.length === 0 ? "No projects visible to this department" : 'No project'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {projects.map((p) => (
@@ -402,6 +427,11 @@ export default function Tasks() {
                     ))}
                   </SelectContent>
                 </Select>
+                {user?.isCeo && projects.length === 0 && (
+                  <p className="text-xs text-[#71717A]">
+                    This department hasn't been granted visibility into any project yet.
+                  </p>
+                )}
               </div>
             )}
           </div>

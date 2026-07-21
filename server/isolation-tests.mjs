@@ -144,6 +144,23 @@ async function main() {
   const searchLeak = (bSearch.json?.projects ?? []).some((p) => p.id === project);
   check('search does not leak hidden project to bhead', bSearch.status === 200 && !searchLeak, `leak=${searchLeak}`);
 
+  const ceoTaskWrongDept = await req('ceo', 'POST', '/tasks', {
+    title: `Iso mismatched-project task ${TS}`,
+    departmentId: deptB,
+    projectId: project,
+  });
+  check(
+    "CEO DENIED linking a project the task's department can't see",
+    ceoTaskWrongDept.status === 400,
+    `got ${ceoTaskWrongDept.status}`
+  );
+  const ceoTaskRightDept = await req('ceo', 'POST', '/tasks', {
+    title: `Iso matched-project task ${TS}`,
+    departmentId: deptA,
+    projectId: project,
+  });
+  check('CEO CAN link a project the task department is granted', ceoTaskRightDept.status === 200, `got ${ceoTaskRightDept.status}`);
+
   console.log('\n== Only CEO creates projects/departments (§5) ==');
   const aheadProj = await req('ahead', 'POST', '/projects', { name: 'Rogue project' });
   check('ahead DENIED creating project', denied(aheadProj), `got ${aheadProj.status}`);
