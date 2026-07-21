@@ -1,0 +1,29 @@
+<svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#09090B"/>
+  <!-- grid -->
+  <g stroke="#1C1C21" stroke-width="1">
+    <path d="M0 100H1600M0 200H1600M0 300H1600M0 400H1600M0 500H1600M0 600H1600M0 700H1600M0 800H1600"/>
+    <path d="M100 0V900M200 0V900M300 0V900M400 0V900M500 0V900M600 0V900M700 0V900M800 0V900M900 0V900M1000 0V900M1100 0V900M1200 0V900M1300 0V900M1400 0V900M1500 0V900"/>
+  </g>
+  <!-- phone handset -->
+  <g stroke="#3F3F46" stroke-width="3" fill="none">
+    <rect x="1180" y="260" width="140" height="260" rx="24"/>
+    <circle cx="1250" cy="480" r="10"/>
+  </g>
+  <!-- call waveform -->
+  <g stroke="#DFE104" stroke-width="4" fill="none" stroke-linecap="round">
+    <path d="M1000 630 V630 M1030 600 V660 M1060 560 V700 M1090 610 V650 M1120 580 V680 M1150 600 V660 M1180 550 V710 M1210 590 V670 M1240 600 V660 M1270 570 V690 M1300 610 V650 M1330 590 V670 M1360 600 V660 M1390 630 V630"/>
+  </g>
+  <!-- CRM card stack -->
+  <g fill="#1C1C21" stroke="#3F3F46" stroke-width="2">
+    <rect x="960" y="300" width="160" height="60" rx="4"/>
+    <rect x="980" y="380" width="160" height="60" rx="4"/>
+  </g>
+  <circle cx="1240" cy="290" r="6" fill="#DFE104"/>
+  <!-- title -->
+  <text x="96" y="600" fill="#FAFAFA" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="80" letter-spacing="-2">AI VOICE</text>
+  <text x="96" y="690" fill="#DFE104" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="80" letter-spacing="-2">RECEPTIONIST</text>
+  <text x="96" y="790" fill="#FAFAFA" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="80" letter-spacing="-2">+ CRM</text>
+  <text x="96" y="140" fill="#A1A1AA" font-family="Arial, Helvetica, sans-serif" font-size="30" letter-spacing="8">MULTI-TENANT SAAS PLATFORM</text>
+  <rect x="96" y="170" width="120" height="6" fill="#DFE104"/>
+</svg>

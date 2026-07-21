@@ -50,6 +50,28 @@ export const projects: Project[] = [
     featured: true,
   },
   {
+    slug: 'company-portal',
+    name: 'LA Tech Solutions — Company Portal',
+    tagline: 'The company operating system that runs LA Tech Solutions itself.',
+    description:
+      'A full internal SaaS platform built from scratch to run the company: a dynamic, drag-and-drop interactive org chart with live presence, session-based attendance and configurable office hours, task and project management, a finance ledger and payroll, and built-in peer-to-peer video meetings — all under a strict role-permission model.',
+    category: 'platform',
+    tech: ['React 19', 'TypeScript', 'Node.js', 'PostgreSQL', 'WebRTC'],
+    image: '/images/portfolio/company-portal.png',
+    featured: true,
+  },
+  {
+    slug: 'ai-receptionist-crm',
+    name: 'Multi-Tenant AI Receptionist & CRM',
+    tagline: 'AI voice receptionist that answers calls and books appointments, per tenant.',
+    description:
+      'A multi-tenant SaaS platform giving any small service business an AI phone receptionist: inbound calls are bridged in real time to an OpenAI Realtime voice agent that books appointments live, with every call transcribed, summarized, and outcome-tagged in a CRM dashboard. Tenant data is isolated at the database level with Postgres Row-Level Security, verified by an automated isolation-test suite.',
+    category: 'platform',
+    tech: ['Next.js', 'Twilio', 'OpenAI Realtime', 'Supabase RLS', 'WebSockets'],
+    image: '/images/portfolio/ai-receptionist-crm.svg',
+    featured: true,
+  },
+  {
     slug: 'guestpostbar',
     name: 'Guestpostbar',
     tagline: 'Transparent guest-posting marketplace with localized pricing.',
@@ -107,6 +129,16 @@ export const projects: Project[] = [
     image: '/images/portfolio/grags.jpg',
     liveUrl: 'https://grags.shop/',
     featured: true,
+  },
+  {
+    slug: 'dhaagay',
+    name: 'Dhaagay Fashions',
+    tagline: 'South Asian bridal & luxury wear — checkout-free by design.',
+    description:
+      "A boutique storefront and self-serve admin dashboard for a South Asian bridal and luxury-wear brand, built around a deliberately checkout-free model: every purchase closes on a pre-filled WhatsApp message instead of a cart, matching how the brand's customers actually buy. The same codebase deploys to either Vercel + Supabase or Hostinger + MySQL, picked purely by environment variables.",
+    category: 'web',
+    tech: ['Express', 'EJS', 'Supabase / MySQL', 'WhatsApp Ordering'],
+    image: '/images/portfolio/dhaagay.png',
   },
   {
     slug: 'bigrafeal',
