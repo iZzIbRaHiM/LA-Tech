@@ -183,7 +183,10 @@ export default function Salary() {
 
       <Dialog open={!!assigning} onOpenChange={(o) => !o && setAssigning(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Wallet size={16} />
+            </span>
             <DialogTitle>{assigning?.salary != null ? 'Update' : 'Assign'} salary — {assigning?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -274,10 +277,13 @@ function PaymentDialog({
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
-        <DialogHeader>
+        <DialogHeader className="flex-row items-center gap-3 space-y-0">
+          <span className="dialog-icon-badge">
+            <Wallet size={16} />
+          </span>
           <DialogTitle>New salary payment — {employee.name}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 stagger">
           <div className="space-y-1.5">
             <Label>Period</Label>
             <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} />

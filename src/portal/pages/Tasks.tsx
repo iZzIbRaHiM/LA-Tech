@@ -471,7 +471,7 @@ export default function Tasks() {
                     </Select>
                   </div>
                 )}
-                {user?.isCeo && projects.length === 0 && (
+                {user?.isCeo && form.departmentId && projects.length === 0 && (
                   <p className="text-xs text-[#71717A]">
                     This department hasn't been granted visibility into any project yet.
                   </p>

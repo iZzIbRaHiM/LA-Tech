@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Plus, Crown, UserMinus, Wallet, Pencil, Archive } from 'lucide-react';
+import { Plus, Crown, UserMinus, Wallet, Pencil, Archive, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -286,7 +286,10 @@ export default function Departments() {
 
       <Dialog open={!!addingTo} onOpenChange={(o) => !o && setAddingTo(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <UserPlus size={16} />
+            </span>
             <DialogTitle>Assign member to {addingTo?.name}</DialogTitle>
           </DialogHeader>
           {unassigned.length === 0 ? (
@@ -328,7 +331,10 @@ export default function Departments() {
 
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
             <DialogTitle>Rename department</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">

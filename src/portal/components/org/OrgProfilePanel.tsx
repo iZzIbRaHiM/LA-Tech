@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronsUpDown, KeyRound, UserX, UserCheck, Plus, Video } from 'lucide-react';
+import { ChevronsUpDown, KeyRound, UserX, UserCheck, Plus, Video, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -549,7 +549,10 @@ export default function OrgProfilePanel({
       {/* Assign/update salary */}
       <Dialog open={salaryOpen} onOpenChange={setSalaryOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Wallet size={16} />
+            </span>
             <DialogTitle>{salary != null ? 'Update' : 'Assign'} salary — {e.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -571,7 +574,10 @@ export default function OrgProfilePanel({
       {/* Reset password */}
       <Dialog open={resetOpen} onOpenChange={(o) => { setResetOpen(o); if (!o) setResetPw(''); }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <KeyRound size={16} />
+            </span>
             <DialogTitle>Reset password for {e.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">

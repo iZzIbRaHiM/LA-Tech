@@ -168,9 +168,13 @@ export default function ProjectDetail() {
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
             <AlertDialogTitle>Delete "{project.name}"?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm">
                 <p>
                   Permanently removes this project, its milestones, its visibility grants, and its entire finance
@@ -183,7 +187,6 @@ export default function ProjectDetail() {
                 </p>
               </div>
             </AlertDialogDescription>
-          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -343,10 +346,13 @@ export default function ProjectDetail() {
 
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
             <DialogTitle>Edit project</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Name <span className="text-red-500">*</span></Label>
               <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />

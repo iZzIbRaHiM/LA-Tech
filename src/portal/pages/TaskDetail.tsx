@@ -44,6 +44,13 @@ interface Comment {
 
 const STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
 
+const PRIORITY_PILL_ACTIVE: Record<string, string> = {
+  low: 'bg-[#3f3f46] border-[#3f3f46]',
+  medium: 'bg-[#6b6b76] border-[#6b6b76]',
+  high: 'bg-[#DFE104] border-[#DFE104] shadow-[0_0_14px_rgb(223_225_4/0.4)]',
+  urgent: 'bg-red-500 border-red-500 shadow-[0_0_14px_rgb(239_68_68/0.4)]',
+};
+
 export default function TaskDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -344,10 +351,13 @@ export default function TaskDetail() {
 
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
             <DialogTitle>Edit task</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Title <span className="text-red-500">*</span></Label>
               <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
@@ -363,18 +373,19 @@ export default function TaskDetail() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Priority</Label>
-                <Select value={editForm.priority} onValueChange={(v) => setEditForm({ ...editForm, priority: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {['low', 'medium', 'high', 'urgent'].map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1">
+                  {(['low', 'medium', 'high', 'urgent'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`pill-option text-[#FAFAFA] ${p === editForm.priority ? PRIORITY_PILL_ACTIVE[p] : ''}`}
+                      data-active={editForm.priority === p}
+                      onClick={() => setEditForm({ ...editForm, priority: p })}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Due date</Label>
