@@ -612,6 +612,31 @@ async function main() {
   });
   check('login rate-limited after repeated failures', brute.status === 429, `got ${brute.status}`);
 
+  console.log('\n== Salary payments: draft/paid lifecycle ==');
+  await must('ceo', 'POST', `/salary/${aMember}/assign`, { amount: 50000 });
+  const payDenied = await req('ahead', 'POST', `/salary/${aMember}/payments`, { period: '2026-01' });
+  check('ahead DENIED creating salary payments', denied(payDenied), `got ${payDenied.status}`);
+  const pay = await must('ceo', 'POST', `/salary/${aMember}/payments`, { period: '2026-01' });
+  const markPaidDenied = await req('ahead', 'POST', `/salary/payments/${pay.id}/mark-paid`);
+  check('ahead DENIED marking a payment paid', denied(markPaidDenied), `got ${markPaidDenied.status}`);
+  const deleteDeniedNonCeo = await req('ahead', 'DELETE', `/salary/payments/${pay.id}`);
+  check('ahead DENIED deleting a payment', denied(deleteDeniedNonCeo), `got ${deleteDeniedNonCeo.status}`);
+  const markPaidOk = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-paid`);
+  check('CEO CAN mark a draft payment paid', markPaidOk.status === 200, `got ${markPaidOk.status}`);
+  const remarkPaid = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-paid`);
+  check('CEO DENIED re-marking an already-paid payment', remarkPaid.status === 409, `got ${remarkPaid.status}`);
+  const deletePaidBlocked = await req('ceo', 'DELETE', `/salary/payments/${pay.id}`);
+  check('CEO DENIED deleting a paid payment', deletePaidBlocked.status === 409, `got ${deletePaidBlocked.status}`);
+  const pay2 = await must('ceo', 'POST', `/salary/${aMember}/payments`, { period: '2026-02' });
+  const deleteDraftOk = await req('ceo', 'DELETE', `/salary/payments/${pay2.id}`);
+  check('CEO CAN delete a draft payment', deleteDraftOk.status === 200, `got ${deleteDraftOk.status}`);
+  const historyAfterDelete = await must('ceo', 'GET', `/salary/${aMember}/payments`);
+  check(
+    'deleted draft payment removed from history',
+    !historyAfterDelete.payments.some((p) => p.id === pay2.id),
+    'still present'
+  );
+
   console.log('\n== Sub-task scoping (§5) ==');
   // A parent task assigned to amember, with one sub for amember and one sub
   // for aHead: amember opening the parent must see only their own sub.

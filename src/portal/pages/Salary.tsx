@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wallet, ChevronDown, ChevronUp, Check, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -69,11 +79,40 @@ export default function Salary() {
   const [payingFor, setPayingFor] = useState<Employee | null>(null);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [deletingPayment, setDeletingPayment] = useState<Payment | null>(null);
 
   const load = () => {
     api<{ employees: Employee[] }>('/salary/employees').then((r) => setEmployees(r.employees)).catch((e) => toast.error(e.message));
   };
   useEffect(load, []);
+
+  const reloadHistory = async (empId: number) => {
+    const r = await api<{ payments: Payment[] }>(`/salary/${empId}/payments`);
+    setPayments(r.payments);
+  };
+
+  const markPaid = async (empId: number, paymentId: number) => {
+    try {
+      await api(`/salary/payments/${paymentId}/mark-paid`, { method: 'POST' });
+      toast.success('Marked as paid');
+      reloadHistory(empId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const confirmDeletePayment = async () => {
+    if (!deletingPayment) return;
+    const empId = expanded;
+    try {
+      await api(`/salary/payments/${deletingPayment.id}`, { method: 'DELETE' });
+      toast.success('Payment deleted');
+      setDeletingPayment(null);
+      if (empId != null) reloadHistory(empId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
 
   const assignSalary = async () => {
     if (!assigning) return;
@@ -165,9 +204,41 @@ export default function Salary() {
                               base {fmt(p.base_amount)} · late {p.late_count} · half-day {p.half_day_count} · absent (billable){' '}
                               {p.billable_absent_count}
                             </span>
-                            <Badge variant="outline" className="text-xs">
-                              net {fmt(p.net_amount)}
-                            </Badge>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant="outline" className="text-xs">
+                                net {fmt(p.net_amount)}
+                              </Badge>
+                              <Badge
+                                variant="outline"
+                                className={`text-xs capitalize ${
+                                  p.status === 'paid' ? 'text-emerald-400 border-emerald-900' : 'text-[#A1A1AA] border-[#333]'
+                                }`}
+                              >
+                                {p.status}
+                              </Badge>
+                              {p.status === 'draft' && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    title="Mark as paid"
+                                    className="text-emerald-400 h-6 px-1.5"
+                                    onClick={() => markPaid(emp.id, p.id)}
+                                  >
+                                    <Check size={13} />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    title="Delete this draft payment"
+                                    className="text-red-400 h-6 px-1.5"
+                                    onClick={() => setDeletingPayment(p)}
+                                  >
+                                    <Trash2 size={13} />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -205,7 +276,37 @@ export default function Salary() {
         </DialogContent>
       </Dialog>
 
-      {payingFor && <PaymentDialog employee={payingFor} onClose={() => setPayingFor(null)} onSaved={load} />}
+      {payingFor && (
+        <PaymentDialog
+          employee={payingFor}
+          onClose={() => setPayingFor(null)}
+          onSaved={() => {
+            load();
+            if (expanded === payingFor.id) reloadHistory(payingFor.id);
+          }}
+        />
+      )}
+
+      <AlertDialog open={!!deletingPayment} onOpenChange={(o) => !o && setDeletingPayment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete payment for {deletingPayment?.period}?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            This permanently removes this draft payment record. Only draft payments can be deleted — once marked
+            paid, a payment stays permanent.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeletePayment} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

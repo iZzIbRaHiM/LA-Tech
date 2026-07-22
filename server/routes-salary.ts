@@ -234,6 +234,36 @@ salaryRouter.post('/salary/:userId/payments', ...gate, async (req, res) => {
   res.json({ id: Number(info.lastInsertRowid), netAmount });
 });
 
+// Payments are created as 'draft' (see schema) but nothing ever transitioned
+// or removed them — a mistake (wrong period, wrong overrides) was a
+// permanent dead end. Marking paid is a one-way transition: once money has
+// actually moved, the record should be immutable, not silently editable.
+salaryRouter.post('/salary/payments/:id/mark-paid', ...gate, async (req, res) => {
+  const id = Number(req.params.id);
+  const payment = await db.prepare('SELECT id, status, user_id, period FROM salary_payments WHERE id = ?').get(id) as
+    | { id: number; status: string; user_id: number; period: string }
+    | undefined;
+  if (!payment) return res.status(404).json({ error: 'Not found' });
+  if (payment.status !== 'draft') return res.status(409).json({ error: 'Only draft payments can be marked paid' });
+  await db.prepare("UPDATE salary_payments SET status = 'paid' WHERE id = ?").run(id);
+  await logActivity(req.user!.id, 'salary', id, 'payment_marked_paid', { userId: payment.user_id, period: payment.period });
+  res.json({ ok: true });
+});
+
+// Delete is draft-only, for the same reason marking-paid is one-way: once
+// paid, the record documents money that actually moved and stays permanent.
+salaryRouter.delete('/salary/payments/:id', ...gate, async (req, res) => {
+  const id = Number(req.params.id);
+  const payment = await db.prepare('SELECT id, status, user_id, period FROM salary_payments WHERE id = ?').get(id) as
+    | { id: number; status: string; user_id: number; period: string }
+    | undefined;
+  if (!payment) return res.status(404).json({ error: 'Not found' });
+  if (payment.status !== 'draft') return res.status(409).json({ error: 'Paid payments cannot be deleted' });
+  await db.prepare('DELETE FROM salary_payments WHERE id = ?').run(id);
+  await logActivity(req.user!.id, 'salary', id, 'payment_deleted', { userId: payment.user_id, period: payment.period });
+  res.json({ ok: true });
+});
+
 // Company-wide payment ledger, for Finance overview — CEO only (the router-
 // level guard above already enforces this; salary stays stricter than the
 // finance-delegate model, so this must never be surfaced anywhere a
