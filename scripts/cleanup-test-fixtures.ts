@@ -29,6 +29,12 @@ async function run() {
 
   if (isoIds.length > 0) {
     const ph = isoIds.map(() => '?').join(',');
+    // Salary rows too: the paid-payment immutability rule exists to protect
+    // real payroll history, but fixture "payments" are fiction that pollutes
+    // the Finance payroll totals — they go, along with the salary
+    // assignments that enabled them.
+    await del('salary payments', `DELETE FROM salary_payments WHERE user_id IN (${ph})`, isoIds);
+    await del('salary assignments', `DELETE FROM salaries WHERE user_id IN (${ph})`, isoIds);
     await del('leave requests', `DELETE FROM leave_requests WHERE user_id IN (${ph})`, isoIds);
     await del('attendance records', `DELETE FROM attendance WHERE user_id IN (${ph})`, isoIds);
     await del('notifications', `DELETE FROM notifications WHERE user_id IN (${ph})`, isoIds);
