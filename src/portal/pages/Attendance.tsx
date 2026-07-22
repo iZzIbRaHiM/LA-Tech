@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2 } from 'lucide-react';
+import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2, CalendarPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -21,7 +30,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
-import { api, downloadFile, type ResolvedSchedule } from '../api';
+import { api, downloadFile, type ResolvedSchedule, type Department } from '../api';
 
 type Category = 'on_time' | 'late' | 'half_day' | 'absent' | null;
 
@@ -93,6 +102,10 @@ export default function Attendance() {
   const [editing, setEditing] = useState<AttendanceRecord | null>(null);
   const [editedTime, setEditedTime] = useState('');
   const [mySchedule, setMySchedule] = useState<ResolvedSchedule | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [logging, setLogging] = useState(false);
+  const [logForm, setLogForm] = useState({ userId: '', date: '', checkInTime: '09:00', checkOutTime: '18:00', note: '' });
+  const [loggingBusy, setLoggingBusy] = useState(false);
 
   const load = useCallback(() => {
     api<{ open: AttendanceRecord | null }>('/attendance/status').then((r) => setOpen(r.open)).catch(() => {});
@@ -109,6 +122,22 @@ export default function Attendance() {
     if (user?.isCeo) return;
     api<{ schedule: ResolvedSchedule }>('/schedules/mine').then((r) => setMySchedule(r.schedule)).catch(() => {});
   }, [user]);
+
+  const isValidator = user?.isCeo || user?.role === 'head';
+
+  useEffect(() => {
+    if (!isValidator) return;
+    api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
+  }, [isValidator]);
+
+  // Whoever this validator can log attendance for: the CEO picks from any
+  // department, a head only from their own — same scoping as canValidateAttendance
+  // (manager-chain authority), department membership just gives the UI a
+  // concrete, familiar list to pick from (mirrors Tasks.tsx's assignee picker).
+  const loggableMembers = departments
+    .filter((d) => user?.isCeo || d.id === user?.departmentId)
+    .flatMap((d) => d.members ?? [])
+    .filter((m) => m.id !== user?.id);
 
   const punch = async (dir: 'check-in' | 'check-out') => {
     setBusy(true);
@@ -152,6 +181,32 @@ export default function Attendance() {
     setEditing(null);
   };
 
+  const canSubmitLog = logForm.userId !== '' && logForm.date !== '' && logForm.checkInTime !== '' && logForm.checkOutTime !== '';
+
+  const logAttendance = async () => {
+    if (!canSubmitLog) return;
+    setLoggingBusy(true);
+    try {
+      const r = await api<{ category: string }>('/attendance/manual', {
+        method: 'POST',
+        body: {
+          userId: Number(logForm.userId),
+          checkIn: `${logForm.date} ${logForm.checkInTime}:00`,
+          checkOut: `${logForm.date} ${logForm.checkOutTime}:00`,
+          note: logForm.note,
+        },
+      });
+      toast.success(`Attendance logged — categorized as ${CATEGORY_LABEL[r.category] ?? r.category}`);
+      setLogging(false);
+      setLogForm({ userId: '', date: '', checkInTime: '09:00', checkOutTime: '18:00', note: '' });
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setLoggingBusy(false);
+    }
+  };
+
   const deleteAbsence = async (r: AttendanceRecord) => {
     try {
       await api(`/attendance/${r.id}`, { method: 'DELETE' });
@@ -162,7 +217,6 @@ export default function Attendance() {
     }
   };
 
-  const isValidator = user?.isCeo || user?.role === 'head';
   // Attendance doesn't apply to the CEO at all — there's only one, and the
   // whole system is scoped to everyone else. No self-validation case to
   // handle here (unlike leave, where the CEO still requests/approves their
@@ -260,9 +314,20 @@ export default function Attendance() {
       {/* Validation queue for heads/CEO */}
       {isValidator && (
         <section className="mb-10">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">
-            Awaiting your validation ({pendingTeam.length})
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide">
+              Awaiting your validation ({pendingTeam.length})
+            </h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLogging(true)}
+              disabled={loggableMembers.length === 0}
+              title={loggableMembers.length === 0 ? 'No one in your team yet' : 'Log a missed day for someone on your team'}
+            >
+              <CalendarPlus size={14} className="mr-1.5" /> Log attendance
+            </Button>
+          </div>
           {pendingTeam.length === 0 ? (
             <p className="text-sm text-[#71717A]">Nothing pending.</p>
           ) : (
@@ -456,8 +521,8 @@ export default function Attendance() {
                       {r.validation_status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {r.category === 'absent' && (
+                  <TableCell className="text-right whitespace-nowrap">
+                    {r.category === 'absent' ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -467,6 +532,42 @@ export default function Attendance() {
                       >
                         <Trash2 size={13} />
                       </Button>
+                    ) : (
+                      r.check_out && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Correct the check-in time and re-approve"
+                            className="text-[#A1A1AA] hover:text-[#FAFAFA]"
+                            onClick={() => openEditDialog(r)}
+                          >
+                            <PencilLine size={13} />
+                          </Button>
+                          {r.validation_status !== 'rejected' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Reject this record"
+                              className="text-red-400"
+                              onClick={() => validate(r.id, 'rejected')}
+                            >
+                              <X size={13} />
+                            </Button>
+                          )}
+                          {r.validation_status !== 'approved' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Approve this record"
+                              className="text-emerald-400"
+                              onClick={() => validate(r.id, 'approved')}
+                            >
+                              <Check size={13} />
+                            </Button>
+                          )}
+                        </>
+                      )
                     )}
                   </TableCell>
                 </TableRow>
@@ -496,6 +597,82 @@ export default function Attendance() {
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Approve with this time
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={logging} onOpenChange={setLogging}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <CalendarPlus size={16} />
+            </span>
+            <div>
+              <DialogTitle>Log attendance</DialogTitle>
+              <DialogDescription className="mt-0.5">Backfill a missed day — auto-approved.</DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="space-y-3 stagger">
+            <div className="space-y-1.5">
+              <Label>Employee <span className="text-red-500">*</span></Label>
+              <Select value={logForm.userId} onValueChange={(v) => setLogForm({ ...logForm, userId: v })}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select person" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loggableMembers.map((m) => (
+                    <SelectItem key={m.id} value={String(m.id)}>
+                      {m.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Date <span className="text-red-500">*</span></Label>
+              <Input
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={logForm.date}
+                onChange={(e) => setLogForm({ ...logForm, date: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Check in <span className="text-red-500">*</span></Label>
+                <Input
+                  type="time"
+                  value={logForm.checkInTime}
+                  onChange={(e) => setLogForm({ ...logForm, checkInTime: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Check out <span className="text-red-500">*</span></Label>
+                <Input
+                  type="time"
+                  value={logForm.checkOutTime}
+                  onChange={(e) => setLogForm({ ...logForm, checkOutTime: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Note</Label>
+              <Textarea
+                rows={2}
+                placeholder="e.g. Forgot to check in, confirmed with them directly"
+                value={logForm.note}
+                onChange={(e) => setLogForm({ ...logForm, note: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={logAttendance}
+              disabled={!canSubmitLog || loggingBusy}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Log attendance
             </Button>
           </DialogFooter>
         </DialogContent>

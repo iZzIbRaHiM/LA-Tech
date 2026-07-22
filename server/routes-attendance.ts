@@ -103,6 +103,61 @@ attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => 
   res.json({ ok: true, onlineMinutes: Math.round(Number(finished.online_minutes)) });
 });
 
+// Manual backfill for a missed day: the only prior remedy for a bad or
+// missing record was deleting a system-generated absence, which left no
+// record at all — no way to log that someone actually worked a day they
+// forgot to check in for. Validator-authored, so it's auto-approved
+// immediately (no separate approval round-trip needed for something the
+// validator is entering themselves).
+attendanceRouter.post('/attendance/manual', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const { userId, checkIn, checkOut, note } = req.body ?? {};
+  const targetId = Number(userId);
+  if (!targetId || !checkIn || !checkOut) {
+    return res.status(400).json({ error: 'userId, checkIn, and checkOut are required' });
+  }
+  if (!(await canValidateAttendance(user, { user_id: targetId }))) {
+    return res.status(403).json({ error: 'Not authorized to log attendance for this person' });
+  }
+  const target = await db.prepare('SELECT is_ceo FROM users WHERE id = ? AND active = 1').get(targetId) as
+    | { is_ceo: number }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found or inactive' });
+  if (target.is_ceo) return res.status(400).json({ error: 'Attendance tracking does not apply to the CEO account' });
+
+  const checkInMs = new Date(`${String(checkIn).replace(' ', 'T')}Z`).getTime();
+  const checkOutMs = new Date(`${String(checkOut).replace(' ', 'T')}Z`).getTime();
+  if (!Number.isFinite(checkInMs) || !Number.isFinite(checkOutMs)) {
+    return res.status(400).json({ error: 'Invalid check-in or check-out time' });
+  }
+  if (checkOutMs <= checkInMs) return res.status(400).json({ error: 'Check-out must be after check-in' });
+  const recordDate = String(checkIn).slice(0, 10);
+  if (String(checkOut).slice(0, 10) !== recordDate) {
+    return res.status(400).json({ error: 'Check-in and check-out must be on the same day' });
+  }
+
+  const existing = await db.prepare('SELECT id FROM attendance WHERE user_id = ? AND record_date = ?').get(targetId, recordDate);
+  if (existing) return res.status(409).json({ error: 'A record already exists for that date — edit or delete it instead' });
+
+  const schedule = await resolveSchedule(targetId);
+  const category = computeCategory(String(checkIn), schedule);
+  const onlineMinutes = Math.round((checkOutMs - checkInMs) / 60000);
+  const info = await db
+    .prepare(
+      `INSERT INTO attendance
+         (user_id, check_in, check_out, record_date, category, note, validation_status, validated_by, validated_at, online_minutes, last_active_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, datetime('now'), ?, ?)`
+    )
+    .run(targetId, checkIn, checkOut, recordDate, category, note?.trim() ?? '', user.id, onlineMinutes, checkOut);
+  await logActivity(user.id, 'attendance', Number(info.lastInsertRowid), 'manually_logged', {
+    userId: targetId,
+    recordDate,
+    category,
+  });
+  await notify(targetId, 'attendance', `Attendance for ${recordDate} was logged on your behalf`, '/portal/attendance');
+  res.json({ id: Number(info.lastInsertRowid), category });
+});
+
 // Own history + (for validators) their team's records. Ordered by
 // record_date (not check_in) since absence rows have no check_in.
 attendanceRouter.get('/attendance', requireAuth, async (req, res) => {

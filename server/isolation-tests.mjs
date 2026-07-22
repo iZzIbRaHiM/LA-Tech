@@ -420,6 +420,44 @@ async function main() {
     `got ${mineAfter.status} / ${mineAfter.json?.schedule?.schedule_name}`
   );
 
+  console.log('\n== Manual attendance entry (backfill a missed day) ==');
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const crossDeptLog = await req('bhead', 'POST', '/attendance/manual', {
+    userId: aMember,
+    checkIn: `${yesterday} 09:00:00`,
+    checkOut: `${yesterday} 18:00:00`,
+  });
+  check('bhead DENIED logging attendance for someone outside their authority', denied(crossDeptLog), `got ${crossDeptLog.status}`);
+  const selfLog = await req('ahead', 'POST', '/attendance/manual', {
+    userId: aHead,
+    checkIn: `${yesterday} 09:00:00`,
+    checkOut: `${yesterday} 18:00:00`,
+  });
+  check('ahead DENIED logging their own attendance manually', denied(selfLog), `got ${selfLog.status}`);
+  const goodLog = await req('ahead', 'POST', '/attendance/manual', {
+    userId: aMember,
+    checkIn: `${yesterday} 09:00:00`,
+    checkOut: `${yesterday} 18:00:00`,
+    note: 'Backfilled — confirmed with employee',
+  });
+  check('ahead CAN log attendance for their own report', goodLog.status === 200, `got ${goodLog.status}`);
+  const dupeLog = await req('ahead', 'POST', '/attendance/manual', {
+    userId: aMember,
+    checkIn: `${yesterday} 09:00:00`,
+    checkOut: `${yesterday} 18:00:00`,
+  });
+  check('CEO/head DENIED logging a second record for the same day', dupeLog.status === 409, `got ${dupeLog.status}`);
+  const loggedRecord = (await must('amember', 'GET', '/attendance')).own.find((r) => r.record_date === yesterday);
+  check(
+    'manually-logged record is auto-approved with a computed category',
+    loggedRecord?.validation_status === 'approved' && !!loggedRecord?.category,
+    `got ${JSON.stringify(loggedRecord)}`
+  );
+  // Post-validation correction: a validator can still re-decide an
+  // already-approved record (not just ones sitting in the pending queue).
+  const reReject = await req('ahead', 'POST', `/attendance/${loggedRecord.id}/validate`, { status: 'rejected' });
+  check('ahead CAN re-decide an already-approved record', reReject.status === 200, `got ${reReject.status}`);
+
   console.log('\n== Attachment ACLs follow the owning entity ==');
   const finEntry = (
     await must('ceo', 'POST', `/finance/projects/${project}/entries`, { type: 'expense', amount: 42 })
