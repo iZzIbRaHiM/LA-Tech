@@ -404,6 +404,61 @@ async function main() {
   const creatorEnd = await req('ceo', 'POST', `/meetings/${meetingId}/end`, {});
   check('creator CAN end the meeting', creatorEnd.status === 200, `got ${creatorEnd.status}`);
 
+  console.log('\n== Meeting scheduling (upcoming / start / cancel) ==');
+  const badSchedule = await req('ceo', 'POST', '/meetings', {
+    title: 'bad time',
+    participantIds: [aMember],
+    scheduledAt: 'tomorrow-ish',
+  });
+  check('malformed scheduledAt rejected', badSchedule.status === 400, `got ${badSchedule.status}`);
+  const schedMeeting = (
+    await must('ceo', 'POST', '/meetings', {
+      title: `Iso scheduled ${TS}`,
+      participantIds: [aMember],
+      scheduledAt: '2027-01-15 14:30',
+    })
+  ).id;
+  const joinBeforeStart = await req('amember', 'POST', `/meetings/${schedMeeting}/join`, {});
+  check('participant DENIED joining before start', joinBeforeStart.status === 409, `got ${joinBeforeStart.status}`);
+  const nonCreatorEdit = await req('amember', 'PATCH', `/meetings/${schedMeeting}`, { title: 'hijack' });
+  check('non-creator DENIED editing a scheduled meeting', denied(nonCreatorEdit), `got ${nonCreatorEdit.status}`);
+  const nonCreatorStart = await req('amember', 'POST', `/meetings/${schedMeeting}/start`, {});
+  check('non-creator DENIED starting', nonCreatorStart.status === 403, `got ${nonCreatorStart.status}`);
+  const nonCreatorCancel = await req('amember', 'POST', `/meetings/${schedMeeting}/cancel`, {});
+  check('non-creator DENIED cancelling', nonCreatorCancel.status === 403, `got ${nonCreatorCancel.status}`);
+  await must('ceo', 'PATCH', `/meetings/${schedMeeting}`, { title: `Iso rescheduled ${TS}`, scheduledAt: '2027-01-16 09:00' });
+  const schedList = await must('amember', 'GET', '/meetings');
+  const schedRow = schedList.meetings.find((m) => m.id === schedMeeting);
+  check(
+    'creator edit persisted (title + new time visible to participant)',
+    schedRow?.title === `Iso rescheduled ${TS}` && schedRow?.scheduled_at === '2027-01-16 09:00' && !schedRow?.started_at,
+    `got ${JSON.stringify({ title: schedRow?.title, at: schedRow?.scheduled_at })}`
+  );
+  const creatorStart = await req('ceo', 'POST', `/meetings/${schedMeeting}/start`, {});
+  check('creator CAN start a scheduled meeting', creatorStart.status === 200, `got ${creatorStart.status}`);
+  const joinAfterStart = await req('amember', 'POST', `/meetings/${schedMeeting}/join`, {});
+  check('participant CAN join once started', joinAfterStart.status === 200, `got ${joinAfterStart.status}`);
+  const cancelAfterStart = await req('ceo', 'POST', `/meetings/${schedMeeting}/cancel`, {});
+  check('cancel DENIED after start (end it instead)', cancelAfterStart.status === 409, `got ${cancelAfterStart.status}`);
+  await must('ceo', 'POST', `/meetings/${schedMeeting}/end`, {});
+  const schedMeeting2 = (
+    await must('ceo', 'POST', '/meetings', {
+      title: `Iso to-cancel ${TS}`,
+      participantIds: [aMember],
+      scheduledAt: '2027-02-01 10:00',
+    })
+  ).id;
+  const creatorCancel = await req('ceo', 'POST', `/meetings/${schedMeeting2}/cancel`, {});
+  check('creator CAN cancel a scheduled meeting', creatorCancel.status === 200, `got ${creatorCancel.status}`);
+  const listAfterCancel = await must('amember', 'GET', '/meetings');
+  check(
+    'cancelled meeting gone from participant list',
+    !listAfterCancel.meetings.some((m) => m.id === schedMeeting2),
+    'still present'
+  );
+  const editAfterCancel = await req('ceo', 'PATCH', `/meetings/${schedMeeting2}`, { title: 'zombie' });
+  check('edit DENIED on a cancelled meeting', editAfterCancel.status === 409, `got ${editAfterCancel.status}`);
+
   console.log('\n== Office timings (schedules) ==');
   const nonCeoSched = await req('ahead', 'POST', '/schedules', { name: 'x', officeStartTime: '09:00', officeEndTime: '17:00' });
   check('non-CEO DENIED creating schedules', denied(nonCeoSched), `got ${nonCeoSched.status}`);

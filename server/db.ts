@@ -509,6 +509,17 @@ export async function initDb() {
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
 
+    -- Scheduling: an instant meeting has started_at = its creation moment; a
+    -- scheduled one carries scheduled_at and stays un-started (join blocked)
+    -- until the creator explicitly starts it. Cancel is a soft flag so the
+    -- record survives for the audit trail. Backfill maps every pre-scheduling
+    -- meeting to "started at creation" — a no-op on later boots because new
+    -- rows always get one of the two shapes above.
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS scheduled_at TEXT;
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS started_at TEXT;
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS cancelled_at TEXT;
+    UPDATE meetings SET started_at = created_at WHERE started_at IS NULL AND scheduled_at IS NULL;
+
     CREATE TABLE IF NOT EXISTS meeting_participants (
       meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

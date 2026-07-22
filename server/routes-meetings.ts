@@ -32,18 +32,36 @@ async function isParticipant(meetingId: number, userId: number): Promise<boolean
   return !!row;
 }
 
+// A scheduled time arrives from <input type="datetime-local"> as
+// "YYYY-MM-DDTHH:MM"; stored with a space to match every other timestamp
+// column in this schema.
+function normalizeScheduledAt(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const s = String(raw).replace('T', ' ').trim();
+  if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(s)) return null;
+  return s.slice(0, 16);
+}
+
 // CEO creates a meeting with an explicit participant list (PRD: "with a
 // single person or whoever he wants to add"). The creator is always a
-// participant themselves.
+// participant themselves. Without scheduledAt the meeting starts instantly
+// (the original behavior); with it, the room stays closed until the creator
+// explicitly starts it.
 meetingsRouter.post('/meetings', requireAuth, requireCeo, async (req, res) => {
   const user = req.user!;
-  const { title, participantIds } = req.body ?? {};
+  const { title, participantIds, scheduledAt } = req.body ?? {};
   const ids = Array.isArray(participantIds) ? participantIds.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
   if (ids.length === 0) return res.status(400).json({ error: 'At least one participant is required' });
 
-  const info = await db
-    .prepare('INSERT INTO meetings (title, created_by) VALUES (?, ?)')
-    .run(String(title ?? '').trim() || 'Meeting', user.id);
+  const scheduled = normalizeScheduledAt(scheduledAt);
+  if (scheduledAt !== undefined && scheduledAt !== null && scheduledAt !== '' && !scheduled) {
+    return res.status(400).json({ error: 'scheduledAt must be YYYY-MM-DD HH:MM' });
+  }
+
+  const cleanTitle = String(title ?? '').trim() || 'Meeting';
+  const info = scheduled
+    ? await db.prepare('INSERT INTO meetings (title, created_by, scheduled_at) VALUES (?, ?, ?)').run(cleanTitle, user.id, scheduled)
+    : await db.prepare("INSERT INTO meetings (title, created_by, started_at) VALUES (?, ?, datetime('now'))").run(cleanTitle, user.id);
   const meetingId = Number(info.lastInsertRowid);
 
   const unique = [...new Set([user.id, ...ids])];
@@ -56,22 +74,111 @@ meetingsRouter.post('/meetings', requireAuth, requireCeo, async (req, res) => {
       .prepare('INSERT OR IGNORE INTO meeting_participants (meeting_id, user_id) VALUES (?, ?)')
       .run(meetingId, uid);
     if (uid !== user.id) {
-      await notify(uid, 'meeting', `${user.name} invited you to a meeting: ${String(title ?? '').trim() || 'Meeting'}`, `/portal/meetings/${meetingId}`);
+      const message = scheduled
+        ? `${user.name} scheduled a meeting with you: ${cleanTitle} — ${scheduled}`
+        : `${user.name} invited you to a meeting: ${cleanTitle}`;
+      await notify(uid, 'meeting', message, `/portal/meetings/${meetingId}`);
     }
   }
-  await logActivity(user.id, 'meeting', meetingId, 'created', { participantIds: unique });
+  await logActivity(user.id, 'meeting', meetingId, 'created', { participantIds: unique, scheduledAt: scheduled });
   res.json({ id: meetingId });
 });
 
-// Active meetings I'm invited to (plus recently ended ones for context).
+// Reschedule/rename/re-invite — only while the meeting hasn't started yet.
+// Once a room is live (or done), its record is history, not a draft.
+meetingsRouter.patch('/meetings/:id', requireAuth, requireCeo, async (req, res) => {
+  const id = Number(req.params.id);
+  const user = req.user!;
+  const meeting = await db.prepare('SELECT * FROM meetings WHERE id = ?').get(id) as
+    | { id: number; created_by: number; title: string; scheduled_at: string | null; started_at: string | null; ended_at: string | null; cancelled_at: string | null }
+    | undefined;
+  if (!meeting || !(await isParticipant(id, user.id))) return res.status(404).json({ error: 'Not found' });
+  if (meeting.created_by !== user.id) return res.status(403).json({ error: 'Only the meeting creator can edit it' });
+  if (meeting.started_at || meeting.ended_at) return res.status(409).json({ error: 'Meeting already started' });
+  if (meeting.cancelled_at) return res.status(409).json({ error: 'Meeting was cancelled' });
+
+  const { title, scheduledAt, participantIds } = req.body ?? {};
+  if (title?.trim()) await db.prepare('UPDATE meetings SET title = ? WHERE id = ?').run(title.trim(), id);
+  if (scheduledAt !== undefined) {
+    const scheduled = normalizeScheduledAt(scheduledAt);
+    if (!scheduled) return res.status(400).json({ error: 'scheduledAt must be YYYY-MM-DD HH:MM' });
+    await db.prepare('UPDATE meetings SET scheduled_at = ? WHERE id = ?').run(scheduled, id);
+  }
+  if (Array.isArray(participantIds)) {
+    const ids = new Set([user.id, ...participantIds.map(Number).filter((n) => Number.isFinite(n) && n > 0)]);
+    if (ids.size < 2) return res.status(400).json({ error: 'At least one participant is required' });
+    const before = await db.prepare('SELECT user_id FROM meeting_participants WHERE meeting_id = ?').all(id) as Array<{ user_id: number }>;
+    const beforeIds = new Set(before.map((r) => r.user_id));
+    await db.prepare('DELETE FROM meeting_participants WHERE meeting_id = ?').run(id);
+    for (const uid of ids) {
+      const target = await db.prepare('SELECT id, active FROM users WHERE id = ?').get(uid) as { id: number; active: number } | undefined;
+      if (!target?.active) continue;
+      await db.prepare('INSERT OR IGNORE INTO meeting_participants (meeting_id, user_id) VALUES (?, ?)').run(id, uid);
+      if (uid !== user.id && !beforeIds.has(uid)) {
+        await notify(uid, 'meeting', `${user.name} scheduled a meeting with you: ${meeting.title}`, `/portal/meetings/${id}`);
+      }
+    }
+  }
+  await logActivity(user.id, 'meeting', id, 'updated', { title, scheduledAt });
+  res.json({ ok: true });
+});
+
+// Start a scheduled meeting — opens the room and pings everyone invited.
+meetingsRouter.post('/meetings/:id/start', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const user = req.user!;
+  const meeting = await db.prepare('SELECT * FROM meetings WHERE id = ?').get(id) as
+    | { id: number; created_by: number; title: string; started_at: string | null; ended_at: string | null; cancelled_at: string | null }
+    | undefined;
+  if (!meeting || !(await isParticipant(id, user.id))) return res.status(404).json({ error: 'Not found' });
+  if (meeting.created_by !== user.id) return res.status(403).json({ error: 'Only the meeting creator can start it' });
+  if (meeting.cancelled_at) return res.status(409).json({ error: 'Meeting was cancelled' });
+  if (meeting.ended_at) return res.status(409).json({ error: 'Meeting has ended' });
+  if (!meeting.started_at) {
+    await db.prepare("UPDATE meetings SET started_at = datetime('now') WHERE id = ?").run(id);
+    const others = await db.prepare('SELECT user_id FROM meeting_participants WHERE meeting_id = ? AND user_id != ?').all(id, user.id) as Array<{ user_id: number }>;
+    for (const o of others) {
+      await notify(o.user_id, 'meeting', `Meeting starting now: ${meeting.title}`, `/portal/meetings/${id}`);
+    }
+    await logActivity(user.id, 'meeting', id, 'started');
+  }
+  res.json({ ok: true });
+});
+
+// Cancel a scheduled meeting before it starts. Soft flag — the record
+// survives for the audit trail, it just leaves everyone's list.
+meetingsRouter.post('/meetings/:id/cancel', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const user = req.user!;
+  const meeting = await db.prepare('SELECT * FROM meetings WHERE id = ?').get(id) as
+    | { id: number; created_by: number; title: string; started_at: string | null; ended_at: string | null; cancelled_at: string | null }
+    | undefined;
+  if (!meeting || !(await isParticipant(id, user.id))) return res.status(404).json({ error: 'Not found' });
+  if (meeting.created_by !== user.id) return res.status(403).json({ error: 'Only the meeting creator can cancel it' });
+  if (meeting.started_at || meeting.ended_at) return res.status(409).json({ error: 'Meeting already started — end it instead' });
+  if (!meeting.cancelled_at) {
+    await db.prepare("UPDATE meetings SET cancelled_at = datetime('now') WHERE id = ?").run(id);
+    const others = await db.prepare('SELECT user_id FROM meeting_participants WHERE meeting_id = ? AND user_id != ?').all(id, user.id) as Array<{ user_id: number }>;
+    for (const o of others) {
+      await notify(o.user_id, 'meeting', `Meeting cancelled: ${meeting.title}`, '/portal/meetings');
+    }
+    await logActivity(user.id, 'meeting', id, 'cancelled');
+  }
+  res.json({ ok: true });
+});
+
+// Meetings I'm invited to: live and upcoming plus recently ended for
+// context. Cancelled ones drop out of everyone's list (the cancellation
+// notification is the goodbye).
 meetingsRouter.get('/meetings', requireAuth, async (req, res) => {
   const meetings = await db
     .prepare(
-      `SELECT m.id, m.title, m.created_by, m.ended_at, m.created_at, u.name AS creator_name,
+      `SELECT m.id, m.title, m.created_by, m.ended_at, m.created_at, m.scheduled_at, m.started_at, u.name AS creator_name,
               (SELECT COUNT(*) FROM meeting_participants x WHERE x.meeting_id = m.id AND x.joined_at IS NOT NULL AND x.left_at IS NULL) AS in_room_count
        FROM meetings m
        JOIN meeting_participants p ON p.meeting_id = m.id AND p.user_id = ?
        JOIN users u ON u.id = m.created_by
+       WHERE m.cancelled_at IS NULL
        ORDER BY m.created_at DESC LIMIT 30`
     )
     .all(req.user!.id);
@@ -101,8 +208,11 @@ meetingsRouter.post('/meetings/:id/join', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const user = req.user!;
   if (!(await isParticipant(id, user.id))) return res.status(404).json({ error: 'Not found' });
-  const meeting = await db.prepare('SELECT ended_at FROM meetings WHERE id = ?').get(id) as { ended_at: string | null };
+  const meeting = await db.prepare('SELECT ended_at, started_at, cancelled_at FROM meetings WHERE id = ?').get(id) as
+    { ended_at: string | null; started_at: string | null; cancelled_at: string | null };
+  if (meeting.cancelled_at) return res.status(409).json({ error: 'Meeting was cancelled' });
   if (meeting.ended_at) return res.status(409).json({ error: 'Meeting has ended' });
+  if (!meeting.started_at) return res.status(409).json({ error: 'Meeting has not started yet' });
 
   const peers = await db
     .prepare(

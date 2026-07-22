@@ -136,6 +136,8 @@ export interface Meeting {
   creator_name: string;
   ended_at: string | null;
   created_at: string;
+  scheduled_at: string | null;
+  started_at: string | null;
   in_room_count: number;
 }
 
