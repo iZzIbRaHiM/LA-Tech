@@ -48,6 +48,8 @@ export default function ProjectDetail() {
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletingMilestone, setDeletingMilestone] = useState<Milestone | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+  const [msEditForm, setMsEditForm] = useState({ title: '', dueDate: '' });
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [visibility, setVisibility] = useState<Array<{ id: number; name: string }>>([]);
@@ -83,6 +85,25 @@ export default function ProjectDetail() {
     try {
       await api(`/milestones/${deletingMilestone.id}`, { method: 'DELETE' });
       setDeletingMilestone(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const openEditMilestone = (m: Milestone) => {
+    setEditingMilestone(m);
+    setMsEditForm({ title: m.title, dueDate: m.due_date ?? '' });
+  };
+
+  const saveMilestoneEdit = async () => {
+    if (!editingMilestone || !msEditForm.title.trim()) return;
+    try {
+      await api(`/milestones/${editingMilestone.id}`, {
+        method: 'PATCH',
+        body: { title: msEditForm.title.trim(), dueDate: msEditForm.dueDate || null },
+      });
+      setEditingMilestone(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -236,6 +257,38 @@ export default function ProjectDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!editingMilestone} onOpenChange={(o) => !o && setEditingMilestone(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Flag size={16} />
+            </span>
+            <DialogTitle>Edit milestone</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Title <span className="text-red-500">*</span></Label>
+            <Input value={msEditForm.title} onChange={(e) => setMsEditForm({ ...msEditForm, title: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Due date</Label>
+            <Input
+              type="date"
+              value={msEditForm.dueDate}
+              onChange={(e) => setMsEditForm({ ...msEditForm, dueDate: e.target.value })}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={saveMilestoneEdit}
+              disabled={!msEditForm.title.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {(project.start_date || project.end_date) && (
         <p className="text-xs text-[#71717A] mb-4">
           {project.start_date ?? '…'} → {project.end_date ?? '…'}
@@ -298,12 +351,14 @@ export default function ProjectDetail() {
               <span className={`text-sm ${m.completed_at ? 'line-through text-[#71717A]' : ''}`}>{m.title}</span>
               {m.due_date && <span className="text-xs text-[#71717A]">due {m.due_date}</span>}
               {user?.isCeo && (
-                <button
-                  className="opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-400 transition-opacity"
-                  onClick={() => setDeletingMilestone(m)}
-                >
-                  <Trash2 size={13} />
-                </button>
+                <span className="opacity-0 group-hover:opacity-100 flex items-center gap-2 transition-opacity">
+                  <button className="text-[#71717A] hover:text-[#DFE104]" onClick={() => openEditMilestone(m)}>
+                    <Pencil size={13} />
+                  </button>
+                  <button className="text-[#71717A] hover:text-red-400" onClick={() => setDeletingMilestone(m)}>
+                    <Trash2 size={13} />
+                  </button>
+                </span>
               )}
             </div>
           ))}

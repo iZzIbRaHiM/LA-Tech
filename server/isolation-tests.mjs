@@ -519,6 +519,22 @@ async function main() {
   check('ahead (granted dept head) CAN complete milestone', aheadMsToggle.status === 200, `got ${aheadMsToggle.status}`);
   const bheadMsToggle = await req('bhead', 'PATCH', `/milestones/${msId}`, { completed: false });
   check('bhead DENIED toggling hidden-project milestone', denied(bheadMsToggle), `got ${bheadMsToggle.status}`);
+  // Editing title/dueDate is CEO-only, even for a head granted completion rights.
+  const aheadMsEdit = await req('ahead', 'PATCH', `/milestones/${msId}`, { title: 'renamed by head' });
+  const msAfterHeadEdit = (await must('ceo', 'GET', `/projects/${project}/milestones`)).milestones.find((m) => m.id === msId);
+  check(
+    'ahead (granted dept head) CANNOT rename milestone (CEO-only field)',
+    aheadMsEdit.status === 200 && msAfterHeadEdit.title === `Iso milestone ${TS}`,
+    `got title=${msAfterHeadEdit.title}`
+  );
+  const ceoMsEdit = await must('ceo', 'PATCH', `/milestones/${msId}`, { title: 'Renamed by CEO', dueDate: '2026-12-31' });
+  const msAfterCeoEdit = (await must('ceo', 'GET', `/projects/${project}/milestones`)).milestones.find((m) => m.id === msId);
+  check(
+    'CEO CAN rename milestone and set due date',
+    msAfterCeoEdit.title === 'Renamed by CEO' && msAfterCeoEdit.due_date === '2026-12-31',
+    `got title=${msAfterCeoEdit.title} due=${msAfterCeoEdit.due_date}`
+  );
+  void ceoMsEdit;
 
   console.log('\n== Finance delegate grant/revoke ==');
   const memberGrant = await req('ahead', 'POST', `/users/${bHead}/finance-access`, { grant: true });
