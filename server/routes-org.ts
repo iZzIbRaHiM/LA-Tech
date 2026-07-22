@@ -125,13 +125,18 @@ orgRouter.patch('/me/profile', requireAuth, async (req, res) => {
 orgRouter.get('/departments', requireAuth, async (req, res) => {
   // CEO: full view. Head/member: own dept in full + other dept names/heads
   // (PRD §2 assumption 2 — existence is visible, contents are not).
+  // ?includeArchived=1 (CEO-only) also returns archived departments so they
+  // can be restored from the Departments page. Default stays active-only —
+  // every dropdown elsewhere consumes this endpoint and must not offer
+  // archived rows.
+  const includeArchived = req.user!.isCeo && req.query.includeArchived === '1';
   const departments = await db
     .prepare(
       `SELECT d.id, d.name, d.head_user_id, d.archived_at, u.name AS head_name
        FROM departments d LEFT JOIN users u ON u.id = d.head_user_id
-       WHERE d.archived_at IS NULL`
+       ${includeArchived ? '' : 'WHERE d.archived_at IS NULL'}`
     )
-    .all() as Array<{ id: number; name: string; head_user_id: number | null; head_name: string | null }>;
+    .all() as Array<{ id: number; name: string; head_user_id: number | null; head_name: string | null; archived_at: string | null }>;
 
   const withMembers = await Promise.all(
     departments.map(async (d) => {
@@ -169,6 +174,23 @@ orgRouter.patch('/departments/:id', requireAuth, requireCeo, async (req, res) =>
   if (name?.trim()) {
     await db.prepare('UPDATE departments SET name = ? WHERE id = ?').run(name.trim(), id);
     await logActivity(req.user!.id, 'department', id, 'renamed', { name });
+  }
+  // Archive was previously one-way — an archived department vanished from
+  // GET /departments and no route could bring it back. Unarchive restores it
+  // (with the same live-name-collision guard as create).
+  if (archive === false) {
+    const dept = await db.prepare('SELECT id, name, archived_at FROM departments WHERE id = ?').get(id) as
+      | { id: number; name: string; archived_at: string | null }
+      | undefined;
+    if (!dept) return res.status(404).json({ error: 'Not found' });
+    if (dept.archived_at) {
+      const clash = await db
+        .prepare('SELECT 1 FROM departments WHERE LOWER(name) = LOWER(?) AND archived_at IS NULL AND id != ?')
+        .get(dept.name, id);
+      if (clash) return res.status(409).json({ error: 'An active department with this name already exists — rename it first' });
+      await db.prepare('UPDATE departments SET archived_at = NULL WHERE id = ?').run(id);
+      await logActivity(req.user!.id, 'department', id, 'unarchived');
+    }
   }
   if (archive === true) {
     const openTasks = await db
@@ -272,6 +294,17 @@ orgRouter.delete('/departments/:id/members/:userId', requireAuth, requireCeo, as
 orgRouter.post('/departments/:id/head', requireAuth, requireCeo, async (req, res) => {
   const departmentId = Number(req.params.id);
   const { userId } = req.body ?? {};
+
+  // userId: null clears the head entirely (vacant seat) — previously the
+  // only way to vacate headship was removing that person from the
+  // department altogether.
+  if (userId === null) {
+    await db.prepare("UPDATE memberships SET role = 'member' WHERE department_id = ? AND role = 'head'").run(departmentId);
+    await db.prepare('UPDATE departments SET head_user_id = NULL WHERE id = ?').run(departmentId);
+    await logActivity(req.user!.id, 'department', departmentId, 'head_cleared');
+    return res.json({ ok: true });
+  }
+
   const membership = await db
     .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
     .get(Number(userId), departmentId);

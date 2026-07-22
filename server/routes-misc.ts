@@ -18,6 +18,19 @@ miscRouter.post('/notifications/read', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// The list previously only grew (capped at 50 in the SELECT) — items could
+// be read but never removed. Delete is scoped to the owner by the WHERE
+// clause, so there's nothing to leak: deleting someone else's id is a no-op.
+miscRouter.delete('/notifications/:id', requireAuth, async (req, res) => {
+  await db.prepare('DELETE FROM notifications WHERE id = ? AND user_id = ?').run(Number(req.params.id), req.user!.id);
+  res.json({ ok: true });
+});
+
+miscRouter.delete('/notifications', requireAuth, async (req, res) => {
+  await db.prepare('DELETE FROM notifications WHERE user_id = ?').run(req.user!.id);
+  res.json({ ok: true });
+});
+
 // Activity feed scoped to what the viewer may see (PRD §4.5):
 // CEO everything; Head their department's tasks + own actions; Employee own tasks/actions.
 miscRouter.get('/activity', requireAuth, async (req, res) => {

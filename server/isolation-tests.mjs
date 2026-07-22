@@ -885,6 +885,59 @@ async function main() {
   const r2After = await req('rotator2', 'GET', '/auth/me');
   check('changing device stays signed in', r2After.status === 200, `got ${r2After.status}`);
 
+  console.log('\n== Notifications: own-only delete + clear ==');
+  // ahead got a "You are now a department head" notification during fixture setup.
+  const aheadNotifs = await must('ahead', 'GET', '/notifications');
+  check('ahead has notifications from fixtures', aheadNotifs.notifications.length > 0, 'none found');
+  const targetNotif = aheadNotifs.notifications[0];
+  await must('amember', 'DELETE', `/notifications/${targetNotif.id}`);
+  const aheadNotifsAfterForeign = await must('ahead', 'GET', '/notifications');
+  check(
+    "someone else's delete is a no-op (owner still has it)",
+    aheadNotifsAfterForeign.notifications.some((n) => n.id === targetNotif.id),
+    'notification was deleted cross-user'
+  );
+  await must('ahead', 'DELETE', `/notifications/${targetNotif.id}`);
+  const aheadNotifsAfterOwn = await must('ahead', 'GET', '/notifications');
+  check(
+    'owner CAN delete a single notification',
+    !aheadNotifsAfterOwn.notifications.some((n) => n.id === targetNotif.id),
+    'still present'
+  );
+  await must('ahead', 'DELETE', '/notifications');
+  const aheadNotifsCleared = await must('ahead', 'GET', '/notifications');
+  check('owner CAN clear all notifications', aheadNotifsCleared.notifications.length === 0, `${aheadNotifsCleared.notifications.length} left`);
+
+  console.log('\n== Departments: unarchive + clearable head ==');
+  const archDept = (await must('ceo', 'POST', '/departments', { name: `IsoArch ${TS}` })).id;
+  await must('ceo', 'PATCH', `/departments/${archDept}`, { archive: true });
+  const activeList = await must('ceo', 'GET', '/departments');
+  check('archived dept hidden from default list', !activeList.departments.some((d) => d.id === archDept), 'still visible');
+  const archivedList = await must('ceo', 'GET', '/departments?includeArchived=1');
+  const archivedRow = archivedList.departments.find((d) => d.id === archDept);
+  check('archived dept visible with includeArchived (CEO)', !!archivedRow?.archived_at, 'missing or no archived_at');
+  const headArchList = await must('ahead', 'GET', '/departments?includeArchived=1');
+  check(
+    'includeArchived ignored for non-CEO',
+    !headArchList.departments.some((d) => d.id === archDept),
+    'archived dept leaked to non-CEO'
+  );
+  await must('ceo', 'PATCH', `/departments/${archDept}`, { archive: false });
+  const restoredList = await must('ceo', 'GET', '/departments');
+  check('unarchive restores the department', restoredList.departments.some((d) => d.id === archDept), 'still hidden');
+  // Head clearing on a fresh dept + the renamed identity fixture user.
+  await must('ceo', 'POST', `/departments/${archDept}/members`, { userId: identityTarget });
+  await must('ceo', 'POST', `/departments/${archDept}/head`, { userId: identityTarget });
+  await must('ceo', 'POST', `/departments/${archDept}/head`, { userId: null });
+  const clearedList = await must('ceo', 'GET', '/departments');
+  const clearedDept = clearedList.departments.find((d) => d.id === archDept);
+  const clearedMember = clearedDept.members.find((m) => m.id === identityTarget);
+  check(
+    'head cleared: seat vacant, ex-head demoted to member',
+    clearedDept.head_user_id === null && clearedMember?.role === 'member',
+    `got head=${clearedDept.head_user_id} role=${clearedMember?.role}`
+  );
+
   console.log('\n== Positive controls (grants that SHOULD work) ==');
   const sub = await req('ahead', 'POST', '/tasks', {
     title: `Iso sub-task ${TS}`,

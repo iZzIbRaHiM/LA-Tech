@@ -19,6 +19,7 @@ import {
   Network,
   Video,
   Menu,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -297,25 +298,49 @@ export default function Layout() {
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 p-0">
-              <div className="px-3 py-2 text-sm font-medium border-b border-[#1f1f23]">Notifications</div>
+              <div className="px-3 py-2 text-sm font-medium border-b border-[#1f1f23] flex items-center justify-between">
+                <span>Notifications</span>
+                {notifications.length > 0 && (
+                  <button
+                    className="text-xs text-[#71717A] hover:text-red-400 transition-colors"
+                    title="Clear all notifications"
+                    onClick={() => {
+                      api('/notifications', { method: 'DELETE' }).then(loadNotifications).catch(() => {});
+                    }}
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
               <div className="max-h-80 overflow-auto">
                 {notifications.length === 0 && (
                   <div className="px-3 py-6 text-sm text-[#A1A1AA] text-center">Nothing yet</div>
                 )}
                 {notifications.map((n) => (
-                  <button
-                    key={n.id}
-                    className="prow w-full text-left px-3 py-2 text-sm border-b border-[#141417]"
-                    onClick={() => n.link && navigate(n.link.replace(/^\/portal/, '/portal'))}
-                  >
-                    <div className={`flex items-start gap-2 ${n.read_at ? 'text-[#A1A1AA]' : ''}`}>
-                      {!n.read_at && (
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFE104] shadow-[0_0_6px_rgb(223_225_4/0.6)]" />
-                      )}
-                      <span>{n.message}</span>
-                    </div>
-                    <div className="text-xs text-[#71717A] mt-0.5">{n.created_at}</div>
-                  </button>
+                  <div key={n.id} className="prow group relative border-b border-[#141417]">
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm"
+                      onClick={() => n.link && navigate(n.link.replace(/^\/portal/, '/portal'))}
+                    >
+                      <div className={`flex items-start gap-2 pr-5 ${n.read_at ? 'text-[#A1A1AA]' : ''}`}>
+                        {!n.read_at && (
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#DFE104] shadow-[0_0_6px_rgb(223_225_4/0.6)]" />
+                        )}
+                        <span>{n.message}</span>
+                      </div>
+                      <div className="text-xs text-[#71717A] mt-0.5">{n.created_at}</div>
+                    </button>
+                    <button
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-400 transition-opacity"
+                      title="Dismiss"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        api(`/notifications/${n.id}`, { method: 'DELETE' }).then(loadNotifications).catch(() => {});
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </PopoverContent>

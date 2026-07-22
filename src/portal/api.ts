@@ -97,6 +97,7 @@ export interface Department {
   name: string;
   head_user_id: number | null;
   head_name: string | null;
+  archived_at?: string | null;
   members: Array<{ id: number; name: string; email: string; role: string; finance_access?: number }> | null;
 }
 

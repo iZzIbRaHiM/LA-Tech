@@ -62,11 +62,26 @@ async function run() {
     "DELETE FROM attachments WHERE entity_type = 'task' AND entity_id NOT IN (SELECT id FROM tasks)"
   );
 
-  // Fixture departments: un-head, then archive (already emptied above).
-  await del('department heads cleared', "UPDATE departments SET head_user_id = NULL WHERE name LIKE 'IsoTest %' AND head_user_id IS NOT NULL");
+  // Fixture departments: un-head, then hard-delete the ones nothing real
+  // references (no tasks, no members after the cleanup above — memberships/
+  // project_visibility cascade). Archiving used to be enough when archived
+  // departments were invisible, but the CEO's Departments page now shows an
+  // Archived section for restoring, and dozens of IsoTest rows are noise
+  // there. Any fixture department that somehow still holds a task or member
+  // falls back to archive.
   await del(
-    'departments archived',
-    "UPDATE departments SET archived_at = datetime('now') WHERE name LIKE 'IsoTest %' AND archived_at IS NULL"
+    'department heads cleared',
+    "UPDATE departments SET head_user_id = NULL WHERE (name LIKE 'IsoTest %' OR name LIKE 'IsoArch %') AND head_user_id IS NOT NULL"
+  );
+  await del(
+    'fixture departments deleted',
+    `DELETE FROM departments WHERE (name LIKE 'IsoTest %' OR name LIKE 'IsoArch %')
+     AND id NOT IN (SELECT DISTINCT department_id FROM tasks)
+     AND id NOT IN (SELECT DISTINCT department_id FROM memberships)`
+  );
+  await del(
+    'departments archived (still referenced)',
+    "UPDATE departments SET archived_at = datetime('now') WHERE (name LIKE 'IsoTest %' OR name LIKE 'IsoArch %') AND archived_at IS NULL"
   );
 
   // Fixture work schedules.

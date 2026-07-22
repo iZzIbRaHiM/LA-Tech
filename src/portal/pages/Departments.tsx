@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Plus, Crown, UserMinus, Wallet, Pencil, Archive, UserPlus } from 'lucide-react';
+import { Plus, Crown, UserMinus, Wallet, Pencil, Archive, ArchiveRestore, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,10 +46,11 @@ export default function Departments() {
     null
   );
   const [renameValue, setRenameValue] = useState('');
+  const [archiving, setArchiving] = useState<Department | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<{ departments: Department[] }>('/departments')
+    api<{ departments: Department[] }>('/departments?includeArchived=1')
       .then((r) => setDepartments(r.departments))
       .catch((e) => toast.error(e.message));
     // Assignment pool: active, non-CEO users without a department.
@@ -93,13 +94,13 @@ export default function Departments() {
     }
   };
 
-  const assignHead = async (deptId: number, userId: number) => {
+  const assignHead = async (deptId: number, userId: number | null) => {
     if (busy) return;
     setBusy(true);
     try {
       await api(`/departments/${deptId}/head`, { method: 'POST', body: { userId } });
       load();
-      toast.success('Department head assigned');
+      toast.success(userId === null ? 'Head position cleared' : 'Department head assigned');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -152,12 +153,13 @@ export default function Departments() {
     }
   };
 
-  const archiveDept = async (dept: Department) => {
-    if (busy || !confirm(`Archive "${dept.name}"? This can't be undone from here.`)) return;
+  const confirmArchive = async () => {
+    if (!archiving || busy) return;
     setBusy(true);
     try {
-      await api(`/departments/${dept.id}`, { method: 'PATCH', body: { archive: true } });
+      await api(`/departments/${archiving.id}`, { method: 'PATCH', body: { archive: true } });
       toast.success('Department archived');
+      setArchiving(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -165,6 +167,23 @@ export default function Departments() {
       setBusy(false);
     }
   };
+
+  const restoreDept = async (dept: Department) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api(`/departments/${dept.id}`, { method: 'PATCH', body: { archive: false } });
+      toast.success('Department restored');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const active = departments.filter((d) => !d.archived_at);
+  const archived = departments.filter((d) => !!d.archived_at);
 
   return (
     <div className="p-8 max-w-4xl">
@@ -191,7 +210,7 @@ export default function Departments() {
       </div>
 
       <div className="space-y-6 stagger">
-        {departments.map((d) => (
+        {active.map((d) => (
           <div key={d.id} className="pcard pcard-hover">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#1f1f23]">
               <div className="flex items-center gap-3">
@@ -220,7 +239,7 @@ export default function Departments() {
                     variant="ghost"
                     size="sm"
                     title="Archive department"
-                    onClick={() => archiveDept(d)}
+                    onClick={() => setArchiving(d)}
                     className="text-[#A1A1AA] hover:text-[#FAFAFA]"
                   >
                     <Archive size={13} />
@@ -253,12 +272,22 @@ export default function Departments() {
                     </div>
                     {user?.isCeo && (
                       <div className="flex gap-1">
-                        {m.role !== 'head' && (
+                        {m.role !== 'head' ? (
                           <Button
                             variant="ghost"
                             size="sm"
                             title="Make head"
                             onClick={() => assignHead(d.id, m.id)}
+                          >
+                            <Crown size={13} />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Clear head position (leave it vacant)"
+                            className="text-[#DFE104]"
+                            onClick={() => assignHead(d.id, null)}
                           >
                             <Crown size={13} />
                           </Button>
@@ -295,8 +324,34 @@ export default function Departments() {
             )}
           </div>
         ))}
-        {departments.length === 0 && <p className="text-sm text-[#71717A]">No departments yet.</p>}
+        {active.length === 0 && <p className="text-sm text-[#71717A]">No departments yet.</p>}
       </div>
+
+      {user?.isCeo && archived.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <Archive size={13} /> Archived
+          </h2>
+          <div className="space-y-2">
+            {archived.map((d) => (
+              <div
+                key={d.id}
+                className="prow flex items-center justify-between px-4 py-2.5 border border-[#1f1f23] bg-[#0f0f12] opacity-70"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <span>{d.name}</span>
+                  <Badge variant="outline" className="text-xs text-[#71717A]">
+                    archived {d.archived_at?.slice(0, 10)}
+                  </Badge>
+                </div>
+                <Button variant="ghost" size="sm" title="Restore department" onClick={() => restoreDept(d)}>
+                  <ArchiveRestore size={13} className="mr-1" /> Restore
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Dialog open={!!addingTo} onOpenChange={(o) => !o && setAddingTo(null)}>
         <DialogContent className="max-w-sm">
@@ -370,6 +425,27 @@ export default function Departments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!archiving} onOpenChange={(o) => !o && setArchiving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Archive size={16} />
+            </span>
+            <AlertDialogTitle>Archive "{archiving?.name}"?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            The department disappears from every list, but nothing is deleted — you can restore it from the
+            Archived section below at any time.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmArchive} className="bg-red-600 text-white hover:bg-red-700">
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!removingMember} onOpenChange={(o) => !o && setRemovingMember(null)}>
         <AlertDialogContent>
