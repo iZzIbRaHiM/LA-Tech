@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Download, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -210,6 +218,8 @@ export function FinanceLedger() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [form, setForm] = useState({ type: 'expense', amount: '', category: '', note: '' });
   const [deleting, setDeleting] = useState<Entry | null>(null);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [editForm, setEditForm] = useState({ amount: '', category: '', note: '' });
 
   const load = useCallback(() => {
     api<{ project: { name: string }; entries: Entry[] }>(`/finance/projects/${projectId}`)
@@ -244,6 +254,28 @@ export function FinanceLedger() {
       await api(`/finance/entries/${deleting.id}`, { method: 'DELETE' });
       toast.success(`${deleting.type[0].toUpperCase()}${deleting.type.slice(1)} entry deleted`);
       setDeleting(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const openEditEntry = (e: Entry) => {
+    setEditingEntry(e);
+    setEditForm({ amount: String(e.amount), category: e.category, note: e.note });
+  };
+
+  const canSaveEdit = Number.isFinite(Number(editForm.amount)) && Number(editForm.amount) > 0;
+
+  const saveEntryEdit = async () => {
+    if (!editingEntry || !canSaveEdit) return;
+    try {
+      await api(`/finance/entries/${editingEntry.id}`, {
+        method: 'PATCH',
+        body: { amount: Number(editForm.amount), category: editForm.category, note: editForm.note },
+      });
+      toast.success('Entry updated');
+      setEditingEntry(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -345,15 +377,60 @@ export function FinanceLedger() {
               </TableCell>
               <TableCell className="text-[#A1A1AA]">{e.created_by_name}</TableCell>
               <TableCell>
-                <Button variant="ghost" size="sm" className="text-red-400" onClick={() => setDeleting(e)}>
-                  <Trash2 size={13} />
-                </Button>
+                <div className="flex items-center">
+                  <Button variant="ghost" size="sm" title="Edit entry" onClick={() => openEditEntry(e)}>
+                    <Pencil size={13} />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-red-400" onClick={() => setDeleting(e)}>
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
       {entries.length === 0 && <p className="text-sm text-[#71717A] mt-4">No entries yet.</p>}
+
+      <Dialog open={!!editingEntry} onOpenChange={(o) => !o && setEditingEntry(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
+            <DialogTitle>Edit {editingEntry?.type} entry</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 stagger">
+            <div className="space-y-1.5">
+              <Label>Amount <span className="text-red-500">*</span></Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={editForm.amount}
+                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Input value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Note</Label>
+              <Input value={editForm.note} onChange={(e) => setEditForm({ ...editForm, note: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={saveEntryEdit}
+              disabled={!canSaveEdit}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>

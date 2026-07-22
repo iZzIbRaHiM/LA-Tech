@@ -551,6 +551,24 @@ async function main() {
   const revokedRead = await req('bhead', 'GET', '/finance/overview');
   check('bhead DENIED finance after revoke', denied(revokedRead), `got ${revokedRead.status}`);
 
+  console.log('\n== Finance entry editing ==');
+  const finEditEntry = (await must('ceo', 'POST', `/finance/projects/${project}/entries`, { type: 'expense', amount: 100, category: 'iso-test' })).id;
+  const headEditEntry = await req('ahead', 'PATCH', `/finance/entries/${finEditEntry}`, { amount: 1 });
+  check('non-finance user DENIED editing entries', denied(headEditEntry), `got ${headEditEntry.status}`);
+  const badAmount = await req('ceo', 'PATCH', `/finance/entries/${finEditEntry}`, { amount: -5 });
+  check('negative amount rejected', badAmount.status === 400, `got ${badAmount.status}`);
+  const emptyPatch = await req('ceo', 'PATCH', `/finance/entries/${finEditEntry}`, {});
+  check('empty patch rejected', emptyPatch.status === 400, `got ${emptyPatch.status}`);
+  await must('ceo', 'PATCH', `/finance/entries/${finEditEntry}`, { amount: 250, category: 'corrected', note: 'fixed' });
+  const ledger = await must('ceo', 'GET', `/finance/projects/${project}`);
+  const editedEntry = ledger.entries.find((e) => e.id === finEditEntry);
+  check(
+    'CEO edit persisted (amount + category + note)',
+    Number(editedEntry.amount) === 250 && editedEntry.category === 'corrected' && editedEntry.note === 'fixed',
+    `got ${JSON.stringify({ amount: editedEntry.amount, category: editedEntry.category, note: editedEntry.note })}`
+  );
+  await must('ceo', 'DELETE', `/finance/entries/${finEditEntry}`);
+
   console.log('\n== User lifecycle security ==');
   // Only the CEO manages accounts.
   const headCreate = await req('ahead', 'POST', '/users', { name: 'X', email: `iso.x.${TS}@latechs.org`, password: PW });

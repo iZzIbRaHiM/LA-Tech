@@ -68,6 +68,38 @@ financeRouter.post('/finance/projects/:projectId/entries', async (req, res) => {
   res.json({ id: Number(info.lastInsertRowid) });
 });
 
+// A wrong amount/category/note previously required delete-and-recreate,
+// losing created_by/created_at provenance. Type is deliberately immutable —
+// flipping expense↔income rewrites financial history in a way that deserves
+// an explicit delete + create audit trail, not a quiet edit.
+financeRouter.patch('/finance/entries/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const entry = await db.prepare('SELECT * FROM finance_entries WHERE id = ?').get(id) as
+    | { id: number; project_id: number; type: string; amount: number; category: string; note: string }
+    | undefined;
+  if (!entry) return res.status(404).json({ error: 'Not found' });
+
+  const { amount, category, note } = req.body ?? {};
+  const updates: Record<string, string | number> = {};
+  if (amount !== undefined) {
+    const amt = Number(amount);
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Amount must be a positive number' });
+    updates.amount = amt;
+  }
+  if (category !== undefined) updates.category = String(category).trim() || 'general';
+  if (note !== undefined) updates.note = String(note);
+  if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+  const setClause = Object.keys(updates).map((k) => `${k} = ?`).join(', ');
+  await db.prepare(`UPDATE finance_entries SET ${setClause} WHERE id = ?`).run(...Object.values(updates), id);
+  await logActivity(req.user!.id, 'finance', id, 'entry_updated', {
+    projectId: entry.project_id,
+    before: { amount: entry.amount, category: entry.category },
+    after: updates,
+  });
+  res.json({ ok: true });
+});
+
 financeRouter.delete('/finance/entries/:id', async (req, res) => {
   const id = Number(req.params.id);
   const entry = await db.prepare('SELECT * FROM finance_entries WHERE id = ?').get(id) as
