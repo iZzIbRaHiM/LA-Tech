@@ -13,6 +13,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,6 +42,9 @@ export default function Departments() {
   const [unassigned, setUnassigned] = useState<PortalUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [renaming, setRenaming] = useState<Department | null>(null);
+  const [removingMember, setRemovingMember] = useState<{ deptId: number; deptName: string; member: { id: number; name: string } } | null>(
+    null
+  );
   const [renameValue, setRenameValue] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -108,13 +121,14 @@ export default function Departments() {
     }
   };
 
-  const removeMember = async (deptId: number, userId: number) => {
-    if (busy) return;
+  const confirmRemoveMember = async () => {
+    if (!removingMember || busy) return;
     setBusy(true);
     try {
-      await api(`/departments/${deptId}/members/${userId}`, { method: 'DELETE' });
+      await api(`/departments/${removingMember.deptId}/members/${removingMember.member.id}`, { method: 'DELETE' });
+      toast.success(`${removingMember.member.name} removed from ${removingMember.deptName}`);
+      setRemovingMember(null);
       load();
-      toast.success('Member removed');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -262,7 +276,7 @@ export default function Departments() {
                           variant="ghost"
                           size="sm"
                           title="Remove from department"
-                          onClick={() => removeMember(d.id, m.id)}
+                          onClick={() => setRemovingMember({ deptId: d.id, deptName: d.name, member: { id: m.id, name: m.name } })}
                         >
                           <UserMinus size={13} />
                         </Button>
@@ -356,6 +370,28 @@ export default function Departments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!removingMember} onOpenChange={(o) => !o && setRemovingMember(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <UserMinus size={16} />
+            </span>
+            <AlertDialogTitle>
+              Remove {removingMember?.member.name} from {removingMember?.deptName}?
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            They lose access to this department's tasks and projects. They can be reassigned here later.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRemoveMember} className="bg-red-600 text-white hover:bg-red-700">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

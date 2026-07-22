@@ -47,6 +47,7 @@ export default function ProjectDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingMilestone, setDeletingMilestone] = useState<Milestone | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [visibility, setVisibility] = useState<Array<{ id: number; name: string }>>([]);
@@ -76,6 +77,17 @@ export default function ProjectDetail() {
       .catch(() => {});
   }, [id]);
   useEffect(load, [load]);
+
+  const confirmDeleteMilestone = async () => {
+    if (!deletingMilestone) return;
+    try {
+      await api(`/milestones/${deletingMilestone.id}`, { method: 'DELETE' });
+      setDeletingMilestone(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
 
   useEffect(() => {
     if (!user?.isCeo) return;
@@ -206,6 +218,24 @@ export default function ProjectDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!deletingMilestone} onOpenChange={(o) => !o && setDeletingMilestone(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete milestone "{deletingMilestone?.title}"?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteMilestone} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {(project.start_date || project.end_date) && (
         <p className="text-xs text-[#71717A] mb-4">
           {project.start_date ?? '…'} → {project.end_date ?? '…'}
@@ -270,14 +300,7 @@ export default function ProjectDetail() {
               {user?.isCeo && (
                 <button
                   className="opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-400 transition-opacity"
-                  onClick={async () => {
-                    try {
-                      await api(`/milestones/${m.id}`, { method: 'DELETE' });
-                      load();
-                    } catch (e) {
-                      toast.error(e instanceof Error ? e.message : 'Failed');
-                    }
-                  }}
+                  onClick={() => setDeletingMilestone(m)}
                 >
                   <Trash2 size={13} />
                 </button>
