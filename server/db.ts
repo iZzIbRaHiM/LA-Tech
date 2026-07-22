@@ -248,6 +248,14 @@ export async function initDb() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TEXT;
     CREATE INDEX IF NOT EXISTS idx_users_manager ON users(manager_id);
 
+    -- Permanent deletion is PII erasure + a lockout flag, not a row DELETE:
+    -- finance entries, the audit log, chat messages, and attachments all
+    -- INNER JOIN on their creator/actor user id, so nulling that FK would
+    -- silently drop those rows from every list instead of just anonymizing
+    -- who did it. Keeping the row (with name/email/password scrubbed) is
+    -- what actually preserves financial and audit integrity.
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+
     -- Backfill so the hierarchy is never invalid: everyone reports to the
     -- CEO until explicitly repositioned. No-op after the first deploy.
     UPDATE users SET manager_id = (SELECT id FROM users WHERE is_ceo = 1 LIMIT 1)

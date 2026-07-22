@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, issueSession, logoutAndRevoke, loadSessionUser, bumpTokenVersion } from './auth.js';
 import { passwordPolicyError } from './validation.js';
@@ -292,7 +293,7 @@ orgRouter.post('/departments/:id/head', requireAuth, requireCeo, async (req, res
 orgRouter.get('/users', requireAuth, requireCeo, async (_req, res) => {
   const users = await db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, u.active, u.must_change_password,
+      `SELECT u.id, u.name, u.email, u.is_ceo, u.finance_access, u.active, u.must_change_password, u.deleted_at,
               m.department_id, m.role, d.name AS department_name
        FROM users u
        LEFT JOIN memberships m ON m.user_id = u.id
@@ -429,6 +430,42 @@ orgRouter.post('/users/:id/active', requireAuth, requireCeo, async (req, res) =>
   await db.prepare('UPDATE users SET active = ? WHERE id = ?').run(activate ? 1 : 0, userId);
   if (!activate) await bumpTokenVersion(userId); // belt-and-braces with the active check
   await logActivity(req.user!.id, 'user', userId, activate ? 'reactivated' : 'deactivated');
+  res.json({ ok: true });
+});
+
+// Permanent deletion, PRD-adjacent CEO power: irreversibly erase a person's
+// identity and login. This is PII erasure + a lockout flag, not a row
+// DELETE — see the deleted_at column comment in db.ts for why. Requires
+// the account to already be deactivated, so the open-tasks/membership/
+// reports-bubble-up safety checks above have already run.
+orgRouter.post('/users/:id/permanent-delete', requireAuth, requireCeo, async (req, res) => {
+  const userId = Number(req.params.id);
+  const target = await db.prepare('SELECT id, is_ceo, active, deleted_at FROM users WHERE id = ?').get(userId) as
+    | { id: number; is_ceo: number; active: number; deleted_at: string | null }
+    | undefined;
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (target.is_ceo) return res.status(400).json({ error: 'The CEO account cannot be deleted' });
+  if (target.active) return res.status(409).json({ error: 'Deactivate this account first' });
+  if (target.deleted_at) return res.status(409).json({ error: 'Already permanently deleted' });
+
+  // A random, never-derivable value — not a real bcrypt hash of anything
+  // typeable — so the account can never authenticate again by any path.
+  const unusableHash = bcrypt.hashSync(crypto.randomUUID() + crypto.randomUUID(), 12);
+  await db
+    .prepare(
+      `UPDATE users SET
+         name = 'Deleted User',
+         email = ?,
+         password_hash = ?,
+         phone = '',
+         title = '',
+         finance_access = 0,
+         deleted_at = datetime('now')
+       WHERE id = ?`
+    )
+    .run(`deleted-user-${userId}@deleted.invalid`, unusableHash, userId);
+  await bumpTokenVersion(userId);
+  await logActivity(req.user!.id, 'user', userId, 'permanently_deleted');
   res.json({ ok: true });
 });
 

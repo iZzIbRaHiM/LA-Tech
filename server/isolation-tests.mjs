@@ -515,6 +515,32 @@ async function main() {
   check('deactivated user DENIED login', victimLogin.status === 401, `got ${victimLogin.status}`);
   const assignInactive = await req('ceo', 'POST', `/departments/${deptA}/members`, { userId: victim });
   check('CEO DENIED assigning deactivated user', assignInactive.status === 400, `got ${assignInactive.status}`);
+
+  console.log('\n== Permanent deletion (PII erasure, not a row DELETE) ==');
+  const activeDelete = await req('ceo', 'POST', `/users/${aMember}/permanent-delete`);
+  check('CEO DENIED permanent-delete of a still-active user', activeDelete.status === 409, `got ${activeDelete.status}`);
+  const headDelete = await req('ahead', 'POST', `/users/${victim}/permanent-delete`);
+  check('ahead DENIED permanent-delete', denied(headDelete), `got ${headDelete.status}`);
+  const ceoData = await must('ceo', 'GET', '/auth/me');
+  const ceoDeleteSelf = await req('ceo', 'POST', `/users/${ceoData.user.id}/permanent-delete`);
+  check('CEO DENIED deleting the CEO account', ceoDeleteSelf.status === 400, `got ${ceoDeleteSelf.status}`);
+  const deleteOk = await req('ceo', 'POST', `/users/${victim}/permanent-delete`);
+  check('CEO CAN permanently delete a deactivated user', deleteOk.status === 200, `got ${deleteOk.status}`);
+  const usersAfterDelete = await must('ceo', 'GET', '/users');
+  const deletedRow = usersAfterDelete.users.find((u) => u.id === victim);
+  check(
+    'deleted user shows anonymized name + deleted_at set',
+    deletedRow?.name === 'Deleted User' && !!deletedRow?.deleted_at,
+    `got name=${deletedRow?.name} deleted_at=${deletedRow?.deleted_at}`
+  );
+  const redeleteBlocked = await req('ceo', 'POST', `/users/${victim}/permanent-delete`);
+  check('CEO DENIED deleting an already-deleted user', redeleteBlocked.status === 409, `got ${redeleteBlocked.status}`);
+  const deletedLogin = await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...CSRF },
+    body: JSON.stringify({ email: `iso.victim.${TS}@latechs.org`, password: PW }),
+  });
+  check('permanently-deleted user still DENIED login', deletedLogin.status === 401, `got ${deletedLogin.status}`);
   // Archiving a department with members is blocked.
   const archiveWithMembers = await req('ceo', 'PATCH', `/departments/${deptA}`, { archive: true });
   check('CEO DENIED archiving department with members', archiveWithMembers.status === 409, `got ${archiveWithMembers.status}`);
