@@ -713,16 +713,29 @@ async function main() {
   const markPaidOk = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-paid`);
   check('CEO CAN mark a draft payment paid', markPaidOk.status === 200, `got ${markPaidOk.status}`);
   const remarkPaid = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-paid`);
-  check('CEO DENIED re-marking an already-paid payment', remarkPaid.status === 409, `got ${remarkPaid.status}`);
-  const deletePaidBlocked = await req('ceo', 'DELETE', `/salary/payments/${pay.id}`);
-  check('CEO DENIED deleting a paid payment', deletePaidBlocked.status === 409, `got ${deletePaidBlocked.status}`);
+  check('re-marking an already-paid payment rejected (no-op guard)', remarkPaid.status === 409, `got ${remarkPaid.status}`);
+  const unmarkDenied = await req('ahead', 'POST', `/salary/payments/${pay.id}/mark-unpaid`);
+  check('non-CEO DENIED reverting a payment to draft', denied(unmarkDenied), `got ${unmarkDenied.status}`);
+  const unmarkOk = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-unpaid`);
+  check('CEO CAN revert a paid payment to draft', unmarkOk.status === 200, `got ${unmarkOk.status}`);
+  const historyAfterUnmark = await must('ceo', 'GET', `/salary/${aMember}/payments`);
+  check(
+    'reverted payment shows draft again',
+    historyAfterUnmark.payments.find((p) => p.id === pay.id)?.status === 'draft',
+    `got ${historyAfterUnmark.payments.find((p) => p.id === pay.id)?.status}`
+  );
+  const unmarkDraft = await req('ceo', 'POST', `/salary/payments/${pay.id}/mark-unpaid`);
+  check('reverting an already-draft payment rejected (no-op guard)', unmarkDraft.status === 409, `got ${unmarkDraft.status}`);
+  await must('ceo', 'POST', `/salary/payments/${pay.id}/mark-paid`);
+  const deletePaidOk = await req('ceo', 'DELETE', `/salary/payments/${pay.id}`);
+  check('CEO CAN delete a PAID payment (full-control decision)', deletePaidOk.status === 200, `got ${deletePaidOk.status}`);
   const pay2 = await must('ceo', 'POST', `/salary/${aMember}/payments`, { period: '2026-02' });
   const deleteDraftOk = await req('ceo', 'DELETE', `/salary/payments/${pay2.id}`);
   check('CEO CAN delete a draft payment', deleteDraftOk.status === 200, `got ${deleteDraftOk.status}`);
   const historyAfterDelete = await must('ceo', 'GET', `/salary/${aMember}/payments`);
   check(
-    'deleted draft payment removed from history',
-    !historyAfterDelete.payments.some((p) => p.id === pay2.id),
+    'deleted payments removed from history',
+    !historyAfterDelete.payments.some((p) => p.id === pay.id || p.id === pay2.id),
     'still present'
   );
 

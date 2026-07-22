@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, ChevronUp, Check, Trash2 } from 'lucide-react';
+import { Wallet, ChevronDown, ChevronUp, Check, Trash2, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -95,6 +95,16 @@ export default function Salary() {
     try {
       await api(`/salary/payments/${paymentId}/mark-paid`, { method: 'POST' });
       toast.success('Marked as paid');
+      reloadHistory(empId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const markUnpaid = async (empId: number, paymentId: number) => {
+    try {
+      await api(`/salary/payments/${paymentId}/mark-unpaid`, { method: 'POST' });
+      toast.success('Reverted to draft');
       reloadHistory(empId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -216,28 +226,36 @@ export default function Salary() {
                               >
                                 {p.status}
                               </Badge>
-                              {p.status === 'draft' && (
-                                <>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    title="Mark as paid"
-                                    className="text-emerald-400 h-6 px-1.5"
-                                    onClick={() => markPaid(emp.id, p.id)}
-                                  >
-                                    <Check size={13} />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    title="Delete this draft payment"
-                                    className="text-red-400 h-6 px-1.5"
-                                    onClick={() => setDeletingPayment(p)}
-                                  >
-                                    <Trash2 size={13} />
-                                  </Button>
-                                </>
+                              {p.status === 'draft' ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Mark as paid"
+                                  className="text-emerald-400 h-6 px-1.5"
+                                  onClick={() => markPaid(emp.id, p.id)}
+                                >
+                                  <Check size={13} />
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Revert to draft (mark as unpaid)"
+                                  className="text-[#A1A1AA] h-6 px-1.5"
+                                  onClick={() => markUnpaid(emp.id, p.id)}
+                                >
+                                  <Undo2 size={13} />
+                                </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Delete this payment"
+                                className="text-red-400 h-6 px-1.5"
+                                onClick={() => setDeletingPayment(p)}
+                              >
+                                <Trash2 size={13} />
+                              </Button>
                             </div>
                           </div>
                         ))}
@@ -296,8 +314,8 @@ export default function Salary() {
             <AlertDialogTitle>Delete payment for {deletingPayment?.period}?</AlertDialogTitle>
           </AlertDialogHeader>
           <AlertDialogDescription>
-            This permanently removes this draft payment record. Only draft payments can be deleted — once marked
-            paid, a payment stays permanent.
+            This permanently removes this {deletingPayment?.status} payment record from the payroll history and the
+            Finance totals. The deletion is recorded in the audit log.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
