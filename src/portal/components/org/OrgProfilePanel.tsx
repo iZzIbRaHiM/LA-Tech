@@ -602,27 +602,30 @@ export default function OrgProfilePanel({
       {/* Deactivate confirmation with downstream impact */}
       <AlertDialog open={deactivateOpen} onOpenChange={setDeactivateOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <UserX size={16} />
+            </span>
             <AlertDialogTitle>Deactivate {e.name}?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm">
-                <p>
-                  Their session ends immediately and they can no longer sign in. Nothing is deleted — tasks, attendance,
-                  and salary history are all kept, and they can be reactivated later.
-                </p>
-                {directReports.length > 0 ? (
-                  <p>
-                    <strong className="text-[#FAFAFA]">{directReports.length} direct report{directReports.length === 1 ? '' : 's'}</strong>{' '}
-                    ({directReports.map((r) => r.name).join(', ')}) will move up to report to{' '}
-                    <strong className="text-[#FAFAFA]">{manager?.name ?? 'the CEO'}</strong>.
-                  </p>
-                ) : (
-                  <p>They have no direct reports.</p>
-                )}
-                <p className="text-[#71717A]">Blocked if they still have open tasks — reassign those first.</p>
-              </div>
-            </AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm">
+              <p>
+                Their session ends immediately and they can no longer sign in. Nothing is deleted — tasks, attendance,
+                and salary history are all kept, and they can be reactivated later.
+              </p>
+              {directReports.length > 0 ? (
+                <p>
+                  <strong className="text-[#FAFAFA]">{directReports.length} direct report{directReports.length === 1 ? '' : 's'}</strong>{' '}
+                  ({directReports.map((r) => r.name).join(', ')}) will move up to report to{' '}
+                  <strong className="text-[#FAFAFA]">{manager?.name ?? 'the CEO'}</strong>.
+                </p>
+              ) : (
+                <p>They have no direct reports.</p>
+              )}
+              <p className="text-[#71717A]">Blocked if they still have open tasks — reassign those first.</p>
+            </div>
+          </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={deactivate} className="bg-red-600 text-white hover:bg-red-700">

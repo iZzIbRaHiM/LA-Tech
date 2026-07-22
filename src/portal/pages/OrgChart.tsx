@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from '@dagrejs/dagre';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, GitBranch, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -459,30 +459,33 @@ function OrgChartInner() {
       {/* Staged drag-reassignment confirmation */}
       <AlertDialog open={!!stagedMove} onOpenChange={(o) => !o && cancelMove()}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <GitBranch size={16} />
+            </span>
             <AlertDialogTitle>
               Move {stagedMove?.source.name} under {stagedMove?.target.name}?
             </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm">
-                <p>
-                  {stagedMove?.source.name} will report to{' '}
-                  <strong className="text-[#FAFAFA]">{stagedMove?.target.name}</strong>
-                  {stagedMove?.target.title ? ` (${stagedMove.target.title})` : ''}, who becomes their approver for
-                  attendance and leave.
-                </p>
-                {stagedMoveReportCount > 0 && (
-                  <p>
-                    Their whole branch moves with them —{' '}
-                    <strong className="text-[#FAFAFA]">
-                      {stagedMoveReportCount} {stagedMoveReportCount === 1 ? 'person' : 'people'}
-                    </strong>{' '}
-                    below them keep reporting to them.
-                  </p>
-                )}
-              </div>
-            </AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm">
+              <p>
+                {stagedMove?.source.name} will report to{' '}
+                <strong className="text-[#FAFAFA]">{stagedMove?.target.name}</strong>
+                {stagedMove?.target.title ? ` (${stagedMove.target.title})` : ''}, who becomes their approver for
+                attendance and leave.
+              </p>
+              {stagedMoveReportCount > 0 && (
+                <p>
+                  Their whole branch moves with them —{' '}
+                  <strong className="text-[#FAFAFA]">
+                    {stagedMoveReportCount} {stagedMoveReportCount === 1 ? 'person' : 'people'}
+                  </strong>{' '}
+                  below them keep reporting to them.
+                </p>
+              )}
+            </div>
+          </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={cancelMove}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmMove} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
@@ -495,12 +498,15 @@ function OrgChartInner() {
       {/* Create employee (optionally under a specific manager) */}
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <UserPlus size={16} />
+            </span>
             <DialogTitle>
               New employee{createManager ? ` — reporting to ${createManager.name}` : ''}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Full name <span className="text-red-500">*</span></Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

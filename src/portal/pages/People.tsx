@@ -285,7 +285,10 @@ export default function People() {
       {/* Reset password */}
       <Dialog open={!!resetting} onOpenChange={(o) => !o && setResetting(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <KeyRound size={16} />
+            </span>
             <DialogTitle>Reset password for {resetting?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">

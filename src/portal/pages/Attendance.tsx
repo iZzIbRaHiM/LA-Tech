@@ -478,7 +478,10 @@ export default function Attendance() {
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <PencilLine size={16} />
+            </span>
             <DialogTitle>Correct check-in time</DialogTitle>
           </DialogHeader>
           <div className="space-y-1.5">

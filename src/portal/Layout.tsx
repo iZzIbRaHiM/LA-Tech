@@ -391,10 +391,13 @@ export default function Layout() {
       {/* Change password */}
       <Dialog open={pwOpen} onOpenChange={setPwOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <KeyRound size={16} />
+            </span>
             <DialogTitle>Change password</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Current password <span className="text-red-500">*</span></Label>
               <PasswordInput

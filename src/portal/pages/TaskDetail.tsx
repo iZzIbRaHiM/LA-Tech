@@ -242,16 +242,19 @@ export default function TaskDetail() {
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
             <AlertDialogTitle>Delete "{task.title}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Permanently removes this task, its comments and attachments
-              {subtasks.length > 0
-                ? `, and its ${subtasks.length} sub-task${subtasks.length === 1 ? '' : 's'}`
-                : ''}
-              . This cannot be undone.
-            </AlertDialogDescription>
           </AlertDialogHeader>
+          <AlertDialogDescription>
+            Permanently removes this task, its comments and attachments
+            {subtasks.length > 0
+              ? `, and its ${subtasks.length} sub-task${subtasks.length === 1 ? '' : 's'}`
+              : ''}
+            . This cannot be undone.
+          </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Clock, Users2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -165,11 +165,14 @@ export default function OfficeTimings() {
       {/* Create / edit timing */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Clock size={16} />
+            </span>
             <DialogTitle>{editing?.id ? 'Edit timing' : 'New office timing'}</DialogTitle>
           </DialogHeader>
           {editing && (
-            <div className="space-y-3">
+            <div className="space-y-3 stagger">
               <div className="space-y-1.5">
                 <Label>Name <span className="text-red-500">*</span></Label>
                 <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} placeholder="e.g. Night shift" />
@@ -207,10 +210,13 @@ export default function OfficeTimings() {
       {/* Assign timing */}
       <Dialog open={!!assigning} onOpenChange={(o) => !o && setAssigning(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Users2 size={16} />
+            </span>
             <DialogTitle>Assign "{assigning?.name}"</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 stagger">
             <div className="space-y-1.5">
               <Label>Assign to</Label>
               <Select value={assignType} onValueChange={(v) => { setAssignType(v as 'department' | 'user'); setAssignTarget(''); }}>
