@@ -245,3 +245,31 @@ tasksRouter.post('/tasks/:id/comments', requireAuth, async (req, res) => {
   }
   res.json({ ok: true });
 });
+
+// Comment edit/delete follows the chat-message rule: author-only — a
+// comment is someone's words, so even the CEO can't rewrite it.
+tasksRouter.patch('/tasks/:id/comments/:commentId', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const comment = await db
+    .prepare('SELECT id, author_id FROM task_comments WHERE id = ? AND task_id = ?')
+    .get(Number(req.params.commentId), Number(req.params.id)) as { id: number; author_id: number } | undefined;
+  if (!comment) return res.status(404).json({ error: 'Not found' });
+  if (comment.author_id !== user.id) return res.status(403).json({ error: 'You can only edit your own comments' });
+  const { body } = req.body ?? {};
+  if (!body?.trim()) return res.status(400).json({ error: 'Comment body required' });
+  await db
+    .prepare("UPDATE task_comments SET body = ?, edited_at = to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS') WHERE id = ?")
+    .run(body.trim(), comment.id);
+  res.json({ ok: true });
+});
+
+tasksRouter.delete('/tasks/:id/comments/:commentId', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const comment = await db
+    .prepare('SELECT id, author_id FROM task_comments WHERE id = ? AND task_id = ?')
+    .get(Number(req.params.commentId), Number(req.params.id)) as { id: number; author_id: number } | undefined;
+  if (!comment) return res.status(404).json({ error: 'Not found' });
+  if (comment.author_id !== user.id) return res.status(403).json({ error: 'You can only delete your own comments' });
+  await db.prepare('DELETE FROM task_comments WHERE id = ?').run(comment.id);
+  res.json({ ok: true });
+});

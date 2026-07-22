@@ -307,6 +307,7 @@ export async function initDb() {
       body TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')
     );
+    ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS edited_at TEXT;
 
     CREATE TABLE IF NOT EXISTS finance_entries (
       id SERIAL PRIMARY KEY,

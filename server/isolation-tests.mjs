@@ -726,6 +726,57 @@ async function main() {
     'still present'
   );
 
+  console.log('\n== User identity editing (name/email, CEO-only) ==');
+  const identityTarget = await mkUser('Iso Rename Me', `iso.rename.${TS}@latechs.org`);
+  const headRename = await req('ahead', 'PATCH', `/org-tree/users/${identityTarget}`, { name: 'Hacked' });
+  check('non-CEO DENIED editing name/email', denied(headRename), `got ${headRename.status}`);
+  const badEmail = await req('ceo', 'PATCH', `/org-tree/users/${identityTarget}`, { email: 'not-an-email' });
+  check('invalid email rejected', badEmail.status === 400, `got ${badEmail.status}`);
+  const dupIdentityEmail = await req('ceo', 'PATCH', `/org-tree/users/${identityTarget}`, { email: `iso.ahead.${TS}@latechs.org` });
+  check('duplicate email rejected', dupIdentityEmail.status === 409, `got ${dupIdentityEmail.status}`);
+  const emptyName = await req('ceo', 'PATCH', `/org-tree/users/${identityTarget}`, { name: '   ' });
+  check('empty name rejected', emptyName.status === 400, `got ${emptyName.status}`);
+  await must('ceo', 'PATCH', `/org-tree/users/${identityTarget}`, {
+    name: 'Iso Renamed',
+    email: `iso.renamed.${TS}@latechs.org`,
+  });
+  const usersAfterRename = await must('ceo', 'GET', '/users');
+  const renamedRow = usersAfterRename.users.find((u) => u.id === identityTarget);
+  check(
+    'CEO rename + email change persisted',
+    renamedRow?.name === 'Iso Renamed' && renamedRow?.email === `iso.renamed.${TS}@latechs.org`,
+    `got ${JSON.stringify({ name: renamedRow?.name, email: renamedRow?.email })}`
+  );
+  await login('renamed', `iso.renamed.${TS}@latechs.org`, PW);
+  const renamedMe = await req('renamed', 'GET', '/auth/me');
+  check('user CAN sign in with the new email', renamedMe.status === 200, `got ${renamedMe.status}`);
+
+  console.log('\n== Task comments: author-only edit/delete ==');
+  await must('ahead', 'POST', `/tasks/${deptTask}/comments`, { body: 'original comment' });
+  const taskDetail = await must('ahead', 'GET', `/tasks/${deptTask}`);
+  const aheadComment = taskDetail.comments.find((c) => c.body === 'original comment');
+  const ceoEditComment = await req('ceo', 'PATCH', `/tasks/${deptTask}/comments/${aheadComment.id}`, { body: 'rewritten' });
+  check("even the CEO DENIED editing someone else's comment", ceoEditComment.status === 403, `got ${ceoEditComment.status}`);
+  const ceoDeleteComment = await req('ceo', 'DELETE', `/tasks/${deptTask}/comments/${aheadComment.id}`);
+  check("even the CEO DENIED deleting someone else's comment", ceoDeleteComment.status === 403, `got ${ceoDeleteComment.status}`);
+  const ownCommentEdit = await req('ahead', 'PATCH', `/tasks/${deptTask}/comments/${aheadComment.id}`, { body: 'corrected comment' });
+  check('author CAN edit their own comment', ownCommentEdit.status === 200, `got ${ownCommentEdit.status}`);
+  const detailAfterEdit = await must('ahead', 'GET', `/tasks/${deptTask}`);
+  const editedComment = detailAfterEdit.comments.find((c) => c.id === aheadComment.id);
+  check(
+    'comment edit persisted with edited_at stamp',
+    editedComment.body === 'corrected comment' && !!editedComment.edited_at,
+    `got body=${editedComment.body} edited_at=${editedComment.edited_at}`
+  );
+  const ownCommentDelete = await req('ahead', 'DELETE', `/tasks/${deptTask}/comments/${aheadComment.id}`);
+  check('author CAN delete their own comment', ownCommentDelete.status === 200, `got ${ownCommentDelete.status}`);
+  const detailAfterDelete = await must('ahead', 'GET', `/tasks/${deptTask}`);
+  check(
+    'deleted comment gone',
+    !detailAfterDelete.comments.some((c) => c.id === aheadComment.id),
+    'still present'
+  );
+
   console.log('\n== Chat: membership + message ownership ==');
   const chatGroup = (
     await must('ceo', 'POST', '/chat/groups', { name: `Iso Chat ${TS}`, memberIds: [aHead, aMember] })

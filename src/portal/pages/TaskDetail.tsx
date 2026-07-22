@@ -37,9 +37,11 @@ import { api, type Task, type Department } from '../api';
 
 interface Comment {
   id: number;
+  author_id: number;
   author_name: string;
   body: string;
   created_at: string;
+  edited_at: string | null;
 }
 
 const STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
@@ -60,6 +62,9 @@ export default function TaskDetail() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [comment, setComment] = useState('');
+  const [editingComment, setEditingComment] = useState<Comment | null>(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [deletingComment, setDeletingComment] = useState<Comment | null>(null);
   const [subTitle, setSubTitle] = useState('');
   const [subAssignee, setSubAssignee] = useState('');
   const [members, setMembers] = useState<Array<{ id: number; name: string }>>([]);
@@ -157,6 +162,28 @@ export default function TaskDetail() {
     try {
       await api(`/tasks/${task.id}/comments`, { method: 'POST', body: { body: comment } });
       setComment('');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const saveCommentEdit = async () => {
+    if (!task || !editingComment || !commentDraft.trim()) return;
+    try {
+      await api(`/tasks/${task.id}/comments/${editingComment.id}`, { method: 'PATCH', body: { body: commentDraft } });
+      setEditingComment(null);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!task || !deletingComment) return;
+    try {
+      await api(`/tasks/${task.id}/comments/${deletingComment.id}`, { method: 'DELETE' });
+      setDeletingComment(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -329,9 +356,28 @@ export default function TaskDetail() {
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Comments</h2>
         <div className="space-y-3 mb-4">
           {comments.map((c) => (
-            <div key={c.id} className="pcard animate-fade-up px-3 py-2">
-              <div className="text-xs text-[#71717A] mb-1">
-                {c.author_name} · {c.created_at}
+            <div key={c.id} className="pcard animate-fade-up px-3 py-2 group">
+              <div className="text-xs text-[#71717A] mb-1 flex items-center gap-2">
+                <span className="flex-1">
+                  {c.author_name} · {c.created_at}
+                  {c.edited_at && ' · edited'}
+                </span>
+                {c.author_id === user?.id && (
+                  <span className="opacity-0 group-hover:opacity-100 flex items-center gap-2 transition-opacity">
+                    <button
+                      className="text-[#71717A] hover:text-[#DFE104]"
+                      onClick={() => {
+                        setEditingComment(c);
+                        setCommentDraft(c.body);
+                      }}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button className="text-[#71717A] hover:text-red-400" onClick={() => setDeletingComment(c)}>
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                )}
               </div>
               <div className="text-sm whitespace-pre-wrap">{c.body}</div>
             </div>
@@ -429,6 +475,45 @@ export default function TaskDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!editingComment} onOpenChange={(o) => !o && setEditingComment(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
+            <DialogTitle>Edit comment</DialogTitle>
+          </DialogHeader>
+          <Textarea value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} rows={3} />
+          <DialogFooter>
+            <Button
+              onClick={saveCommentEdit}
+              disabled={!commentDraft.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingComment} onOpenChange={(o) => !o && setDeletingComment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete this comment?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteComment} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -44,8 +44,27 @@ orgHierarchyRouter.patch('/org-tree/users/:id', requireAuth, requireCeo, async (
   if (!target) return res.status(404).json({ error: 'User not found' });
   if (!target.active) return res.status(400).json({ error: 'User is deactivated — reactivate first' });
 
-  const { managerId, title, phone } = req.body ?? {};
+  const { managerId, title, phone, name, email } = req.body ?? {};
   const sets: Array<[string, unknown]> = [];
+
+  // Name/email were previously only writable at creation — a typo'd name,
+  // or an email (the login identifier) that changed, was permanently stuck.
+  // Same dup-email guard as POST /users; email change notifies the user
+  // since it changes how they sign in.
+  if (name !== undefined) {
+    const cleanName = String(name).trim();
+    if (!cleanName) return res.status(400).json({ error: 'Name cannot be empty' });
+    sets.push(['name', cleanName]);
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return res.status(400).json({ error: 'Invalid email' });
+    const existing = await db.prepare('SELECT id FROM users WHERE lower(email) = ? AND id != ?').get(cleanEmail, id) as
+      | { id: number }
+      | undefined;
+    if (existing) return res.status(409).json({ error: 'That email is already in use' });
+    sets.push(['email', cleanEmail]);
+  }
 
   if (managerId !== undefined) {
     if (target.is_ceo) return res.status(400).json({ error: "The CEO's manager cannot be changed" });
@@ -69,10 +88,13 @@ orgHierarchyRouter.patch('/org-tree/users/:id', requireAuth, requireCeo, async (
     await db.prepare(`UPDATE users SET ${col} = ? WHERE id = ?`).run(val, id);
   }
   if (sets.length) {
-    await logActivity(actor.id, 'user', id, 'org_updated', { managerId, title, phone });
+    await logActivity(actor.id, 'user', id, 'org_updated', { managerId, title, phone, name, email });
   }
   if (managerId !== undefined && Number(managerId) !== target.manager_id) {
     await notify(id, 'org', 'Your manager has changed', '/portal/org');
+  }
+  if (email !== undefined) {
+    await notify(id, 'org', `Your sign-in email was changed to ${String(email).trim().toLowerCase()}`, '/portal');
   }
   res.json({ ok: true });
 });

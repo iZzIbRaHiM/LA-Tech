@@ -126,7 +126,7 @@ export default function OrgProfilePanel({
 }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ title: '', phone: '' });
+  const [form, setForm] = useState({ title: '', phone: '', name: '', email: '' });
   const [managerOpen, setManagerOpen] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -153,7 +153,7 @@ export default function OrgProfilePanel({
   // Reset per-employee state whenever the panel targets someone new.
   useEffect(() => {
     if (!employee) return;
-    setForm({ title: employee.title, phone: employee.phone });
+    setForm({ title: employee.title, phone: employee.phone, name: employee.name, email: employee.email });
     setTasks([]);
     setAttendance([]);
     setSalary(null);
@@ -199,8 +199,14 @@ export default function OrgProfilePanel({
 
   const saveDetails = () =>
     run(async () => {
-      await api(`/org-tree/users/${e.id}`, { method: 'PATCH', body: { title: form.title, phone: form.phone } });
+      await api(`/org-tree/users/${e.id}`, {
+        method: 'PATCH',
+        body: { title: form.title, phone: form.phone, name: form.name, email: form.email },
+      });
     }, 'Details saved');
+
+  const detailsUnchanged =
+    form.title === e.title && form.phone === e.phone && form.name === e.name && form.email === e.email;
 
   const setManager = (managerId: number) =>
     run(async () => {
@@ -300,6 +306,14 @@ export default function OrgProfilePanel({
           {/* ---------- Details ---------- */}
           <TabsContent value="details" className="space-y-4 pt-4">
             <div className="space-y-1.5">
+              <Label>Name <span className="text-red-500">*</span></Label>
+              <Input value={form.name} onChange={(ev) => setForm({ ...form, name: ev.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email (sign-in) <span className="text-red-500">*</span></Label>
+              <Input type="email" value={form.email} onChange={(ev) => setForm({ ...form, email: ev.target.value })} />
+            </div>
+            <div className="space-y-1.5">
               <Label>Role / title</Label>
               <Input value={form.title} onChange={(ev) => setForm({ ...form, title: ev.target.value })} placeholder="e.g. Overall Manager" />
             </div>
@@ -310,7 +324,7 @@ export default function OrgProfilePanel({
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={saveDetails}
-                disabled={busy || (form.title === e.title && form.phone === e.phone)}
+                disabled={busy || detailsUnchanged || !form.name.trim() || !form.email.trim()}
                 size="sm"
                 className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
               >
