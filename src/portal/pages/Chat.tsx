@@ -11,6 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile } from '../api';
@@ -52,6 +62,7 @@ export default function Chat() {
   const [draft, setDraft] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ChatGroup | null>(null);
+  const [deleting, setDeleting] = useState<ChatGroup | null>(null);
   const [allUsers, setAllUsers] = useState<PortalUser[]>([]);
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
@@ -182,12 +193,13 @@ export default function Chat() {
     }
   };
 
-  const deleteGroup = async (g: ChatGroup) => {
-    if (!confirm(`Delete "${g.name}"? This removes it for everyone, including its message history.`)) return;
+  const confirmDeleteGroup = async () => {
+    if (!deleting) return;
     try {
-      await api(`/chat/groups/${g.id}`, { method: 'DELETE' });
+      await api(`/chat/groups/${deleting.id}`, { method: 'DELETE' });
       toast.success('Group deleted');
-      if (activeId === g.id) setActiveId(null);
+      if (activeId === deleting.id) setActiveId(null);
+      setDeleting(null);
       loadGroups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -256,7 +268,7 @@ export default function Chat() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteGroup(g);
+                      setDeleting(g);
                     }}
                     className="text-[#71717A] hover:text-red-400 p-1"
                   >
@@ -402,6 +414,26 @@ export default function Chat() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete "{deleting?.name}"?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            This removes it for everyone, including its entire message history. This cannot be undone.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteGroup} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -13,6 +13,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -37,6 +47,7 @@ export default function OfficeTimings() {
   const [assignType, setAssignType] = useState<'department' | 'user'>('department');
   const [assignTarget, setAssignTarget] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<WorkSchedule | null>(null);
 
   const load = useCallback(() => {
     api<{ schedules: WorkSchedule[]; assignments: ScheduleAssignment[] }>('/schedules')
@@ -80,10 +91,14 @@ export default function OfficeTimings() {
     }, editing.id ? 'Timing updated' : 'Timing created');
   };
 
-  const deleteSchedule = (s: WorkSchedule) =>
+  const confirmDeleteSchedule = () => {
+    if (!deleting) return;
+    const s = deleting;
     run(async () => {
       await api(`/schedules/${s.id}`, { method: 'DELETE' });
+      setDeleting(null);
     }, `"${s.name}" deleted — affected people fall back to the company default`);
+  };
 
   const assign = () => {
     if (!assigning || !assignTarget) return;
@@ -138,7 +153,7 @@ export default function OfficeTimings() {
                     <Button variant="ghost" size="sm" title="Edit" onClick={() => setEditing({ ...s })}>
                       <Pencil size={13} />
                     </Button>
-                    <Button variant="ghost" size="sm" title="Delete" className="text-red-400" onClick={() => deleteSchedule(s)}>
+                    <Button variant="ghost" size="sm" title="Delete" className="text-red-400" onClick={() => setDeleting(s)}>
                       <Trash2 size={13} />
                     </Button>
                   </div>
@@ -250,6 +265,26 @@ export default function OfficeTimings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete "{deleting?.name}"?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            Anyone currently assigned this timing falls back to the company default. This cannot be undone.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteSchedule} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

@@ -19,6 +19,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import Attachments from '../Attachments';
@@ -199,6 +209,7 @@ export function FinanceLedger() {
   const [name, setName] = useState('');
   const [entries, setEntries] = useState<Entry[]>([]);
   const [form, setForm] = useState({ type: 'expense', amount: '', category: '', note: '' });
+  const [deleting, setDeleting] = useState<Entry | null>(null);
 
   const load = useCallback(() => {
     api<{ project: { name: string }; entries: Entry[] }>(`/finance/projects/${projectId}`)
@@ -227,9 +238,12 @@ export function FinanceLedger() {
     }
   };
 
-  const remove = async (id: number) => {
+  const remove = async () => {
+    if (!deleting) return;
     try {
-      await api(`/finance/entries/${id}`, { method: 'DELETE' });
+      await api(`/finance/entries/${deleting.id}`, { method: 'DELETE' });
+      toast.success(`${deleting.type[0].toUpperCase()}${deleting.type.slice(1)} entry deleted`);
+      setDeleting(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -331,7 +345,7 @@ export function FinanceLedger() {
               </TableCell>
               <TableCell className="text-[#A1A1AA]">{e.created_by_name}</TableCell>
               <TableCell>
-                <Button variant="ghost" size="sm" onClick={() => remove(e.id)}>
+                <Button variant="ghost" size="sm" className="text-red-400" onClick={() => setDeleting(e)}>
                   <Trash2 size={13} />
                 </Button>
               </TableCell>
@@ -340,6 +354,34 @@ export function FinanceLedger() {
         </TableBody>
       </Table>
       {entries.length === 0 && <p className="text-sm text-[#71717A] mt-4">No entries yet.</p>}
+
+      <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>
+              Delete this {deleting?.type} entry?
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>
+            {deleting && (
+              <>
+                {fmt(deleting.amount)} · {deleting.category || 'uncategorized'}
+                {deleting.note ? ` · ${deleting.note}` : ''}. This permanently removes it from the ledger and cannot
+                be undone.
+              </>
+            )}
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={remove} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -13,6 +13,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -47,6 +57,7 @@ export default function People() {
   const [users, setUsers] = useState<PortalUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState<PortalUser | null>(null);
+  const [deactivating, setDeactivating] = useState<PortalUser | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [form, setForm] = useState({ name: '', email: '', password: '', title: '', departmentId: '' });
   const [resetPw, setResetPw] = useState('');
@@ -105,9 +116,29 @@ export default function People() {
   };
 
   const setActive = async (u: PortalUser, active: boolean) => {
+    // Deactivation ends their session, drops department membership, and
+    // bubbles up any direct reports server-side — too consequential for a
+    // single click. Reactivation is safe and fully reversible, so it stays
+    // instant.
+    if (!active) {
+      setDeactivating(u);
+      return;
+    }
     try {
       await api(`/users/${u.id}/active`, { method: 'POST', body: { active } });
-      toast.success(active ? `${u.name} reactivated` : `${u.name} deactivated — their session is now invalid`);
+      toast.success(`${u.name} reactivated`);
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const confirmDeactivate = async () => {
+    if (!deactivating) return;
+    try {
+      await api(`/users/${deactivating.id}/active`, { method: 'POST', body: { active: false } });
+      toast.success(`${deactivating.name} deactivated — their session is now invalid`);
+      setDeactivating(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
@@ -309,6 +340,33 @@ export default function People() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deactivating} onOpenChange={(o) => !o && setDeactivating(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <UserX size={16} />
+            </span>
+            <AlertDialogTitle>Deactivate {deactivating?.name}?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm">
+              <p>
+                Their session ends immediately and they can no longer sign in. Nothing is deleted — tasks,
+                attendance, and salary history are all kept, and they can be reactivated later.
+              </p>
+              <p>Any direct reports move up to report to their manager automatically.</p>
+              <p className="text-[#71717A]">Blocked if they still have open tasks — reassign those first.</p>
+            </div>
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeactivate} className="bg-red-600 text-white hover:bg-red-700">
+              Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
