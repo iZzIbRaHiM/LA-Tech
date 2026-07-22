@@ -46,6 +46,7 @@ interface Message {
   sender_name: string;
   body: string;
   created_at: string;
+  edited_at: string | null;
   attachment_filename: string | null;
   attachment_size: number | null;
 }
@@ -67,6 +68,9 @@ export default function Chat() {
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -133,6 +137,31 @@ export default function Chat() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const saveMessageEdit = async () => {
+    if (!activeId || !editingMessage || !editDraft.trim()) return;
+    try {
+      await api(`/chat/groups/${activeId}/messages/${editingMessage.id}`, {
+        method: 'PATCH',
+        body: { body: editDraft },
+      });
+      setEditingMessage(null);
+      loadMessages();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const confirmDeleteMessage = async () => {
+    if (!activeId || !deletingMessage) return;
+    try {
+      await api(`/chat/groups/${activeId}/messages/${deletingMessage.id}`, { method: 'DELETE' });
+      setDeletingMessage(null);
+      loadMessages();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -292,7 +321,26 @@ export default function Chat() {
             <div className="px-4 py-3 border-b border-[#1f1f23] font-medium text-sm">{activeGroup.name}</div>
             <div className="flex-1 overflow-auto p-4 space-y-3">
               {messages.map((m) => (
-                <div key={m.id} className={m.sender_id === user?.id ? 'flex justify-end' : 'flex justify-start'}>
+                <div
+                  key={m.id}
+                  className={`group flex items-end gap-1.5 ${m.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
+                >
+                  {m.sender_id === user?.id && !m.attachment_filename && (
+                    <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity mb-1">
+                      <button
+                        className="text-[#71717A] hover:text-[#DFE104]"
+                        onClick={() => {
+                          setEditingMessage(m);
+                          setEditDraft(m.body);
+                        }}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button className="text-[#71717A] hover:text-red-400" onClick={() => setDeletingMessage(m)}>
+                        <Trash2 size={12} />
+                      </button>
+                    </span>
+                  )}
                   <div
                     className={`animate-scale-in max-w-md px-3 py-2 text-sm transition-shadow ${
                       m.sender_id === user?.id
@@ -321,6 +369,7 @@ export default function Chat() {
                     )}
                     <div className={`text-[10px] mt-1 ${m.sender_id === user?.id ? 'text-black/60' : 'text-[#71717A]'}`}>
                       {m.created_at}
+                      {m.edited_at && ' · edited'}
                     </div>
                   </div>
                 </div>
@@ -429,6 +478,49 @@ export default function Chat() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteGroup} className="bg-red-600 text-white hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!editingMessage} onOpenChange={(o) => !o && setEditingMessage(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge">
+              <Pencil size={16} />
+            </span>
+            <DialogTitle>Edit message</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && saveMessageEdit()}
+          />
+          <DialogFooter>
+            <Button
+              onClick={saveMessageEdit}
+              disabled={!editDraft.trim()}
+              className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingMessage} onOpenChange={(o) => !o && setDeletingMessage(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader className="flex-row items-center gap-3 space-y-0">
+            <span className="dialog-icon-badge destructive">
+              <Trash2 size={16} />
+            </span>
+            <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteMessage} className="bg-red-600 text-white hover:bg-red-700">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

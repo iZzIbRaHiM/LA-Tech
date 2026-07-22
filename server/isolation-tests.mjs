@@ -653,6 +653,40 @@ async function main() {
     'still present'
   );
 
+  console.log('\n== Chat: membership + message ownership ==');
+  const chatGroup = (
+    await must('ceo', 'POST', '/chat/groups', { name: `Iso Chat ${TS}`, memberIds: [aHead, aMember] })
+  ).id;
+  const outsiderMsgs = await req('bhead', 'GET', `/chat/groups/${chatGroup}/messages`);
+  check('non-member DENIED reading group messages', denied(outsiderMsgs), `got ${outsiderMsgs.status}`);
+  const outsiderPost = await req('bhead', 'POST', `/chat/groups/${chatGroup}/messages`, { body: 'intruder' });
+  check('non-member DENIED posting', denied(outsiderPost), `got ${outsiderPost.status}`);
+  const msg = await must('ahead', 'POST', `/chat/groups/${chatGroup}/messages`, { body: 'original text' });
+  const otherEdit = await req('amember', 'PATCH', `/chat/groups/${chatGroup}/messages/${msg.id}`, { body: 'hijacked' });
+  check("member DENIED editing someone else's message", otherEdit.status === 403, `got ${otherEdit.status}`);
+  const otherDelete = await req('amember', 'DELETE', `/chat/groups/${chatGroup}/messages/${msg.id}`);
+  check("member DENIED deleting someone else's message", otherDelete.status === 403, `got ${otherDelete.status}`);
+  const ceoEditOther = await req('ceo', 'PATCH', `/chat/groups/${chatGroup}/messages/${msg.id}`, { body: 'ceo rewrite' });
+  check("even the CEO DENIED editing someone else's message", ceoEditOther.status === 403, `got ${ceoEditOther.status}`);
+  const ownEdit = await req('ahead', 'PATCH', `/chat/groups/${chatGroup}/messages/${msg.id}`, { body: 'corrected text' });
+  check('author CAN edit their own message', ownEdit.status === 200, `got ${ownEdit.status}`);
+  const msgsAfterEdit = await must('ahead', 'GET', `/chat/groups/${chatGroup}/messages`);
+  const editedMsg = msgsAfterEdit.messages.find((m) => m.id === msg.id);
+  check(
+    'edit persisted with edited_at stamp',
+    editedMsg.body === 'corrected text' && !!editedMsg.edited_at,
+    `got body=${editedMsg.body} edited_at=${editedMsg.edited_at}`
+  );
+  const ownDelete = await req('ahead', 'DELETE', `/chat/groups/${chatGroup}/messages/${msg.id}`);
+  check('author CAN delete their own message', ownDelete.status === 200, `got ${ownDelete.status}`);
+  const msgsAfterDelete = await must('ahead', 'GET', `/chat/groups/${chatGroup}/messages`);
+  check(
+    'deleted message gone from the stream',
+    !msgsAfterDelete.messages.some((m) => m.id === msg.id),
+    'still present'
+  );
+  await must('ceo', 'DELETE', `/chat/groups/${chatGroup}`);
+
   console.log('\n== Sub-task scoping (§5) ==');
   // A parent task assigned to amember, with one sub for amember and one sub
   // for aHead: amember opening the parent must see only their own sub.

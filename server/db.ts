@@ -497,6 +497,7 @@ export async function initDb() {
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_filename TEXT;
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_stored_name TEXT;
     ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS attachment_size INTEGER;
+    ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS edited_at TEXT;
 
     -- In-portal meetings (WebRTC mesh; the DB carries only the signaling
     -- handshake — offers/answers/ICE — never any media).

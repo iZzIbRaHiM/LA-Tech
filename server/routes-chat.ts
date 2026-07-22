@@ -104,7 +104,7 @@ chatRouter.get('/chat/groups/:id/messages', requireAuth, async (req, res) => {
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
   const messages = await db
     .prepare(
-      `SELECT m.id, m.body, m.created_at, m.sender_id, u.name AS sender_name,
+      `SELECT m.id, m.body, m.created_at, m.edited_at, m.sender_id, u.name AS sender_name,
               m.attachment_filename, m.attachment_size
        FROM chat_messages m JOIN users u ON u.id = m.sender_id
        WHERE m.group_id = ? ORDER BY m.created_at ASC LIMIT 200`
@@ -178,4 +178,40 @@ chatRouter.get('/chat/groups/:id/messages/:messageId/download', requireAuth, asy
   } catch {
     res.status(404).json({ error: 'File missing' });
   }
+});
+
+// Edit/delete are author-only — even the CEO can't rewrite someone else's
+// words (group management is CEO-only, but a message belongs to whoever
+// sent it). Only text messages can be edited; a file "message" has nothing
+// to rewrite.
+chatRouter.patch('/chat/groups/:id/messages/:messageId', requireAuth, async (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  const message = await db
+    .prepare('SELECT id, sender_id, attachment_stored_name FROM chat_messages WHERE id = ? AND group_id = ?')
+    .get(Number(req.params.messageId), groupId) as
+    | { id: number; sender_id: number; attachment_stored_name: string | null }
+    | undefined;
+  if (!message) return res.status(404).json({ error: 'Not found' });
+  if (message.sender_id !== req.user!.id) return res.status(403).json({ error: 'You can only edit your own messages' });
+  if (message.attachment_stored_name) return res.status(400).json({ error: 'File messages cannot be edited' });
+
+  const { body } = req.body ?? {};
+  if (!body?.trim()) return res.status(400).json({ error: 'Message body required' });
+  await db
+    .prepare("UPDATE chat_messages SET body = ?, edited_at = to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS') WHERE id = ?")
+    .run(body.trim(), message.id);
+  res.json({ ok: true });
+});
+
+chatRouter.delete('/chat/groups/:id/messages/:messageId', requireAuth, async (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  const message = await db
+    .prepare('SELECT id, sender_id FROM chat_messages WHERE id = ? AND group_id = ?')
+    .get(Number(req.params.messageId), groupId) as { id: number; sender_id: number } | undefined;
+  if (!message) return res.status(404).json({ error: 'Not found' });
+  if (message.sender_id !== req.user!.id) return res.status(403).json({ error: 'You can only delete your own messages' });
+  await db.prepare('DELETE FROM chat_messages WHERE id = ?').run(message.id);
+  res.json({ ok: true });
 });
