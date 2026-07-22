@@ -243,6 +243,21 @@ async function main() {
   const bLeave = await req('bhead', 'GET', '/leave');
   const bLeaveLeak = (bLeave.json?.team ?? []).some((l) => l.user_id === aMember);
   check("bhead's leave view excludes dept-A requests", !bLeaveLeak, `leak=${bLeaveLeak}`);
+  // Correcting a decision: the same authority that approved it can flip it.
+  const leaveRedecide = await req('ahead', 'POST', `/leave/${leaveId}/decide`, { status: 'rejected' });
+  check('ahead CAN correct an already-decided leave request', leaveRedecide.status === 200, `got ${leaveRedecide.status}`);
+  // Withdrawing a request: requester-only, pending-only.
+  const leaveId2 = (
+    await must('amember', 'POST', '/leave', { type: 'sick', startDate: '2026-09-01', endDate: '2026-09-02' })
+  ).id;
+  const cancelByOther = await req('ahead', 'DELETE', `/leave/${leaveId2}`);
+  check("head DENIED cancelling someone else's leave request", cancelByOther.status === 403, `got ${cancelByOther.status}`);
+  const cancelDecided = await req('amember', 'DELETE', `/leave/${leaveId}`);
+  check('amember DENIED withdrawing an already-decided request', cancelDecided.status === 409, `got ${cancelDecided.status}`);
+  const cancelOwn = await req('amember', 'DELETE', `/leave/${leaveId2}`);
+  check('amember CAN withdraw their own pending request', cancelOwn.status === 200, `got ${cancelOwn.status}`);
+  const afterCancel = await must('amember', 'GET', '/leave');
+  check('withdrawn request no longer appears', !afterCancel.own.some((l) => l.id === leaveId2), 'still present');
 
   console.log('\n== Org hierarchy & manager-chain authority ==');
   // grandchild reports to aMember, who reports to aHead — a 3-level chain

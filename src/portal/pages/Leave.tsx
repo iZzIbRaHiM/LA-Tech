@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
-import { Check, X, Plus, CalendarDays, Paperclip } from 'lucide-react';
+import { Check, X, Plus, CalendarDays, Paperclip, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -146,8 +146,19 @@ export default function Leave() {
     }
   };
 
+  const cancel = async (id: number) => {
+    try {
+      await api(`/leave/${id}`, { method: 'DELETE' });
+      load();
+      toast.success('Request withdrawn');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const isDecider = user?.isCeo || user?.role === 'head';
   const pending = team.filter((t) => t.status === 'pending');
+  const decided = team.filter((t) => t.status !== 'pending');
 
   const shiftMonth = (delta: number) => {
     const [y, m] = month.split('-').map(Number);
@@ -225,6 +236,66 @@ export default function Leave() {
         </section>
       )}
 
+      {/* Decided history — validators only. Same Approve/Reject actions stay
+          available so a mistaken decision can be corrected later, not just
+          while it's still sitting in the pending queue. */}
+      {isDecider && decided.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Team history</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Dates</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Correct</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {decided.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.user_name}</TableCell>
+                  <TableCell className="capitalize">{r.type}</TableCell>
+                  <TableCell className="text-xs">
+                    {r.start_date} → {r.end_date}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs capitalize ${STATUS_BADGE[r.status]}`}>
+                      {r.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
+                    {r.status !== 'approved' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Change to approved"
+                        className="text-emerald-400"
+                        onClick={() => decide(r.id, 'approved')}
+                      >
+                        <Check size={14} />
+                      </Button>
+                    )}
+                    {r.status !== 'rejected' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Change to rejected"
+                        className="text-red-400"
+                        onClick={() => decide(r.id, 'rejected')}
+                      >
+                        <X size={14} />
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      )}
+
       {/* Calendar (CEO sees company-wide, head sees dept, employee sees own) */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-3">
@@ -256,7 +327,7 @@ export default function Leave() {
                 <TableHead>Dates</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Attachments</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -273,7 +344,7 @@ export default function Leave() {
                         {r.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right whitespace-nowrap">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -282,6 +353,17 @@ export default function Leave() {
                       >
                         <Paperclip size={13} />
                       </Button>
+                      {r.status === 'pending' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Withdraw this request"
+                          className="text-red-400"
+                          onClick={() => cancel(r.id)}
+                        >
+                          <Ban size={13} />
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                   {expandedId === r.id && (

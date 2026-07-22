@@ -76,7 +76,9 @@ leaveRouter.post('/leave/:id/decide', requireAuth, async (req, res) => {
     | undefined;
   if (!request) return res.status(404).json({ error: 'Not found' });
   if (!(await canDecideLeave(user, request))) return res.status(403).json({ error: 'Not authorized to decide this request' });
-  if (request.status !== 'pending') return res.status(409).json({ error: 'Already decided' });
+  // Deciding again (e.g. correcting a mistaken approval/rejection) is
+  // allowed — same authority that could decide it the first time can
+  // revise it. Matches attendance validation, which never blocked this.
 
   const { status } = req.body ?? {};
   if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
@@ -91,6 +93,28 @@ leaveRouter.post('/leave/:id/decide', requireAuth, async (req, res) => {
     `Your leave request (${request.start_date} → ${request.end_date}) was ${status}`,
     '/portal/leave'
   );
+  res.json({ ok: true });
+});
+
+// Withdraw your own request — only while it's still pending. Once decided,
+// plans changing means going back to whoever decided it (they can flip it
+// via /decide above), since a team may already be scheduled around an
+// approved absence.
+leaveRouter.delete('/leave/:id', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const request = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(Number(req.params.id)) as
+    | LeaveRow
+    | undefined;
+  if (!request) return res.status(404).json({ error: 'Not found' });
+  if (request.user_id !== user.id) return res.status(403).json({ error: 'Not your request' });
+  if (request.status !== 'pending') {
+    return res.status(409).json({ error: 'Already decided — ask whoever approved or rejected it to change it instead' });
+  }
+  await db.prepare('DELETE FROM leave_requests WHERE id = ?').run(request.id);
+  // Polymorphic attachments table has no FK cascade — clean up explicitly,
+  // same as task/project deletion do.
+  await db.prepare("DELETE FROM attachments WHERE entity_type = 'leave' AND entity_id = ?").run(request.id);
+  await logActivity(user.id, 'leave', request.id, 'cancelled', { startDate: request.start_date, endDate: request.end_date });
   res.json({ ok: true });
 });
 
