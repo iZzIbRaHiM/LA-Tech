@@ -150,7 +150,12 @@ export default function OrgProfilePanel({
   );
   const manager = employee?.manager_id != null ? nodesById.get(employee.manager_id) : undefined;
 
-  // Reset per-employee state whenever the panel targets someone new.
+  // Reset per-employee state whenever the panel targets someone new. Keyed on
+  // employee.id (not the object) on purpose: the Org Chart re-polls /org-tree
+  // every few seconds and hands us a fresh employee object each time — keying
+  // on the object would re-run this on every poll and clobber whatever the CEO
+  // is typing in the form. Only a genuine change of selected person resets it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!employee) return;
     setForm({ title: employee.title, phone: employee.phone, name: employee.name, email: employee.email });
@@ -175,7 +180,7 @@ export default function OrgProfilePanel({
         .then((r) => setPayments(r.payments))
         .catch(() => {});
     }
-  }, [employee]);
+  }, [employee?.id]);
 
   const run = useCallback(
     async (fn: () => Promise<void>, successMsg: string) => {
