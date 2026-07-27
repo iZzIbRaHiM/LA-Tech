@@ -126,7 +126,7 @@ export default function Dashboard() {
                 localStorage.setItem('portal-onboarding-dismissed', '1');
                 setChecklistDismissed(true);
               }}
-              className="text-[#71717A] hover:text-[#FAFAFA]"
+              className="text-[#71717A] hover:text-[#FAFAFA] transition-colors"
               title="Dismiss"
             >
               <X size={14} />
@@ -194,7 +194,7 @@ export default function Dashboard() {
                     setPhoneDraft(profile.phone);
                     setEditingPhone(true);
                   }}
-                  className="text-[#71717A] hover:text-[#DFE104]"
+                  className="text-[#71717A] hover:text-[#DFE104] transition-colors"
                   title="Edit phone"
                 >
                   <Pencil size={12} />

@@ -92,10 +92,18 @@ export default function Attachments({
             <span className="max-w-40 truncate" title={`${a.filename} · ${fmtSize(a.size)} · ${a.uploaded_by_name}`}>
               {a.filename}
             </span>
-            <button onClick={() => download(a)} className="text-[#DFE104] hover:opacity-80" title="Download">
+            <button
+              onClick={() => download(a)}
+              className="text-[#DFE104] hover:opacity-80 transition-opacity"
+              title="Download"
+            >
               <Download size={11} />
             </button>
-            <button onClick={() => remove(a.id)} className="text-[#71717A] hover:text-red-400" title="Delete">
+            <button
+              onClick={() => remove(a.id)}
+              className="text-[#71717A] hover:text-red-400 transition-colors"
+              title="Delete"
+            >
               <Trash2 size={11} />
             </button>
           </span>

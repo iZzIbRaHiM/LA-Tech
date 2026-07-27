@@ -352,10 +352,16 @@ export default function ProjectDetail() {
               {m.due_date && <span className="text-xs text-[#71717A]">due {m.due_date}</span>}
               {user?.isCeo && (
                 <span className="opacity-0 group-hover:opacity-100 flex items-center gap-2 transition-opacity">
-                  <button className="text-[#71717A] hover:text-[#DFE104]" onClick={() => openEditMilestone(m)}>
+                  <button
+                    className="text-[#71717A] hover:text-[#DFE104] transition-colors"
+                    onClick={() => openEditMilestone(m)}
+                  >
                     <Pencil size={13} />
                   </button>
-                  <button className="text-[#71717A] hover:text-red-400" onClick={() => setDeletingMilestone(m)}>
+                  <button
+                    className="text-[#71717A] hover:text-red-400 transition-colors"
+                    onClick={() => setDeletingMilestone(m)}
+                  >
                     <Trash2 size={13} />
                   </button>
                 </span>

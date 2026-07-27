@@ -164,7 +164,11 @@ export default function OfficeTimings() {
                       <Badge key={`${a.target_type}-${a.target_id}`} variant="outline" className="text-xs gap-1">
                         {a.target_type === 'department' ? 'Dept: ' : ''}
                         {a.target_name ?? `#${a.target_id}`}
-                        <button onClick={() => unassign(a)} title="Remove assignment" className="hover:text-red-400">
+                        <button
+                          onClick={() => unassign(a)}
+                          title="Remove assignment"
+                          className="hover:text-red-400 transition-colors"
+                        >
                           <X size={11} />
                         </button>
                       </Badge>
