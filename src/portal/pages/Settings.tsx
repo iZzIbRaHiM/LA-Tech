@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DetailSkeleton from '../components/DetailSkeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,7 +70,7 @@ export default function Settings() {
     }
   };
 
-  if (!form) return <div className="p-8 text-sm text-[#71717A]">Loading…</div>;
+  if (!form) return <DetailSkeleton />;
 
   const DeductionRow = ({
     label,

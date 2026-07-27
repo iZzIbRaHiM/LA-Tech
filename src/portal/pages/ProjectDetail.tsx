@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil } from 'lucide-react';
+import DetailSkeleton from '../components/DetailSkeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -125,7 +126,7 @@ export default function ProjectDetail() {
       </div>
     );
   }
-  if (!project) return <div className="p-8 text-sm text-[#71717A]">Loading…</div>;
+  if (!project) return <DetailSkeleton />;
 
   const toggleVisibility = async (deptId: number, grant: boolean) => {
     const ids = grant ? [...visibility.map((v) => v.id), deptId] : visibility.filter((v) => v.id !== deptId).map((v) => v.id);

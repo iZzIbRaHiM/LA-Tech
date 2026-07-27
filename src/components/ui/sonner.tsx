@@ -33,7 +33,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(223_225_4/0.08)] !backdrop-blur-sm",
+            "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(223_225_4/0.08)] !backdrop-blur-sm !transition-all",
+          success: "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(34_197_94/0.35)]",
+          error: "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(239_68_68/0.4)]",
+          warning: "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(245_158_11/0.35)]",
+          info: "!shadow-[0_8px_32px_rgb(0_0_0/0.6),0_0_0_1px_rgb(223_225_4/0.3)]",
         },
       }}
       {...props}

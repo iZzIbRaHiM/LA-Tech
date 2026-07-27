@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
+import DetailSkeleton from '../components/DetailSkeleton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -113,7 +114,7 @@ export default function TaskDetail() {
       </div>
     );
   }
-  if (!task) return <div className="p-8 text-sm text-[#71717A]">Loading…</div>;
+  if (!task) return <DetailSkeleton />;
 
   const setStatus = async (status: string) => {
     try {
