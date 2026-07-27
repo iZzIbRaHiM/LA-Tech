@@ -30,3 +30,45 @@ export async function wouldCreateCycle(subjectId: number, proposedManagerId: num
   if (subjectId === proposedManagerId) return true;
   return await isAncestor(subjectId, proposedManagerId);
 }
+
+// Does this person manage anyone at all? Used to extend authority (e.g.
+// meeting creation) beyond department heads to anyone above them in the
+// chain — "the person over them" — without hardcoding a role check.
+export async function hasDirectReports(userId: number): Promise<boolean> {
+  const row = await db.prepare('SELECT 1 FROM users WHERE manager_id = ? AND active = 1 LIMIT 1').get(userId);
+  return !!row;
+}
+
+// Everyone below userId in the chain, any depth (their reports, their
+// reports' reports, ...). Used to scope who someone may invite to a
+// meeting — "only people under them".
+export async function getDescendantIds(userId: number): Promise<number[]> {
+  const rows = (await db
+    .prepare(
+      `WITH RECURSIVE chain AS (
+         SELECT id FROM users WHERE manager_id = ?
+         UNION ALL
+         SELECT u.id FROM users u JOIN chain c ON u.manager_id = c.id
+       )
+       SELECT id FROM chain`
+    )
+    .all(userId)) as Array<{ id: number }>;
+  return rows.map((r) => r.id);
+}
+
+// Everyone above userId in the chain, up to (and including) the CEO. Used
+// to silently surface a meeting to the creator's whole reporting line, so
+// "people above them" can see and join even though they weren't invited.
+export async function getAncestorIds(userId: number): Promise<number[]> {
+  const rows = (await db
+    .prepare(
+      `WITH RECURSIVE chain AS (
+         SELECT manager_id FROM users WHERE id = ?
+         UNION ALL
+         SELECT u.manager_id FROM users u JOIN chain c ON u.id = c.manager_id
+       )
+       SELECT manager_id AS id FROM chain WHERE manager_id IS NOT NULL`
+    )
+    .all(userId)) as Array<{ id: number }>;
+  return rows.map((r) => r.id);
+}

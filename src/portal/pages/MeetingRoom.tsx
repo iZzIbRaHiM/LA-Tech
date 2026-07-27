@@ -141,6 +141,16 @@ export default function MeetingRoom() {
         return;
       }
 
+      if (s.type === 'force-mute') {
+        const track = localStreamRef.current?.getAudioTracks()[0];
+        if (track && track.enabled) {
+          track.enabled = false;
+          setMicOn(false);
+          toast.info('The meeting host muted your microphone');
+        }
+        return;
+      }
+
       const pc = ensurePc(peerId);
       if (s.type === 'offer') {
         // Perfect-negotiation-lite: on simultaneous offers, the peer with
@@ -358,6 +368,17 @@ export default function MeetingRoom() {
     }
   };
 
+  const isHost = meeting?.created_by === myId;
+
+  const muteParticipant = async (peerId: number) => {
+    try {
+      await api(`/meetings/${meetingId}/mute`, { method: 'POST', body: { userId: peerId } });
+      toast.success('Mute request sent');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const peerList = [...peers.entries()];
   const tileCount = peerList.length + 1;
   const gridClass =
@@ -405,7 +426,7 @@ export default function MeetingRoom() {
 
         {/* Remote tiles */}
         {peerList.map(([peerId, p]) => (
-          <RemoteTile key={peerId} peer={p} />
+          <RemoteTile key={peerId} peer={p} onMute={isHost ? () => void muteParticipant(peerId) : undefined} />
         ))}
       </div>
 
@@ -457,13 +478,13 @@ export default function MeetingRoom() {
   );
 }
 
-function RemoteTile({ peer }: { peer: PeerState }) {
+function RemoteTile({ peer, onMute }: { peer: PeerState; onMute?: () => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current && peer.stream) ref.current.srcObject = peer.stream;
   }, [peer.stream]);
   return (
-    <div className="relative min-h-40 border border-[#1f1f23] bg-[#0f0f12] overflow-hidden">
+    <div className="group relative min-h-40 border border-[#1f1f23] bg-[#0f0f12] overflow-hidden">
       {peer.stream ? (
         <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
@@ -473,6 +494,15 @@ function RemoteTile({ peer }: { peer: PeerState }) {
         </div>
       )}
       <span className="absolute bottom-2 left-2 bg-[#09090B]/80 px-2 py-0.5 text-xs">{peer.name}</span>
+      {onMute && (
+        <button
+          onClick={onMute}
+          title={`Mute ${peer.name}`}
+          className="absolute top-2 right-2 bg-[#09090B]/80 p-1.5 opacity-0 group-hover:opacity-100 text-[#A1A1AA] hover:text-red-400 transition-opacity"
+        >
+          <MicOff size={13} />
+        </button>
+      )}
     </div>
   );
 }

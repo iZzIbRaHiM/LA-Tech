@@ -49,10 +49,13 @@ async function run() {
     );
   }
 
-  // Fixture meetings (participants/signals cascade).
+  // Fixture meetings (participants/signals cascade). Broadened from 'Iso
+  // meeting %' — later isolation tests added 'Iso scheduled/rescheduled/
+  // to-cancel/head meeting/mgr meeting %' titles that didn't match, so
+  // this catches every 'Iso *' meeting title the same way tasks/milestones do.
   await del(
     'meetings',
-    "DELETE FROM meetings WHERE title LIKE 'Iso meeting %' OR title IN ('RTC verification', 'Verification call', 'UI check')"
+    "DELETE FROM meetings WHERE title LIKE 'Iso %' OR title IN ('RTC verification', 'Verification call', 'UI check')"
   );
 
   // Fixture projects (visibility/finance/milestones cascade).

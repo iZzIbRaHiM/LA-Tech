@@ -1,6 +1,17 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { db, logActivity, notify } from './db.js';
-import { requireAuth, requireCeo } from './auth.js';
+import { requireAuth } from './auth.js';
+import { canCreateMeetings } from './policy.js';
+import { getDescendantIds, getAncestorIds } from './org-hierarchy.js';
+
+// CEO, department heads, and anyone with direct reports may start/edit a
+// meeting (policy.ts's canCreateMeetings) — broader than requireCeo since a
+// meeting room grants no authority over anyone's data.
+async function requireMeetingCreator(req: Request, res: Response, next: NextFunction) {
+  if (!(await canCreateMeetings(req.user!))) return res.status(403).json({ error: 'Not authorized to create meetings' });
+  next();
+}
 
 // In-portal video meetings. Media is pure WebRTC peer-to-peer between the
 // participants' browsers — these routes only carry the signaling handshake
@@ -11,6 +22,34 @@ export const meetingsRouter = Router();
 // ICE servers are vended by the server rather than baked into the client
 // bundle: TURN credentials stay in env vars, reach authenticated users
 // only, and can be rotated without a redeploy of the frontend.
+// Who the current user is allowed to invite — everyone under them in the
+// chain (the CEO's "under" is everyone active). Backs the participant
+// picker in the create/edit dialog; also doubles as "can I create a
+// meeting at all" for the UI (an empty list with no reports means no).
+meetingsRouter.get('/meetings/eligible-participants', requireAuth, async (req, res) => {
+  const user = req.user!;
+  const ids = user.isCeo
+    ? null
+    : await getDescendantIds(user.id);
+  if (ids !== null && ids.length === 0) return res.json({ users: [] });
+  const rows = user.isCeo
+    ? await db
+        .prepare(
+          `SELECT u.id, u.name, d.name AS department_name FROM users u
+           LEFT JOIN memberships m ON m.user_id = u.id LEFT JOIN departments d ON d.id = m.department_id
+           WHERE u.active = 1 AND u.is_ceo = 0 ORDER BY u.name`
+        )
+        .all()
+    : await db
+        .prepare(
+          `SELECT u.id, u.name, d.name AS department_name FROM users u
+           LEFT JOIN memberships m ON m.user_id = u.id LEFT JOIN departments d ON d.id = m.department_id
+           WHERE u.active = 1 AND u.id IN (${ids!.map(() => '?').join(',')}) ORDER BY u.name`
+        )
+        .all(...ids!);
+  res.json({ users: rows });
+});
+
 meetingsRouter.get('/meetings/ice-servers', requireAuth, (_req, res) => {
   const iceServers: Array<{ urls: string; username?: string; credential?: string }> = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -32,6 +71,19 @@ async function isParticipant(meetingId: number, userId: number): Promise<boolean
   return !!row;
 }
 
+// You may only invite people under you in the reporting chain — the CEO's
+// "under" is everyone. Throws with the offending id so the route can 400.
+async function assertCanInvite(actor: { id: number; isCeo: boolean }, targetIds: number[]) {
+  if (actor.isCeo) return;
+  const allowed = new Set(await getDescendantIds(actor.id));
+  const outside = targetIds.find((id) => id !== actor.id && !allowed.has(id));
+  if (outside !== undefined) {
+    const err = new Error('You can only invite people who report to you') as Error & { status: number };
+    err.status = 400;
+    throw err;
+  }
+}
+
 // A scheduled time arrives from <input type="datetime-local"> as
 // "YYYY-MM-DDTHH:MM"; stored with a space to match every other timestamp
 // column in this schema.
@@ -42,16 +94,22 @@ function normalizeScheduledAt(raw: unknown): string | null {
   return s.slice(0, 16);
 }
 
-// CEO creates a meeting with an explicit participant list (PRD: "with a
-// single person or whoever he wants to add"). The creator is always a
+// CEO, department heads, and anyone with direct reports can create a
+// meeting with an explicit participant list. The creator is always a
 // participant themselves. Without scheduledAt the meeting starts instantly
 // (the original behavior); with it, the room stays closed until the creator
 // explicitly starts it.
-meetingsRouter.post('/meetings', requireAuth, requireCeo, async (req, res) => {
+meetingsRouter.post('/meetings', requireAuth, requireMeetingCreator, async (req, res) => {
   const user = req.user!;
   const { title, participantIds, scheduledAt } = req.body ?? {};
   const ids = Array.isArray(participantIds) ? participantIds.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
   if (ids.length === 0) return res.status(400).json({ error: 'At least one participant is required' });
+
+  try {
+    await assertCanInvite(user, ids);
+  } catch (e) {
+    return res.status((e as { status?: number }).status ?? 400).json({ error: (e as Error).message });
+  }
 
   const scheduled = normalizeScheduledAt(scheduledAt);
   if (scheduledAt !== undefined && scheduledAt !== null && scheduledAt !== '' && !scheduled) {
@@ -64,8 +122,8 @@ meetingsRouter.post('/meetings', requireAuth, requireCeo, async (req, res) => {
     : await db.prepare("INSERT INTO meetings (title, created_by, started_at) VALUES (?, ?, datetime('now'))").run(cleanTitle, user.id);
   const meetingId = Number(info.lastInsertRowid);
 
-  const unique = [...new Set([user.id, ...ids])];
-  for (const uid of unique) {
+  const invited = [...new Set([user.id, ...ids])];
+  for (const uid of invited) {
     const target = await db.prepare('SELECT id, active FROM users WHERE id = ?').get(uid) as
       | { id: number; active: number }
       | undefined;
@@ -80,13 +138,24 @@ meetingsRouter.post('/meetings', requireAuth, requireCeo, async (req, res) => {
       await notify(uid, 'meeting', message, `/portal/meetings/${meetingId}`);
     }
   }
-  await logActivity(user.id, 'meeting', meetingId, 'created', { participantIds: unique, scheduledAt: scheduled });
+  // Silently surface the meeting to everyone above the creator in the
+  // reporting chain — they weren't invited, but they can see it and join
+  // if they want to. No notification: this isn't an invite, just visibility.
+  const ancestors = await getAncestorIds(user.id);
+  for (const uid of ancestors) {
+    const target = await db.prepare('SELECT id, active FROM users WHERE id = ?').get(uid) as
+      | { id: number; active: number }
+      | undefined;
+    if (!target?.active) continue;
+    await db.prepare('INSERT OR IGNORE INTO meeting_participants (meeting_id, user_id) VALUES (?, ?)').run(meetingId, uid);
+  }
+  await logActivity(user.id, 'meeting', meetingId, 'created', { participantIds: invited, scheduledAt: scheduled });
   res.json({ id: meetingId });
 });
 
 // Reschedule/rename/re-invite — only while the meeting hasn't started yet.
 // Once a room is live (or done), its record is history, not a draft.
-meetingsRouter.patch('/meetings/:id', requireAuth, requireCeo, async (req, res) => {
+meetingsRouter.patch('/meetings/:id', requireAuth, requireMeetingCreator, async (req, res) => {
   const id = Number(req.params.id);
   const user = req.user!;
   const meeting = await db.prepare('SELECT * FROM meetings WHERE id = ?').get(id) as
@@ -105,7 +174,13 @@ meetingsRouter.patch('/meetings/:id', requireAuth, requireCeo, async (req, res) 
     await db.prepare('UPDATE meetings SET scheduled_at = ? WHERE id = ?').run(scheduled, id);
   }
   if (Array.isArray(participantIds)) {
-    const ids = new Set([user.id, ...participantIds.map(Number).filter((n) => Number.isFinite(n) && n > 0)]);
+    const requested = participantIds.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    try {
+      await assertCanInvite(user, requested);
+    } catch (e) {
+      return res.status((e as { status?: number }).status ?? 400).json({ error: (e as Error).message });
+    }
+    const ids = new Set([user.id, ...requested]);
     if (ids.size < 2) return res.status(400).json({ error: 'At least one participant is required' });
     const before = await db.prepare('SELECT user_id FROM meeting_participants WHERE meeting_id = ?').all(id) as Array<{ user_id: number }>;
     const beforeIds = new Set(before.map((r) => r.user_id));
@@ -117,6 +192,14 @@ meetingsRouter.patch('/meetings/:id', requireAuth, requireCeo, async (req, res) 
       if (uid !== user.id && !beforeIds.has(uid)) {
         await notify(uid, 'meeting', `${user.name} scheduled a meeting with you: ${meeting.title}`, `/portal/meetings/${id}`);
       }
+    }
+    // Ancestors were wiped by the DELETE above along with everyone else —
+    // re-surface the meeting to them (silently, same as on creation).
+    const ancestors = await getAncestorIds(user.id);
+    for (const uid of ancestors) {
+      const target = await db.prepare('SELECT id, active FROM users WHERE id = ?').get(uid) as { id: number; active: number } | undefined;
+      if (!target?.active) continue;
+      await db.prepare('INSERT OR IGNORE INTO meeting_participants (meeting_id, user_id) VALUES (?, ?)').run(id, uid);
     }
   }
   await logActivity(user.id, 'meeting', id, 'updated', { title, scheduledAt });
@@ -258,6 +341,29 @@ meetingsRouter.post('/meetings/:id/end', requireAuth, async (req, res) => {
     await db.prepare("UPDATE meetings SET ended_at = datetime('now') WHERE id = ?").run(id);
     await logActivity(req.user!.id, 'meeting', id, 'ended');
   }
+  res.json({ ok: true });
+});
+
+// Host mic control. Media is peer-to-peer, so the server can't reach into
+// someone's hardware — this sends a 'force-mute' signal the target's own
+// client honors by disabling its local mic track (a soft mute, the same
+// model Zoom/Meet use: the host can silence you, you can still unmute
+// yourself again afterward — this isn't a lock, it's "please mute").
+meetingsRouter.post('/meetings/:id/mute', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const user = req.user!;
+  const meeting = await db.prepare('SELECT created_by, ended_at FROM meetings WHERE id = ?').get(id) as
+    | { created_by: number; ended_at: string | null }
+    | undefined;
+  if (!meeting || !(await isParticipant(id, user.id))) return res.status(404).json({ error: 'Not found' });
+  if (meeting.created_by !== user.id) return res.status(403).json({ error: 'Only the meeting creator can mute participants' });
+  if (meeting.ended_at) return res.status(409).json({ error: 'Meeting has ended' });
+  const target = Number(req.body?.userId);
+  if (!target || target === user.id) return res.status(400).json({ error: 'A valid target participant is required' });
+  if (!(await isParticipant(id, target))) return res.status(400).json({ error: 'That person is not in this meeting' });
+  await db
+    .prepare('INSERT INTO meeting_signals (meeting_id, from_user, to_user, type, payload) VALUES (?, ?, ?, ?, ?)')
+    .run(id, user.id, target, 'force-mute', '{}');
   res.json({ ok: true });
 });
 

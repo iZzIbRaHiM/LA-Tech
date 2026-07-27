@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Ban, CalendarClock, Pencil, Play, Plus, Video } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,7 +28,12 @@ import {
 import { useAuth } from '../AuthContext';
 import { api, type Meeting } from '../api';
 import { usePolling } from '../usePolling';
-import type { PortalUser } from './People';
+
+interface EligiblePerson {
+  id: number;
+  name: string;
+  department_name: string | null;
+}
 
 export default function Meetings() {
   const { user } = useAuth();
@@ -39,9 +44,12 @@ export default function Meetings() {
   const [cancelling, setCancelling] = useState<Meeting | null>(null);
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
-  const [people, setPeople] = useState<PortalUser[]>([]);
+  const [people, setPeople] = useState<EligiblePerson[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
+  // Drives whether "New meeting" shows at all — the CEO always can; anyone
+  // else can only if they have at least one person under them to invite.
+  const [canCreate, setCanCreate] = useState(false);
 
   const load = useCallback(() => {
     api<{ meetings: Meeting[] }>('/meetings').then((r) => setMeetings(r.meetings)).catch((e) => toast.error(e.message));
@@ -50,10 +58,14 @@ export default function Meetings() {
   usePolling(load, 6000);
 
   const loadPeople = () => {
-    api<{ users: PortalUser[] }>('/users')
-      .then((r) => setPeople(r.users.filter((u) => u.active && !u.is_ceo)))
+    api<{ users: EligiblePerson[] }>('/meetings/eligible-participants')
+      .then((r) => {
+        setPeople(r.users);
+        setCanCreate(!!user?.isCeo || r.users.length > 0);
+      })
       .catch((e) => toast.error(e.message));
   };
+  useEffect(loadPeople, [user]);
 
   const openCreate = () => {
     setTitle('');
@@ -173,7 +185,7 @@ export default function Meetings() {
     <div className="p-4 sm:p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-2">
         <h1 className="ptitle font-display font-bold text-2xl">Meetings</h1>
-        {user?.isCeo && (
+        {canCreate && (
           <Button onClick={openCreate} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
             <Plus size={15} className="mr-1" /> New meeting
           </Button>

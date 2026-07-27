@@ -13,7 +13,7 @@
 // - Project existence itself is confidential outside the allow-list.
 import { db } from './db.js';
 import type { SessionUser } from './auth.js';
-import { isAncestor } from './org-hierarchy.js';
+import { isAncestor, hasDirectReports } from './org-hierarchy.js';
 
 // ---------- Finance ----------
 export function hasFinanceAccess(user: SessionUser): boolean {
@@ -68,6 +68,16 @@ export async function canValidateAttendance(actor: SessionUser, record: { user_i
 
 export async function canDecideLeave(actor: SessionUser, request: { user_id: number }): Promise<boolean> {
   return await decidesFor(actor, request.user_id);
+}
+
+// ---------- Meetings ----------
+// CEO, department heads, and anyone else with direct reports ("the person
+// over them" — a head's own manager, a skip-level, etc.) can start a
+// meeting. Deliberately broader than the department-head-only rule
+// elsewhere: a meeting is just a room, not a grant over anyone's data.
+export async function canCreateMeetings(actor: SessionUser): Promise<boolean> {
+  if (actor.isCeo || actor.role === 'head') return true;
+  return await hasDirectReports(actor.id);
 }
 
 // ---------- Attachments ----------

@@ -547,7 +547,7 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_meeting_signals ON meeting_signals(meeting_id, to_user, id);
     ALTER TABLE meeting_signals DROP CONSTRAINT IF EXISTS meeting_signals_type_check;
-    ALTER TABLE meeting_signals ADD CONSTRAINT meeting_signals_type_check CHECK (type IN ('offer','answer','ice','peer-left'));
+    ALTER TABLE meeting_signals ADD CONSTRAINT meeting_signals_type_check CHECK (type IN ('offer','answer','ice','peer-left','force-mute'));
 
     -- Multiple office timings: named schedules assignable to a department or
     -- an individual (individual wins over department, department over the

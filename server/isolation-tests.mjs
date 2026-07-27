@@ -378,8 +378,12 @@ async function main() {
 
   console.log('\n== Meetings: participant-only access ==');
   const meetingId = (await must('ceo', 'POST', '/meetings', { title: `Iso meeting ${TS}`, participantIds: [aMember] })).id;
-  const nonCeoCreate = await req('ahead', 'POST', '/meetings', { title: 'x', participantIds: [aMember] });
-  check('non-CEO DENIED creating meetings', denied(nonCeoCreate), `got ${nonCeoCreate.status}`);
+  // ahead is deliberately NOT used here anymore — heads can legitimately
+  // create meetings now (see "Meetings: creator scope" below); grandchild
+  // has zero direct reports and isn't a head, so they're the genuine
+  // no-authority case.
+  const nonCeoCreate = await req('grandchild', 'POST', '/meetings', { title: 'x', participantIds: [aMember] });
+  check('user with no reports/not-head DENIED creating meetings', denied(nonCeoCreate), `got ${nonCeoCreate.status}`);
   const outsiderDetail = await req('bhead', 'GET', `/meetings/${meetingId}`);
   check('non-participant DENIED meeting detail (404 — existence hidden)', denied(outsiderDetail), `got ${outsiderDetail.status}`);
   const outsiderJoin = await req('bhead', 'POST', `/meetings/${meetingId}/join`, {});
@@ -458,6 +462,35 @@ async function main() {
   );
   const editAfterCancel = await req('ceo', 'PATCH', `/meetings/${schedMeeting2}`, { title: 'zombie' });
   check('edit DENIED on a cancelled meeting', editAfterCancel.status === 409, `got ${editAfterCancel.status}`);
+
+  console.log('\n== Meetings: creator scope (heads/managers) + host mute ==');
+  const memberNoReportsCreate = await req('grandchild', 'POST', '/meetings', { title: 'x', participantIds: [aHead] });
+  check('member with no reports DENIED creating meetings', memberNoReportsCreate.status === 403, `got ${memberNoReportsCreate.status}`);
+  const managerNoHeadCreate = await must('amember', 'POST', '/meetings', { title: `Iso mgr meeting ${TS}`, participantIds: [grandchild] });
+  check('non-head manager (has a report) CAN create a meeting', !!managerNoHeadCreate.id, `got ${JSON.stringify(managerNoHeadCreate)}`);
+  await must('amember', 'POST', `/meetings/${managerNoHeadCreate.id}/end`, {});
+  const headEligible = await must('ahead', 'GET', '/meetings/eligible-participants');
+  check(
+    "head's eligible list includes own report, excludes non-report head",
+    headEligible.users.some((u) => u.id === aMember) && !headEligible.users.some((u) => u.id === bHead),
+    `got ${JSON.stringify(headEligible.users.map((u) => u.id))}`
+  );
+  const headInviteOutsider = await req('ahead', 'POST', '/meetings', { title: 'reach', participantIds: [bHead] });
+  check('head DENIED inviting someone outside their reports', headInviteOutsider.status === 400, `got ${headInviteOutsider.status}`);
+  const headMeeting = (await must('ahead', 'POST', '/meetings', { title: `Iso head meeting ${TS}`, participantIds: [aMember] })).id;
+  const ceoSeesUnrequested = await must('ceo', 'GET', '/meetings');
+  check(
+    'ancestor (CEO) silently surfaced in a report-created meeting, without being invited',
+    ceoSeesUnrequested.meetings.some((m) => m.id === headMeeting),
+    'meeting not visible to ancestor'
+  );
+  const memberMuteDenied = await req('amember', 'POST', `/meetings/${headMeeting}/mute`, { userId: aHead });
+  check('non-creator DENIED muting another participant', memberMuteDenied.status === 403, `got ${memberMuteDenied.status}`);
+  const muteNonParticipant = await req('ahead', 'POST', `/meetings/${headMeeting}/mute`, { userId: bHead });
+  check('mute DENIED targeting a non-participant', muteNonParticipant.status === 400, `got ${muteNonParticipant.status}`);
+  const muteOk = await req('ahead', 'POST', `/meetings/${headMeeting}/mute`, { userId: aMember });
+  check('creator CAN force-mute a participant', muteOk.status === 200, `got ${muteOk.status}`);
+  await must('ahead', 'POST', `/meetings/${headMeeting}/end`, {});
 
   console.log('\n== Office timings (schedules) ==');
   const nonCeoSched = await req('ahead', 'POST', '/schedules', { name: 'x', officeStartTime: '09:00', officeEndTime: '17:00' });
