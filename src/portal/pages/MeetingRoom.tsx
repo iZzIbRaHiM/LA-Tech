@@ -404,9 +404,15 @@ export default function MeetingRoom() {
         )}
       </div>
 
-      <div className={`flex-1 overflow-auto p-3 grid gap-3 auto-rows-fr ${gridClass}`}>
+      <div className={`flex-1 overflow-auto p-3 grid gap-3 auto-rows-fr stagger ${gridClass}`}>
         {/* Local tile */}
-        <div className="relative min-h-40 border border-[#1f1f23] bg-[#0f0f12] overflow-hidden">
+        <div
+          className={`relative min-h-40 border overflow-hidden transition-shadow ${
+            sharing
+              ? 'border-[#DFE104]/50 shadow-[0_0_20px_rgb(223_225_4/0.15)]'
+              : 'border-[#1f1f23] hover:border-[#2a2a30]'
+          } bg-[#0f0f12]`}
+        >
           <video
             ref={localVideoRef}
             autoPlay
@@ -468,7 +474,12 @@ export default function MeetingRoom() {
           <span className="ml-1.5">Leave</span>
         </Button>
         {meeting?.created_by === myId && (
-          <Button variant="outline" size="sm" onClick={endForAll} className="text-red-400 border-red-900">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={endForAll}
+            className="text-red-400 border-red-900 hover:shadow-[0_0_14px_rgb(239_68_68/0.25)] transition-shadow"
+          >
             <Ban size={15} />
             <span className="ml-1.5 hidden sm:inline">End for all</span>
           </Button>
@@ -484,7 +495,7 @@ function RemoteTile({ peer, onMute }: { peer: PeerState; onMute?: () => void }) 
     if (ref.current && peer.stream) ref.current.srcObject = peer.stream;
   }, [peer.stream]);
   return (
-    <div className="group relative min-h-40 border border-[#1f1f23] bg-[#0f0f12] overflow-hidden">
+    <div className="group relative min-h-40 border border-[#1f1f23] bg-[#0f0f12] overflow-hidden transition-shadow hover:border-[#2a2a30]">
       {peer.stream ? (
         <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />
       ) : (
