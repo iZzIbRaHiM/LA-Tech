@@ -294,7 +294,7 @@ export default function Chat() {
                       e.stopPropagation();
                       openEdit(g);
                     }}
-                    className="text-[#71717A] hover:text-[#FAFAFA] p-1"
+                    className="text-[#71717A] hover:text-[#FAFAFA] p-1 transition-colors"
                   >
                     <Pencil size={12} />
                   </button>
@@ -303,7 +303,7 @@ export default function Chat() {
                       e.stopPropagation();
                       setDeleting(g);
                     }}
-                    className="text-[#71717A] hover:text-red-400 p-1"
+                    className="text-[#71717A] hover:text-red-400 p-1 transition-colors"
                   >
                     <Trash2 size={12} />
                   </button>
