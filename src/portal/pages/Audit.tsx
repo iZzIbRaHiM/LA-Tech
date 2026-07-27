@@ -58,7 +58,7 @@ export default function Audit() {
   };
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-5xl animate-fade-up">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="ptitle font-display font-bold text-2xl mb-1">Audit Log</h1>
@@ -95,9 +95,9 @@ export default function Audit() {
             <TableHead>Details</TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody>
+        <TableBody className="stagger">
           {rows.map((r) => (
-            <TableRow key={r.id}>
+            <TableRow key={r.id} className="transition-colors hover:bg-[#141417]">
               <TableCell className="text-xs text-[#A1A1AA] whitespace-nowrap">{r.created_at}</TableCell>
               <TableCell>{r.actor_name}</TableCell>
               <TableCell>
@@ -116,10 +116,10 @@ export default function Audit() {
       {rows.length === 0 && <p className="text-sm text-[#71717A] mt-4">No entries.</p>}
 
       <div className="flex gap-2 mt-4">
-        <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>
+        <Button className="press" variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>
           ← Newer
         </Button>
-        <Button variant="outline" size="sm" disabled={rows.length < LIMIT} onClick={() => setOffset(offset + LIMIT)}>
+        <Button className="press" variant="outline" size="sm" disabled={rows.length < LIMIT} onClick={() => setOffset(offset + LIMIT)}>
           Older →
         </Button>
       </div>

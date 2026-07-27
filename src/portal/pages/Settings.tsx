@@ -108,13 +108,14 @@ export default function Settings() {
   );
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-2xl animate-fade-up">
       <h1 className="ptitle font-display font-bold text-2xl mb-1">Settings</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">
         Company-wide attendance and payroll policy. Changes apply to attendance categorization and salary
         deductions going forward — already-validated attendance records aren't retroactively recategorized.
       </p>
 
+      <div className="stagger">
       <section className="mb-8">
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Office hours</h2>
         <div className="grid grid-cols-2 gap-3 max-w-md">
@@ -196,8 +197,13 @@ export default function Settings() {
           when creating a salary payment.
         </p>
       </section>
+      </div>
 
-      <Button onClick={save} disabled={saving} className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50">
+      <Button
+        onClick={save}
+        disabled={saving}
+        className="press bg-[#DFE104] text-black hover:bg-[#c9cb04] hover:shadow-[0_0_16px_rgb(223_225_4/0.4)] transition-shadow disabled:opacity-50"
+      >
         Save settings
       </Button>
     </div>
