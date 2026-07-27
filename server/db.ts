@@ -361,6 +361,13 @@ export async function initDb() {
     UPDATE attendance SET record_date = date(check_in) WHERE record_date IS NULL AND check_in IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_user_date ON attendance(user_id, record_date);
 
+    -- Belt-and-suspenders for the app-level dup-name check in
+    -- POST /departments: without this, two concurrent creates (double-click,
+    -- two tabs) can both pass the SELECT check and both insert before either
+    -- commits. Partial + case-insensitive to match that check exactly —
+    -- an archived department may share a name with a later active one.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_departments_active_name ON departments(LOWER(name)) WHERE archived_at IS NULL;
+
     CREATE TABLE IF NOT EXISTS leave_requests (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -198,32 +198,43 @@ salaryRouter.post('/salary/:userId/payments', ...gate, async (req, res) => {
     (applyHalfDay ? halfDayDeductionTotal : 0) -
     (applyAbsent ? absentDeductionTotal : 0);
 
-  const info = await db
-    .prepare(
-      `INSERT INTO salary_payments
-        (user_id, period, base_amount, late_count, half_day_count, billable_absent_count,
-         apply_late_deduction, apply_half_day_deduction, apply_absent_deduction,
-         late_deduction_total, half_day_deduction_total, absent_deduction_total,
-         net_amount, note, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      userId,
-      period,
-      baseSalary,
-      lateCount,
-      halfDayCount,
-      billableAbsentCount,
-      applyLate ? 1 : 0,
-      applyHalfDay ? 1 : 0,
-      applyAbsent ? 1 : 0,
-      lateDeductionTotal,
-      halfDayDeductionTotal,
-      absentDeductionTotal,
-      netAmount,
-      note?.trim() ?? '',
-      req.user!.id
-    );
+  let info: { lastInsertRowid?: number };
+  try {
+    info = await db
+      .prepare(
+        `INSERT INTO salary_payments
+          (user_id, period, base_amount, late_count, half_day_count, billable_absent_count,
+           apply_late_deduction, apply_half_day_deduction, apply_absent_deduction,
+           late_deduction_total, half_day_deduction_total, absent_deduction_total,
+           net_amount, note, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        userId,
+        period,
+        baseSalary,
+        lateCount,
+        halfDayCount,
+        billableAbsentCount,
+        applyLate ? 1 : 0,
+        applyHalfDay ? 1 : 0,
+        applyAbsent ? 1 : 0,
+        lateDeductionTotal,
+        halfDayDeductionTotal,
+        absentDeductionTotal,
+        netAmount,
+        note?.trim() ?? '',
+        req.user!.id
+      );
+  } catch (err) {
+    // The SELECT check above has a race window (double-click submit); the
+    // UNIQUE(user_id, period) constraint is the real guard. A concurrent
+    // loser lands here — surface the same clean 409, not a raw 500.
+    if ((err as { code?: string }).code === '23505') {
+      return res.status(409).json({ error: 'A payment record for this employee and period already exists' });
+    }
+    throw err;
+  }
 
   await logActivity(req.user!.id, 'salary', Number(info.lastInsertRowid), 'payment_created', {
     userId,

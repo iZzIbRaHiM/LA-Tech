@@ -62,6 +62,7 @@ export default function TaskDetail() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [comment, setComment] = useState('');
+  const [postingComment, setPostingComment] = useState(false);
   const [editingComment, setEditingComment] = useState<Comment | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
   const [deletingComment, setDeletingComment] = useState<Comment | null>(null);
@@ -158,13 +159,16 @@ export default function TaskDetail() {
   };
 
   const addComment = async () => {
-    if (!comment.trim()) return;
+    if (!comment.trim() || postingComment) return;
+    setPostingComment(true);
     try {
       await api(`/tasks/${task.id}/comments`, { method: 'POST', body: { body: comment } });
       setComment('');
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      setPostingComment(false);
     }
   };
 
@@ -392,7 +396,11 @@ export default function TaskDetail() {
             rows={2}
             className="flex-1"
           />
-          <Button onClick={addComment} className="self-end bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+          <Button
+            onClick={addComment}
+            disabled={!comment.trim() || postingComment}
+            className="self-end bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
+          >
             Send
           </Button>
         </div>

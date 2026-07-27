@@ -332,7 +332,7 @@ export default function Departments() {
           <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <Archive size={13} /> Archived
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-2 stagger">
             {archived.map((d) => (
               <div
                 key={d.id}

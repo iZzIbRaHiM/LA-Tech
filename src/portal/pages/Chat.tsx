@@ -61,6 +61,7 @@ export default function Chat() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ChatGroup | null>(null);
   const [deleting, setDeleting] = useState<ChatGroup | null>(null);
@@ -106,9 +107,10 @@ export default function Chat() {
   }, [messages]);
 
   const send = async () => {
-    if (!activeId || !draft.trim()) return;
+    if (!activeId || !draft.trim() || sending) return;
     const body = draft;
     setDraft('');
+    setSending(true);
     try {
       await api(`/chat/groups/${activeId}/messages`, { method: 'POST', body: { body } });
       const r = await api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`);
@@ -116,6 +118,8 @@ export default function Chat() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to send');
       setDraft(body);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -398,7 +402,7 @@ export default function Chat() {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />
-              <Button onClick={send} disabled={!draft.trim()} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+              <Button onClick={send} disabled={!draft.trim() || sending} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
                 <Send size={14} />
               </Button>
             </div>

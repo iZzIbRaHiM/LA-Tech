@@ -169,20 +169,25 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Assignees can only update status' });
   }
 
+  // Every column below is written by ONE UPDATE statement rather than one
+  // per field — previously each field was its own round trip with no
+  // transaction wrapping them, so two concurrent PATCHes on the same task
+  // (e.g. a reassign racing a status change) could interleave column-by-
+  // column and leave the row in a state neither caller sent. A single
+  // statement is atomic in Postgres by construction.
+  let newAssignee: number | null | undefined;
   if (assignedTo !== undefined && canManage) {
-    const newAssignee = assignedTo === null ? null : Number(assignedTo);
+    newAssignee = assignedTo === null ? null : Number(assignedTo);
     if (newAssignee) {
       const ok = await db
         .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND department_id = ?')
         .get(newAssignee, task.department_id);
       if (!ok) return res.status(400).json({ error: 'Assignee does not belong to the task department' });
-      await notify(newAssignee, 'task', `Task reassigned to you: ${task.title}`, `/portal/tasks/${id}`);
     }
-    await db.prepare("UPDATE tasks SET assigned_to = ?, updated_at = datetime('now') WHERE id = ?").run(newAssignee, id);
-    await logActivity(user.id, 'task', id, 'reassigned', { assignedTo: newAssignee });
   }
 
   const fields: Array<[string, unknown]> = [];
+  if (newAssignee !== undefined) fields.push(['assigned_to', newAssignee]);
   if (status) fields.push(['status', status]);
   if (canManage) {
     if (priority) fields.push(['priority', priority]);
@@ -194,8 +199,15 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     if (title?.trim()) fields.push(['title', title.trim()]);
     if (description !== undefined) fields.push(['description', description]);
   }
-  for (const [col, val] of fields) {
-    await db.prepare(`UPDATE tasks SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, id);
+  if (fields.length) {
+    const setClause = fields.map(([col]) => `${col} = ?`).join(', ');
+    await db
+      .prepare(`UPDATE tasks SET ${setClause}, updated_at = datetime('now') WHERE id = ?`)
+      .run(...fields.map(([, val]) => val), id);
+  }
+  if (newAssignee !== undefined) {
+    if (newAssignee) await notify(newAssignee, 'task', `Task reassigned to you: ${task.title}`, `/portal/tasks/${id}`);
+    await logActivity(user.id, 'task', id, 'reassigned', { assignedTo: newAssignee });
   }
   if (status && status !== task.status) {
     await logActivity(user.id, 'task', id, 'status_changed', { from: task.status, to: status });

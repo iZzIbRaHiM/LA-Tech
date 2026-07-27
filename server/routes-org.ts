@@ -161,18 +161,35 @@ orgRouter.post('/departments', requireAuth, requireCeo, async (req, res) => {
     .prepare('SELECT 1 FROM departments WHERE LOWER(name) = LOWER(?) AND archived_at IS NULL')
     .get(name.trim());
   if (dup) return res.status(409).json({ error: 'A department with this name already exists' });
-  const info = await db
-    .prepare('INSERT INTO departments (name, created_by) VALUES (?, ?)')
-    .run(name.trim(), req.user!.id);
-  await logActivity(req.user!.id, 'department', Number(info.lastInsertRowid), 'created', { name });
-  res.json({ id: Number(info.lastInsertRowid) });
+  try {
+    const info = await db
+      .prepare('INSERT INTO departments (name, created_by) VALUES (?, ?)')
+      .run(name.trim(), req.user!.id);
+    await logActivity(req.user!.id, 'department', Number(info.lastInsertRowid), 'created', { name });
+    res.json({ id: Number(info.lastInsertRowid) });
+  } catch (err) {
+    // The SELECT check above has a race window (double-click, two tabs); the
+    // unique index is the real guard. A concurrent loser lands here, not on
+    // the check above — surface it as the same clean 409, not a raw 500.
+    if ((err as { code?: string }).code === '23505') {
+      return res.status(409).json({ error: 'A department with this name already exists' });
+    }
+    throw err;
+  }
 });
 
 orgRouter.patch('/departments/:id', requireAuth, requireCeo, async (req, res) => {
   const id = Number(req.params.id);
   const { name, archive } = req.body ?? {};
   if (name?.trim()) {
-    await db.prepare('UPDATE departments SET name = ? WHERE id = ?').run(name.trim(), id);
+    try {
+      await db.prepare('UPDATE departments SET name = ? WHERE id = ?').run(name.trim(), id);
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') {
+        return res.status(409).json({ error: 'A department with this name already exists' });
+      }
+      throw err;
+    }
     await logActivity(req.user!.id, 'department', id, 'renamed', { name });
   }
   // Archive was previously one-way — an archived department vanished from
@@ -188,7 +205,14 @@ orgRouter.patch('/departments/:id', requireAuth, requireCeo, async (req, res) =>
         .prepare('SELECT 1 FROM departments WHERE LOWER(name) = LOWER(?) AND archived_at IS NULL AND id != ?')
         .get(dept.name, id);
       if (clash) return res.status(409).json({ error: 'An active department with this name already exists — rename it first' });
-      await db.prepare('UPDATE departments SET archived_at = NULL WHERE id = ?').run(id);
+      try {
+        await db.prepare('UPDATE departments SET archived_at = NULL WHERE id = ?').run(id);
+      } catch (err) {
+        if ((err as { code?: string }).code === '23505') {
+          return res.status(409).json({ error: 'An active department with this name already exists — rename it first' });
+        }
+        throw err;
+      }
       await logActivity(req.user!.id, 'department', id, 'unarchived');
     }
   }

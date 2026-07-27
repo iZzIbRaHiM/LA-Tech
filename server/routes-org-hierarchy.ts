@@ -90,8 +90,11 @@ orgHierarchyRouter.patch('/org-tree/users/:id', requireAuth, requireCeo, async (
   if (sets.length) {
     await logActivity(actor.id, 'user', id, 'org_updated', { managerId, title, phone, name, email });
   }
-  if (managerId !== undefined && Number(managerId) !== target.manager_id) {
-    await notify(id, 'org', 'Your manager has changed', '/portal/org');
+  if (managerId !== undefined) {
+    const newManagerId = managerId === null ? null : Number(managerId);
+    if (newManagerId !== target.manager_id) {
+      await notify(id, 'org', 'Your manager has changed', '/portal/org');
+    }
   }
   if (email !== undefined) {
     await notify(id, 'org', `Your sign-in email was changed to ${String(email).trim().toLowerCase()}`, '/portal');
