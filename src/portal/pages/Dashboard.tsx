@@ -42,12 +42,16 @@ export default function Dashboard() {
   const [activity, setActivity] = useState<Activity[]>([]);
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [schedule, setSchedule] = useState<ResolvedSchedule | null>(null);
-  const [checkedInToday, setCheckedInToday] = useState<boolean | null>(null);
   const [editingPhone, setEditingPhone] = useState(false);
   const [phoneDraft, setPhoneDraft] = useState('');
-  const [checklistDismissed, setChecklistDismissed] = useState(
-    () => localStorage.getItem('portal-onboarding-dismissed') === '1'
-  );
+  // Dismissal is keyed per user — a single shared key meant one person
+  // dismissing it hid the checklist for everyone else on the same browser.
+  const dismissKey = user?.id != null ? `portal-onboarding-dismissed:${user.id}` : null;
+  const [checklistDismissed, setChecklistDismissed] = useState(false);
+  useEffect(() => {
+    if (!dismissKey) return;
+    setChecklistDismissed(localStorage.getItem(dismissKey) === '1');
+  }, [dismissKey]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
 
   const loadProfile = useCallback(() => {
@@ -67,12 +71,7 @@ export default function Dashboard() {
     api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch((e) => toast.error(e.message));
     api<{ activity: Activity[] }>('/activity').then((r) => setActivity(r.activity)).catch((e) => toast.error(e.message));
     loadProfile();
-    if (!user?.isCeo) {
-      api<{ own: Array<{ record_date: string }> }>('/attendance')
-        .then((r) => setCheckedInToday(r.own.some((a) => a.record_date === new Date().toISOString().slice(0, 10))))
-        .catch(() => {});
-    }
-  }, [loadProfile, user?.isCeo]);
+  }, [loadProfile]);
 
   const savePhone = async () => {
     try {
@@ -91,17 +90,21 @@ export default function Dashboard() {
   const overdueCount = useCountUp(overdue.length);
   const projectCount = useCountUp(projects.length);
 
-  // First-run checklist for non-CEO users — auto-detects real completion
-  // where it can, and disappears once everything is done (or dismissed).
+  // First-run checklist for non-CEO users — auto-detects real completion and
+  // disappears for good once done (or dismissed). Every item must be a
+  // one-time setup fact: "Check in for today" used to live here, but it's a
+  // *daily* task, so it reset every morning and brought the whole panel back
+  // forever. The Today strip already surfaces checking in.
   const checklist = !user?.isCeo
     ? [
         { label: 'Set your own password', done: !user?.mustChangePassword, to: undefined },
-        { label: 'Check in for today', done: !!checkedInToday, to: '/portal/attendance' },
         { label: 'Add your phone number', done: !!profile?.phone, to: undefined },
       ]
     : [];
   const checklistComplete = checklist.every((c) => c.done);
-  const showChecklist = !user?.isCeo && !checklistDismissed && !checklistComplete && checkedInToday !== null;
+  // Gate on the profile fetch (phone lives there) so the panel doesn't flash
+  // before we know whether it's already complete.
+  const showChecklist = !user?.isCeo && !checklistDismissed && !checklistComplete && profile !== null;
 
   return (
     <div className="p-4 sm:p-8 max-w-6xl stagger">
@@ -124,7 +127,7 @@ export default function Dashboard() {
             <span className="text-sm font-medium text-[#DFE104]">Getting started</span>
             <button
               onClick={() => {
-                localStorage.setItem('portal-onboarding-dismissed', '1');
+                if (dismissKey) localStorage.setItem(dismissKey, '1');
                 setChecklistDismissed(true);
               }}
               className="text-[#71717A] hover:text-[#FAFAFA] transition-colors"
