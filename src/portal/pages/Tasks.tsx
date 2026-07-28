@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Plus, Trash2, CheckSquare, CalendarDays, Users2, FolderKanban } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -185,7 +186,7 @@ export default function Tasks() {
   );
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="ptitle font-display font-bold text-2xl">Tasks</h1>
         <div className="flex items-center gap-3">
@@ -333,7 +334,7 @@ export default function Tasks() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {tasks.length === 0 && <p className="text-sm text-[#71717A] mt-6">No tasks visible to you yet.</p>}
+      {tasks.length === 0 && <EmptyState icon={CheckSquare} title="No tasks visible to you yet." />}
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-lg">

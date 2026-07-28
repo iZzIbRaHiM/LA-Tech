@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Plus, Eye, FolderKanban } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,7 +64,7 @@ export default function Projects() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
         <h1 className="ptitle font-display font-bold text-2xl">Projects</h1>
         {user?.isCeo && (
@@ -96,9 +97,10 @@ export default function Projects() {
         ))}
       </div>
       {projects.length === 0 && (
-        <p className="text-sm text-[#71717A]">
-          {user?.isCeo ? 'No projects yet — create one.' : 'No projects shared with your department yet.'}
-        </p>
+        <EmptyState
+          icon={FolderKanban}
+          title={user?.isCeo ? 'No projects yet — create one.' : 'No projects shared with your department yet.'}
+        />
       )}
 
       <Dialog open={creating} onOpenChange={setCreating}>

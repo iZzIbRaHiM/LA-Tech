@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { Check, Circle, Pencil, UserRound, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckSquare, Circle, FolderKanban, Pencil, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -208,7 +208,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <Link to="/portal/tasks" className="block group">
           <Card className="pcard pcard-hover press h-full">
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex-row items-center gap-3 space-y-0">
+              <span className="dialog-icon-badge shrink-0">
+                <CheckSquare size={16} />
+              </span>
               <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
                 Open tasks
               </CardTitle>
@@ -221,7 +224,10 @@ export default function Dashboard() {
         </Link>
         <Link to="/portal/tasks" className="block group">
           <Card className={`pcard pcard-hover press h-full ${overdue.length ? 'border-red-900/60' : ''}`}>
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex-row items-center gap-3 space-y-0">
+              <span className={`dialog-icon-badge shrink-0 ${overdue.length ? 'destructive' : ''}`}>
+                <AlertTriangle size={16} />
+              </span>
               <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
                 Overdue
               </CardTitle>
@@ -234,7 +240,10 @@ export default function Dashboard() {
         </Link>
         <Link to="/portal/projects" className="block group">
           <Card className="pcard pcard-hover press h-full">
-            <CardHeader className="pb-2">
+            <CardHeader className="pb-2 flex-row items-center gap-3 space-y-0">
+              <span className="dialog-icon-badge shrink-0">
+                <FolderKanban size={16} />
+              </span>
               <CardTitle className="text-sm text-[#A1A1AA] font-normal group-hover:text-[#FAFAFA] transition-colors">
                 {user?.isCeo ? 'Projects' : 'Shared projects'}
               </CardTitle>

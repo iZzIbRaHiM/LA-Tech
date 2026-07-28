@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Ban, CalendarClock, Pencil, Play, Plus, Video } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -245,7 +246,7 @@ export default function Meetings() {
       )}
 
       {meetings.length === 0 ? (
-        <p className="text-sm text-[#71717A]">No meetings yet.</p>
+        <EmptyState icon={Video} title="No meetings yet." />
       ) : (
         <div className="space-y-2 stagger">
           {rest.map((m) => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, KeyRound, UserX, UserCheck, Wallet, UserPlus, Trash2 } from 'lucide-react';
+import { Plus, KeyRound, UserX, UserCheck, Wallet, UserPlus, Trash2, Users } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -172,7 +173,7 @@ export default function People() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-2">
         <h1 className="ptitle font-display font-bold text-2xl">People</h1>
         <Button onClick={openCreate} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
@@ -283,7 +284,7 @@ export default function People() {
           ))}
         </TableBody>
       </Table>
-      {users.length === 0 && <p className="text-sm text-[#71717A] mt-4">No users yet.</p>}
+      {users.length === 0 && <EmptyState icon={Users} title="No users yet." />}
 
       {/* Create user */}
       <Dialog open={creating} onOpenChange={setCreating}>

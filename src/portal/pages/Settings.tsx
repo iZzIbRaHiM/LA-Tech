@@ -109,7 +109,7 @@ export default function Settings() {
   );
 
   return (
-    <div className="p-8 max-w-2xl animate-fade-up">
+    <div className="p-4 sm:p-8 max-w-2xl animate-fade-up">
       <h1 className="ptitle font-display font-bold text-2xl mb-1">Settings</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">
         Company-wide attendance and payroll policy. Changes apply to attendance categorization and salary

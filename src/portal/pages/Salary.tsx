@@ -154,7 +154,7 @@ export default function Salary() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <h1 className="ptitle font-display font-bold text-2xl mb-1">Salary</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">Visible only to the CEO.</p>
 

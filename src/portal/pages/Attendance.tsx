@@ -250,7 +250,7 @@ export default function Attendance() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <h1 className="ptitle font-display font-bold text-2xl mb-8">Attendance</h1>
 
       {/* Check in/out card — doesn't apply to the CEO at all (there's only

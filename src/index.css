@@ -206,6 +206,19 @@
     transition: box-shadow 0.2s ease, border-color 0.2s ease;
   }
 
+  /* Semantic status colors — the single source of truth for the palette
+     already used ad hoc across the app (red-400/900 for danger/overdue,
+     emerald-400/900 for success/paid, the yellow accent for neutral/live).
+     New status UI should reach for these classes instead of picking a raw
+     Tailwind shade, so the meaning of a color stays consistent everywhere. */
+  .text-status-danger { color: #f87171; }
+  .text-status-success { color: #34d399; }
+  .text-status-accent { color: #DFE104; }
+  .border-status-danger { border-color: rgb(127 29 29 / 0.6); }
+  .border-status-success { border-color: rgb(6 78 59 / 0.6); }
+  .bg-status-danger { background-color: rgb(239 68 68 / 0.1); }
+  .bg-status-success { background-color: rgb(52 211 153 / 0.1); }
+
   /* Dialog title icon badge — a small glowing square that gives every
      popup's header a focal point instead of bare text. */
   .dialog-icon-badge {

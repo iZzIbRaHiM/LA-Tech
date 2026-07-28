@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { Check, X, Plus, CalendarDays, Paperclip, Ban } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -167,7 +168,7 @@ export default function Leave() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
         <h1 className="ptitle font-display font-bold text-2xl">Leave</h1>
         <Button onClick={() => setCreating(true)} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
@@ -318,7 +319,7 @@ export default function Leave() {
       <section>
         <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My requests</h2>
         {own.length === 0 ? (
-          <p className="text-sm text-[#71717A]">No requests yet.</p>
+          <EmptyState icon={CalendarDays} title="No requests yet." />
         ) : (
           <Table>
             <TableHeader>

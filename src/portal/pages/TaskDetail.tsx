@@ -106,7 +106,7 @@ export default function TaskDetail() {
 
   if (notFound) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <p className="text-sm text-[#71717A]">Task not found or not visible to you.</p>
         <Link to="/portal/tasks" className="text-sm text-[#DFE104] mt-2 inline-block">
           ← Back to tasks
@@ -218,7 +218,7 @@ export default function TaskDetail() {
   };
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-8 max-w-3xl">
       <Link to="/portal/tasks" className="text-sm text-[#A1A1AA] hover:text-[#FAFAFA] flex items-center gap-1 mb-4">
         <ArrowLeft size={14} /> Tasks
       </Link>

@@ -169,43 +169,79 @@ export default function Layout() {
 
   const unread = notifications.filter((n) => !n.read_at).length;
 
-  const nav = [
-    { to: '/portal', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    ...(user?.isCeo ? [{ to: '/portal/people', label: 'People', icon: UserCog }] : []),
-    ...(user?.isCeo ? [{ to: '/portal/org', label: 'Org Chart', icon: Network }] : []),
-    { to: '/portal/departments', label: 'Departments', icon: Users },
-    { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
-    { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
-    { to: '/portal/attendance', label: 'Attendance', icon: Clock },
-    { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
-    { to: '/portal/chat', label: 'Chat', icon: MessageSquare },
-    { to: '/portal/meetings', label: 'Meetings', icon: Video },
-    ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
-    ...(user?.isCeo ? [{ to: '/portal/salary', label: 'Salary', icon: Wallet }] : []),
-    ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
-    ...(user?.isCeo ? [{ to: '/portal/settings', label: 'Settings', icon: SettingsIcon }] : []),
-  ];
+  // Grouped so the sidebar reads as sections instead of one flat list of 14
+  // links — Overview / Organization / Work / Collaborate / Money / Admin.
+  const navGroups = [
+    { label: null, items: [{ to: '/portal', label: 'Dashboard', icon: LayoutDashboard, end: true }] },
+    {
+      label: 'Organization',
+      items: [
+        ...(user?.isCeo ? [{ to: '/portal/people', label: 'People', icon: UserCog }] : []),
+        ...(user?.isCeo ? [{ to: '/portal/org', label: 'Org Chart', icon: Network }] : []),
+        { to: '/portal/departments', label: 'Departments', icon: Users },
+      ],
+    },
+    {
+      label: 'Work',
+      items: [
+        { to: '/portal/tasks', label: 'Tasks', icon: CheckSquare },
+        { to: '/portal/projects', label: 'Projects', icon: FolderKanban },
+        { to: '/portal/attendance', label: 'Attendance', icon: Clock },
+        { to: '/portal/leave', label: 'Leave', icon: CalendarDays },
+      ],
+    },
+    {
+      label: 'Collaborate',
+      items: [
+        { to: '/portal/chat', label: 'Chat', icon: MessageSquare },
+        { to: '/portal/meetings', label: 'Meetings', icon: Video },
+      ],
+    },
+    {
+      label: 'Money',
+      items: [
+        ...(user?.isCeo || user?.financeAccess ? [{ to: '/portal/finance', label: 'Finance', icon: Wallet }] : []),
+        ...(user?.isCeo ? [{ to: '/portal/salary', label: 'Salary', icon: Wallet }] : []),
+      ],
+    },
+    {
+      label: 'Admin',
+      items: [
+        ...(user?.isCeo ? [{ to: '/portal/audit', label: 'Audit Log', icon: ScrollText }] : []),
+        ...(user?.isCeo ? [{ to: '/portal/settings', label: 'Settings', icon: SettingsIcon }] : []),
+      ],
+    },
+  ].filter((g) => g.items.length > 0);
 
   const navContent = (onNavigate?: () => void) => (
     <>
-      <nav className="flex-1 px-2 space-y-0.5 overflow-y-auto">
-        {nav.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `pnav press flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
-                isActive
-                  ? 'pnav-active bg-[#1c1c20] text-[#FAFAFA] shadow-[inset_0_1px_0_rgb(255_255_255/0.03)]'
-                  : 'text-[#A1A1AA] hover:bg-[#141417] hover:text-[#FAFAFA]'
-              }`
-            }
-          >
-            <Icon size={15} />
-            {label}
-          </NavLink>
+      <nav className="flex-1 px-2 space-y-3 overflow-y-auto">
+        {navGroups.map((group, i) => (
+          <div key={group.label ?? `group-${i}`} className="space-y-0.5">
+            {group.label && (
+              <div className="px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#52525B]">
+                {group.label}
+              </div>
+            )}
+            {group.items.map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  `pnav press flex items-center gap-2.5 px-2.5 py-1.5 text-sm transition-colors ${
+                    isActive
+                      ? 'pnav-active bg-[#1c1c20] text-[#FAFAFA] shadow-[inset_0_1px_0_rgb(255_255_255/0.03)]'
+                      : 'text-[#A1A1AA] hover:bg-[#141417] hover:text-[#FAFAFA]'
+                  }`
+                }
+              >
+                <Icon size={15} />
+                {label}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
       <div className="px-3 py-3 border-t border-[#1f1f23] flex items-center justify-between">

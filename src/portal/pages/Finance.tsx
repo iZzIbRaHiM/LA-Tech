@@ -100,7 +100,7 @@ export function FinanceOverview() {
   }, [user]);
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <h1 className="ptitle font-display font-bold text-2xl mb-1">Finance</h1>
       <p className="text-sm text-[#A1A1AA] mb-8">
         {user?.isCeo ? 'Visible only to the CEO and finance delegates.' : 'You have finance delegate access.'}
@@ -294,7 +294,7 @@ export function FinanceLedger() {
   };
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-4 sm:p-8 max-w-4xl">
       <Link to="/portal/finance" className="text-sm text-[#A1A1AA] hover:text-[#FAFAFA] flex items-center gap-1 mb-4">
         <ArrowLeft size={14} /> Finance
       </Link>

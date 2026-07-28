@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { ScrollText } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import {
   Select,
   SelectContent,
@@ -58,7 +60,7 @@ export default function Audit() {
   };
 
   return (
-    <div className="p-8 max-w-5xl animate-fade-up">
+    <div className="p-4 sm:p-8 max-w-5xl animate-fade-up">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="ptitle font-display font-bold text-2xl mb-1">Audit Log</h1>
@@ -113,7 +115,7 @@ export default function Audit() {
           ))}
         </TableBody>
       </Table>
-      {rows.length === 0 && <p className="text-sm text-[#71717A] mt-4">No entries.</p>}
+      {rows.length === 0 && <EmptyState icon={ScrollText} title="No entries." />}
 
       <div className="flex gap-2 mt-4">
         <Button className="press" variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>
