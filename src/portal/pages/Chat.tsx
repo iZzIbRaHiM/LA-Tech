@@ -70,6 +70,15 @@ export default function Chat() {
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Two-part in-flight guard. The ref is what actually blocks a duplicate
+  // request: it updates synchronously, so clicks arriving before React has
+  // re-rendered still see it set. The state exists only to drive the UI
+  // (disabled + "Saving…"), since a ref can't trigger a re-render. A
+  // state-only guard is NOT enough — verified by triple-clicking Save with a
+  // stubbed slow response, which fired three requests through a `busy` state
+  // check because none of them had re-rendered yet.
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
@@ -196,8 +205,15 @@ export default function Chat() {
     }
   };
 
+  // Every group mutation shares one in-flight flag, and the buttons that
+  // trigger them are disabled while it's set. Without this, a slow POST left
+  // the dialog open with no feedback, so a second click sent the request
+  // again and silently created a duplicate group (observed in production:
+  // two identical "OBD PK" groups created 5s apart from one interaction).
   const createGroup = async () => {
-    if (!groupName.trim()) return;
+    if (!groupName.trim() || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       const r = await api<{ id: number }>('/chat/groups', {
         method: 'POST',
@@ -209,11 +225,16 @@ export default function Chat() {
       setActiveId(r.id);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
   const saveEdit = async () => {
-    if (!editing || !groupName.trim()) return;
+    if (!editing || !groupName.trim() || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api(`/chat/groups/${editing.id}`, {
         method: 'PATCH',
@@ -224,11 +245,16 @@ export default function Chat() {
       loadGroups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
   const confirmDeleteGroup = async () => {
-    if (!deleting) return;
+    if (!deleting || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api(`/chat/groups/${deleting.id}`, { method: 'DELETE' });
       toast.success('Group deleted');
@@ -237,6 +263,9 @@ export default function Chat() {
       loadGroups();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -433,10 +462,10 @@ export default function Chat() {
           <DialogFooter>
             <Button
               onClick={createGroup}
-              disabled={!groupName.trim()}
+              disabled={!groupName.trim() || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
-              Create
+              {busy ? 'Creating…' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -460,10 +489,10 @@ export default function Chat() {
           <DialogFooter>
             <Button
               onClick={saveEdit}
-              disabled={!groupName.trim()}
+              disabled={!groupName.trim() || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
-              Save
+              {busy ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -482,8 +511,12 @@ export default function Chat() {
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteGroup} className="bg-red-600 text-white hover:bg-red-700">
-              Delete
+            <AlertDialogAction
+              onClick={confirmDeleteGroup}
+              disabled={busy}
+              className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {busy ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
