@@ -198,7 +198,7 @@ export default function Meetings() {
 
       {upcoming.length > 0 && (
         <section className="mb-8">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+          <h2 className="psection mb-3 flex items-center gap-1.5">
             <CalendarClock size={13} /> Upcoming
           </h2>
           <div className="space-y-2 stagger">

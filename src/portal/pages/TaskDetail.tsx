@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, MessageSquare } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import DetailSkeleton from '../components/DetailSkeleton';
 import {
   AlertDialog,
@@ -308,12 +309,12 @@ export default function TaskDetail() {
       </AlertDialog>
 
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-2">Attachments</h2>
+        <h2 className="psection mb-2">Attachments</h2>
         <Attachments entityType="task" entityId={task.id} />
       </section>
 
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">
+        <h2 className="psection mb-3">
           Sub-tasks ({subtasks.length})
         </h2>
         <div className="space-y-1 mb-3">
@@ -358,7 +359,7 @@ export default function TaskDetail() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Comments</h2>
+        <h2 className="psection mb-3">Comments</h2>
         <div className="space-y-3 mb-4">
           {comments.map((c) => (
             <div key={c.id} className="pcard animate-fade-up px-3 py-2 group">
@@ -387,7 +388,7 @@ export default function TaskDetail() {
               <div className="text-sm whitespace-pre-wrap">{c.body}</div>
             </div>
           ))}
-          {comments.length === 0 && <p className="text-sm text-[#71717A]">No comments yet.</p>}
+          {comments.length === 0 && <EmptyState icon={MessageSquare} title="No comments yet." />}
         </div>
         <div className="flex gap-2">
           <Textarea

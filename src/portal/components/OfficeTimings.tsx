@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2, Pencil, X, Clock, Users2 } from 'lucide-react';
+import EmptyState from './EmptyState';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -120,7 +121,7 @@ export default function OfficeTimings() {
   return (
     <section className="mb-8">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide">Office timings (shifts)</h2>
+        <h2 className="psection">Office timings (shifts)</h2>
         <Button size="sm" variant="outline" onClick={() => setEditing({ ...EMPTY })}>
           <Plus size={13} className="mr-1" /> New timing
         </Button>
@@ -131,7 +132,7 @@ export default function OfficeTimings() {
       </p>
 
       {schedules.length === 0 ? (
-        <p className="text-sm text-[#71717A]">No custom timings yet — everyone uses the company default.</p>
+        <EmptyState compact icon={Clock} title="No custom timings yet — everyone uses the company default." />
       ) : (
         <div className="space-y-3">
           {schedules.map((s) => {

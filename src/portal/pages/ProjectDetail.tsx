@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil, CheckSquare } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import DetailSkeleton from '../components/DetailSkeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -299,7 +300,7 @@ export default function ProjectDetail() {
 
       {user?.isCeo && (
         <section className="mb-8">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+          <h2 className="psection mb-3 flex items-center gap-1.5">
             <Eye size={13} /> Department visibility
           </h2>
           <div className="pcard space-y-2 p-3 max-w-sm">
@@ -326,7 +327,7 @@ export default function ProjectDetail() {
 
       {/* Milestones timeline */}
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+        <h2 className="psection mb-3 flex items-center gap-1.5">
           <Flag size={13} /> Milestones
         </h2>
         <div className="border-l border-[#1f1f23] ml-1.5 pl-5 space-y-3">
@@ -369,7 +370,7 @@ export default function ProjectDetail() {
               )}
             </div>
           ))}
-          {milestones.length === 0 && <p className="text-sm text-[#71717A]">No milestones yet.</p>}
+          {milestones.length === 0 && <EmptyState icon={Flag} title="No milestones yet." />}
         </div>
         {user?.isCeo && (
           <div className="flex gap-2 mt-4 max-w-md">
@@ -409,7 +410,7 @@ export default function ProjectDetail() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">
+        <h2 className="psection mb-3">
           Linked tasks ({tasks.length})
         </h2>
         <div className="space-y-1">
@@ -425,7 +426,7 @@ export default function ProjectDetail() {
               </Badge>
             </Link>
           ))}
-          {tasks.length === 0 && <p className="text-sm text-[#71717A]">No tasks linked yet.</p>}
+          {tasks.length === 0 && <EmptyState icon={CheckSquare} title="No tasks linked yet." />}
         </div>
       </section>
 

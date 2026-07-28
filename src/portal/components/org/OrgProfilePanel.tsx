@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronsUpDown, KeyRound, UserX, UserCheck, Plus, Video, Wallet } from 'lucide-react';
+import { ChevronsUpDown, KeyRound, UserX, UserCheck, Plus, Video, Wallet, CheckSquare, Clock } from 'lucide-react';
+import EmptyState from '../EmptyState';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -486,7 +487,7 @@ export default function OrgProfilePanel({
           {/* ---------- Tasks ---------- */}
           <TabsContent value="tasks" className="pt-4">
             {tasks.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No tasks assigned.</p>
+              <EmptyState compact icon={CheckSquare} title="No tasks assigned." />
             ) : (
               <div className="space-y-1.5">
                 {tasks.map((t) => (
@@ -508,7 +509,7 @@ export default function OrgProfilePanel({
           {/* ---------- Attendance ---------- */}
           <TabsContent value="attendance" className="pt-4">
             {attendance.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No attendance records.</p>
+              <EmptyState compact icon={Clock} title="No attendance records." />
             ) : (
               <div className="space-y-1.5">
                 {attendance.map((r) => (
@@ -545,7 +546,7 @@ export default function OrgProfilePanel({
             <div>
               <div className="text-xs uppercase tracking-wide text-[#A1A1AA] mb-2">Payment history</div>
               {payments.length === 0 ? (
-                <p className="text-sm text-[#71717A]">No payment records yet.</p>
+                <EmptyState compact icon={Wallet} title="No payment records yet." />
               ) : (
                 <div className="space-y-1">
                   {payments.map((p) => (

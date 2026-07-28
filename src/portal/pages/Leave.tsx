@@ -179,11 +179,11 @@ export default function Leave() {
       {/* Approval queue */}
       {isDecider && (
         <section className="mb-10">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">
+          <h2 className="psection mb-3">
             Awaiting your decision ({pending.length})
           </h2>
           {pending.length === 0 ? (
-            <p className="text-sm text-[#71717A]">Nothing pending.</p>
+            <EmptyState compact icon={Check} title="Nothing pending." />
           ) : (
             <Table>
               <TableHeader>
@@ -242,7 +242,7 @@ export default function Leave() {
           while it's still sitting in the pending queue. */}
       {isDecider && decided.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Team history</h2>
+          <h2 className="psection mb-3">Team history</h2>
           <Table>
             <TableHeader>
               <TableRow>
@@ -300,7 +300,7 @@ export default function Leave() {
       {/* Calendar (CEO sees company-wide, head sees dept, employee sees own) */}
       <section className="mb-10">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide flex items-center gap-1.5">
+          <h2 className="psection flex items-center gap-1.5">
             <CalendarDays size={13} /> Approved leave — {month}
           </h2>
           <div className="flex gap-1">
@@ -317,7 +317,7 @@ export default function Leave() {
 
       {/* Own requests */}
       <section>
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My requests</h2>
+        <h2 className="psection mb-3">My requests</h2>
         {own.length === 0 ? (
           <EmptyState icon={CalendarDays} title="No requests yet." />
         ) : (

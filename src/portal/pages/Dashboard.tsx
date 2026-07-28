@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { AlertTriangle, Check, CheckSquare, Circle, FolderKanban, Pencil, UserRound, X } from 'lucide-react';
+import { Activity as ActivityIcon, AlertTriangle, Check, CheckSquare, Circle, FolderKanban, Pencil, UserRound, X } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -264,7 +265,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section>
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My open tasks</h2>
+          <h2 className="psection mb-3">My open tasks</h2>
           <div className="space-y-1">
             {!tasksLoaded &&
               [0, 1, 2].map((i) => (
@@ -295,7 +296,7 @@ export default function Dashboard() {
         </section>
 
         <section>
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Recent activity</h2>
+          <h2 className="psection mb-3">Recent activity</h2>
           <div className="space-y-2">
             {activity.slice(0, 10).map((a) => (
               <div key={a.id} className="text-sm text-[#A1A1AA]">
@@ -303,7 +304,7 @@ export default function Dashboard() {
                 <span className="text-[#71717A]">· {a.entity_type}</span>
               </div>
             ))}
-            {activity.length === 0 && <p className="text-sm text-[#71717A]">Nothing yet.</p>}
+            {activity.length === 0 && <EmptyState compact icon={ActivityIcon} title="No activity yet." />}
           </div>
         </section>
       </div>

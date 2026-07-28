@@ -330,7 +330,7 @@ export default function Departments() {
 
       {user?.isCeo && archived.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+          <h2 className="psection mb-3 flex items-center gap-1.5">
             <Archive size={13} /> Archived
           </h2>
           <div className="space-y-2 stagger">

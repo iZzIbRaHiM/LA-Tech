@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare, Plus, Pencil, Trash2, Send, Paperclip, FileText } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -267,7 +268,7 @@ export default function Chat() {
     <div className="flex h-full">
       <div className="w-64 shrink-0 border-r border-[#1f1f23] flex flex-col">
         <div className="px-4 py-3 flex items-center justify-between border-b border-[#1f1f23]">
-          <h2 className="font-medium text-sm">Chats</h2>
+          <h2 className="psection">Chats</h2>
           {user?.isCeo && (
             <Button variant="ghost" size="sm" onClick={openCreate} className="text-[#DFE104]">
               <Plus size={14} />
@@ -378,7 +379,7 @@ export default function Chat() {
                   </div>
                 </div>
               ))}
-              {messages.length === 0 && <p className="text-sm text-[#71717A]">No messages yet — say hello.</p>}
+              {messages.length === 0 && <EmptyState icon={MessageSquare} title="No messages yet — say hello." />}
               <div ref={bottomRef} />
             </div>
             <div className="p-3 border-t border-[#1f1f23] flex gap-2">

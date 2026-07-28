@@ -14,7 +14,8 @@ import {
   Area,
   Legend,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, DollarSign, BarChart3, CheckSquare, Clock } from 'lucide-react';
+import EmptyState from './components/EmptyState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { api, type Task } from './api';
 
@@ -153,7 +154,7 @@ export default function CeoInsights() {
 
   return (
     <div className="mb-12">
-      <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+      <h2 className="psection mb-3 flex items-center gap-1.5">
         <DollarSign size={13} /> Company overview
       </h2>
 
@@ -177,7 +178,7 @@ export default function CeoInsights() {
           </CardHeader>
           <CardContent>
             {revenueChartData.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No project finance data yet.</p>
+              <EmptyState compact icon={BarChart3} title="No project finance data yet." />
             ) : (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={revenueChartData} margin={{ left: -20 }}>
@@ -201,7 +202,7 @@ export default function CeoInsights() {
           </CardHeader>
           <CardContent>
             {payrollTrend.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No salary payments recorded yet.</p>
+              <EmptyState compact icon={Wallet} title="No salary payments recorded yet." />
             ) : (
               <ResponsiveContainer width="100%" height={240}>
                 <AreaChart data={payrollTrend} margin={{ left: -20 }}>
@@ -228,7 +229,7 @@ export default function CeoInsights() {
           </CardHeader>
           <CardContent className="flex items-center justify-center">
             {taskStatusData.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No tasks yet.</p>
+              <EmptyState compact icon={CheckSquare} title="No tasks yet." />
             ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
@@ -254,7 +255,7 @@ export default function CeoInsights() {
           </CardHeader>
           <CardContent className="flex items-center justify-center">
             {attendanceChartData.length === 0 ? (
-              <p className="text-sm text-[#71717A]">No attendance data yet this month.</p>
+              <EmptyState compact icon={Clock} title="No attendance data yet this month." />
             ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>

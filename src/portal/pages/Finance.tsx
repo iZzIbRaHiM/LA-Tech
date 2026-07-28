@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Pencil, Plus, Trash2, FolderKanban, Receipt, Wallet } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -151,12 +152,12 @@ export function FinanceOverview() {
           ))}
         </TableBody>
       </Table>
-      {perProject.length === 0 && <p className="text-sm text-[#71717A] mt-4">No projects yet.</p>}
+      {perProject.length === 0 && <EmptyState icon={FolderKanban} title="No projects yet." />}
 
       {user?.isCeo && (
         <section className="mt-10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide">Salary payments</h2>
+            <h2 className="psection">Salary payments</h2>
             <Link to="/portal/salary" className="text-sm text-[#DFE104] hover:underline">
               Manage salaries →
             </Link>
@@ -185,7 +186,7 @@ export function FinanceOverview() {
             </Card>
           </div>
           {salaryPayments.length === 0 ? (
-            <p className="text-sm text-[#71717A]">No salary payments recorded yet.</p>
+            <EmptyState compact icon={Wallet} title="No salary payments recorded yet." />
           ) : (
             <Table>
               <TableHeader>
@@ -390,7 +391,7 @@ export function FinanceLedger() {
           ))}
         </TableBody>
       </Table>
-      {entries.length === 0 && <p className="text-sm text-[#71717A] mt-4">No entries yet.</p>}
+      {entries.length === 0 && <EmptyState icon={Receipt} title="No entries yet." />}
 
       <Dialog open={!!editingEntry} onOpenChange={(o) => !o && setEditingEntry(null)}>
         <DialogContent className="max-w-sm">

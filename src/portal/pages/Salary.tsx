@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Wallet, ChevronDown, ChevronUp, Check, Trash2, Undo2 } from 'lucide-react';
+import { Wallet, ChevronDown, ChevronUp, Check, Trash2, Undo2, Users } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -268,7 +269,7 @@ export default function Salary() {
           ))}
         </TableBody>
       </Table>
-      {employees.length === 0 && <p className="text-sm text-[#71717A] mt-4">No employees yet.</p>}
+      {employees.length === 0 && <EmptyState icon={Users} title="No employees yet." />}
 
       <Dialog open={!!assigning} onOpenChange={(o) => !o && setAssigning(null)}>
         <DialogContent className="max-w-sm">

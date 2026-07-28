@@ -118,7 +118,7 @@ export default function Settings() {
 
       <div className="stagger">
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Office hours</h2>
+        <h2 className="psection mb-3">Office hours</h2>
         <div className="grid grid-cols-2 gap-3 max-w-md">
           <div className="space-y-1.5">
             <Label>Office start time</Label>
@@ -140,7 +140,7 @@ export default function Settings() {
       </section>
 
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Check-in categorization</h2>
+        <h2 className="psection mb-3">Check-in categorization</h2>
         <div className="grid grid-cols-2 gap-3 max-w-md">
           <div className="space-y-1.5">
             <Label>Late after (minutes)</Label>
@@ -170,7 +170,7 @@ export default function Settings() {
       <OfficeTimings />
 
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Absences</h2>
+        <h2 className="psection mb-3">Absences</h2>
         <div className="space-y-1.5 max-w-xs">
           <Label>Max absences allowed / month (free, no deduction)</Label>
           <Input
@@ -183,7 +183,7 @@ export default function Settings() {
       </section>
 
       <section className="mb-8">
-        <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-4">Salary deductions</h2>
+        <h2 className="psection mb-4">Salary deductions</h2>
         <div className="space-y-4 max-w-xl">
           <DeductionRow label="Late check-in (per occurrence)" typeKey="late_deduction_type" amountKey="late_deduction_amount" />
           <DeductionRow label="Half day (per occurrence)" typeKey="half_day_deduction_type" amountKey="half_day_deduction_amount" />

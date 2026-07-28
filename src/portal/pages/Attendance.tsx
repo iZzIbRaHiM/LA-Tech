@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2, CalendarPlus } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -315,7 +316,7 @@ export default function Attendance() {
       {isValidator && (
         <section className="mb-10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide">
+            <h2 className="psection">
               Awaiting your validation ({pendingTeam.length})
             </h2>
             <Button
@@ -329,7 +330,7 @@ export default function Attendance() {
             </Button>
           </div>
           {pendingTeam.length === 0 ? (
-            <p className="text-sm text-[#71717A]">Nothing pending.</p>
+            <EmptyState compact icon={Check} title="Nothing pending." />
           ) : (
             <Table>
               <TableHeader>
@@ -397,7 +398,7 @@ export default function Attendance() {
       {user?.isCeo && (
         <section className="mb-10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide flex items-center gap-1.5">
+            <h2 className="psection flex items-center gap-1.5">
               <BarChart3 size={13} /> Monthly report — {reportMonth}
             </h2>
             <div className="flex gap-1">
@@ -413,7 +414,7 @@ export default function Attendance() {
             </div>
           </div>
           {report.length === 0 ? (
-            <p className="text-sm text-[#71717A]">No completed attendance records this month.</p>
+            <EmptyState icon={Clock} title="No completed attendance records this month." />
           ) : (
             <Table>
               <TableHeader>
@@ -448,9 +449,9 @@ export default function Attendance() {
       {/* Own history — doesn't apply to the CEO (no attendance records of their own) */}
       {!user?.isCeo && (
         <section className="mb-10">
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">My history</h2>
+          <h2 className="psection mb-3">My history</h2>
           {own.length === 0 ? (
-            <p className="text-sm text-[#71717A]">No records yet — check in to create your first one.</p>
+            <EmptyState icon={Clock} title="No records yet — check in to create your first one." />
           ) : (
             <Table>
               <TableHeader>
@@ -495,7 +496,7 @@ export default function Attendance() {
       {/* Team history — validators only, and only if there's something to see */}
       {isValidator && team.length > 0 && (
         <section>
-          <h2 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wide mb-3">Team history</h2>
+          <h2 className="psection mb-3">Team history</h2>
           <Table>
             <TableHeader>
               <TableRow>
