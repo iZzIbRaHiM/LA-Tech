@@ -113,16 +113,6 @@ export default function Navigation() {
             >
               Portfolio
             </Link>
-            <Link
-              to="/portal"
-              className={navLinkClass(false)}
-              style={{
-                fontSize: 'clamp(0.75rem, 1vw, 1.125rem)',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              Portal
-            </Link>
             <a
               href={isHome ? '#contact' : '/#contact'}
               onClick={(e) => {
@@ -210,18 +200,6 @@ export default function Navigation() {
             }}
           >
             Portfolio
-          </Link>
-          <Link
-            to="/portal"
-            onClick={() => setMobileOpen(false)}
-            className="font-display font-bold uppercase text-[#FAFAFA] hover:text-[#DFE104] transition-colors duration-200"
-            style={{
-              fontSize: 'clamp(2.5rem, 8vw, 8rem)',
-              lineHeight: 0.85,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Portal
           </Link>
           <a
             href={isHome ? '#contact' : '/#contact'}
