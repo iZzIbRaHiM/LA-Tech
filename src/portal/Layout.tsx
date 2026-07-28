@@ -21,6 +21,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +47,13 @@ import { Kbd } from '@/components/ui/kbd';
 import { useAuth } from './AuthContext';
 import { api } from './api';
 import { usePolling } from './usePolling';
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+}
 
 interface Notification {
   id: number;
@@ -171,7 +179,9 @@ export default function Layout() {
 
   // Grouped so the sidebar reads as sections instead of one flat list of 14
   // links — Overview / Organization / Work / Collaborate / Money / Admin.
-  const navGroups = [
+  // Explicitly typed: without it TS infers a union where only the Dashboard
+  // item carries `end`, and destructuring it below fails under `tsc -b`.
+  const navGroups: Array<{ label: string | null; items: NavItem[] }> = [
     { label: null, items: [{ to: '/portal', label: 'Dashboard', icon: LayoutDashboard, end: true }] },
     {
       label: 'Organization',
