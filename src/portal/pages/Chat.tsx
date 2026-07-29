@@ -101,6 +101,10 @@ const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '👏', '🙏', '🔥', 
 // Spec springs. 400/28 is the "launch from the input" feel; the softer
 // 300/30 is for list reordering and layout shifts, where overshoot on a
 // whole row reads as noise rather than physicality.
+// Only the most recent messages participate in layout projection; see the
+// `layout` prop on the message row for why.
+const LAYOUT_WINDOW = 40;
+
 const SPRING_SEND = { type: 'spring' as const, stiffness: 400, damping: 28 };
 const SPRING_SOFT = { type: 'spring' as const, stiffness: 300, damping: 30 };
 const SPRING_POP = { type: 'spring' as const, stiffness: 500, damping: 18 };
@@ -319,7 +323,14 @@ export default function Chat() {
   }, [user]);
 
   const [pollMs, setPollMs] = useState(POLL_FAST_MS);
-  const lastChangeRef = useRef(Date.now());
+  // Seeded on mount rather than in the initialiser: `useRef(Date.now())`
+  // re-evaluates Date.now() on every render (the value is discarded after the
+  // first, but the call is an impure read during render). 0 is never compared
+  // before the mount effect runs — the idle check is on a 5s interval.
+  const lastChangeRef = useRef(0);
+  useEffect(() => {
+    lastChangeRef.current = Date.now();
+  }, []);
   const newestIdRef = useRef(0);
 
   // Called whenever the user does something that implies they're engaged, so
@@ -382,9 +393,13 @@ export default function Chat() {
 
   // Autoscroll only while the reader is already at the bottom; if they've
   // scrolled up into history, new arrivals must not yank the view down.
+  // `pending` is a dependency too: an optimistic bubble is appended before the
+  // server round-trip, so keying on `messages` alone left your own message
+  // rendered below the fold for the ~200ms until the refetch landed — exactly
+  // the latency the optimistic render exists to hide.
   useEffect(() => {
     if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  }, [messages, pending]);
 
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -402,6 +417,20 @@ export default function Chat() {
   useEffect(() => () => {
     if (scrollIdleRef.current) clearTimeout(scrollIdleRef.current);
   }, []);
+
+  // `send()` clears its own optimistic row after refetching, but the background
+  // poll runs on its own timer and can deliver the confirmed message first. In
+  // that window both copies are mounted and the message visibly appears twice,
+  // so drop any optimistic row the server has already echoed back to us.
+  // Matching on body is a heuristic: sending the same text twice in quick
+  // succession collapses the second bubble for the few ms until the refetch
+  // lands, which is far less jarring than a duplicate.
+  const visiblePending = useMemo(() => {
+    if (!pending.length) return pending;
+    return pending.filter(
+      (pm) => !messages.some((m) => m.sender_id === user?.id && m.body === pm.body)
+    );
+  }, [pending, messages, user?.id]);
 
   const jumpToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
@@ -906,7 +935,11 @@ export default function Chat() {
                   return (
                     <motion.div
                       key={m.id}
-                      layout={reduce ? false : 'position'}
+                      // Layout projection costs a measurement per node on every
+                      // layout pass, and the fetch caps at 200 messages. Only
+                      // the recent tail can actually shift position (deletes,
+                      // new arrivals), so older rows opt out and stop paying.
+                      layout={reduce || i < visibleMessages.length - LAYOUT_WINDOW ? false : 'position'}
                       initial={
                         reduce
                           ? { opacity: 0 }
@@ -920,10 +953,10 @@ export default function Chat() {
                       }
                       animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, x: 0, y: 0 }}
                       exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
-                      transition={
-                        reduce ? { duration: 0.1 } : mine ? SPRING_SEND : { ...SPRING_SOFT, duration: 0.25 }
-                      }
-                      onAnimationStart={(d: unknown) => void d}
+                      // No `duration` on the spring branch: Framer ignores
+                      // stiffness/damping the moment a duration is supplied, so
+                      // the tuned 300/30 curve was being silently discarded.
+                      transition={reduce ? { duration: 0.1 } : mine ? SPRING_SEND : SPRING_SOFT}
                     >
                       {showDay && (
                         <div className="chat-divider my-5 chat-daypill" role="separator">
@@ -1031,7 +1064,7 @@ export default function Chat() {
                     the server confirms. Hidden while searching, since these
                     aren't real results yet. */}
                 {!msgQuery.trim() &&
-                  pending.map((pm) => (
+                  visiblePending.map((pm) => (
                     <motion.div
                       key={pm.id}
                       layout={reduce ? false : 'position'}
@@ -1086,9 +1119,9 @@ export default function Chat() {
               {(!nearBottom || hasNewBelow) && (
                 <motion.button
                   key="jump"
-                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
-                  animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, x: '-50%' }}
-                  exit={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9 }}
+                  animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9 }}
                   transition={reduce ? { duration: 0.1 } : SPRING_POP}
                   className="chat-jump px-3 py-1.5 text-[13px] flex items-center gap-1.5"
                   onClick={jumpToBottom}

@@ -444,11 +444,17 @@
   .chat-typing-dot:nth-child(3) { animation-delay: 0.3s; }
 
   /* Floating "new messages" chip over the scroll area. */
+  /* Centred with auto margins rather than translateX(-50%): the
+     prefers-reduced-motion block nulls `transform` across .chat-root, which
+     would otherwise strip the centering and shove the chip half its width
+     off-axis. Positioning must not ride on a property the a11y reset clears. */
   .chat-jump {
     position: absolute;
     bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: fit-content;
     background: #1A1A1D;
     border: 1px solid rgb(232 197 71 / 0.3);
     color: #E8C547;
@@ -458,7 +464,7 @@
     transition: transform 0.12s ease, box-shadow 0.15s ease;
   }
   .chat-jump:hover {
-    transform: translateX(-50%) translateY(-2px);
+    transform: translateY(-2px);
     box-shadow: 0 8px 26px rgb(0 0 0 / 0.6), 0 0 14px rgb(232 197 71 / 0.25);
   }
 
