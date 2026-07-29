@@ -220,6 +220,52 @@
     letter-spacing: 0.025em;
   }
 
+  /* Chat bubble — arrives with a soft pop, lifts and deepens its shadow on
+     hover. The lift is small on purpose: a chat log is a dense list, so a
+     large transform would make the whole column feel unstable while reading. */
+  .pbubble {
+    position: relative;
+    animation: p-bubble-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transition:
+      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.25s ease;
+  }
+  .pbubble:hover {
+    transform: translateY(-1px);
+  }
+  .pbubble-mine {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.35),
+      0 2px 12px rgb(223 225 4 / 0.16);
+  }
+  .pbubble-mine:hover {
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.4),
+      0 8px 24px rgb(223 225 4 / 0.32),
+      0 0 0 1px rgb(223 225 4 / 0.35);
+  }
+  .pbubble-theirs {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 2px 10px rgb(0 0 0 / 0.35);
+  }
+  .pbubble-theirs:hover {
+    box-shadow:
+      0 2px 6px rgb(0 0 0 / 0.5),
+      0 10px 28px rgb(0 0 0 / 0.55),
+      0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+
+  /* Unread pill on a chat row — pulses gently so a new message is noticed
+     without the whole row flashing. */
+  .punread {
+    background: #DFE104;
+    color: #000;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgb(223 225 4 / 0.45);
+    animation: p-unread-pulse 2.4s ease-in-out infinite;
+  }
+
   /* Dialog title icon badge — a small glowing square that gives every
      popup's header a focal point instead of bare text. */
   .dialog-icon-badge {
@@ -384,6 +430,29 @@
   }
 }
 
+/* Message arrival: rises slightly and settles, rather than just fading —
+   reads as the message "landing" in the conversation. */
+@keyframes p-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes p-unread-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgb(223 225 4 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 18px rgb(223 225 4 / 0.75);
+  }
+}
+
 @keyframes p-glow-pulse {
   0%,
   100% {
@@ -469,7 +538,9 @@
   .animate-fade-up,
   .animate-scale-in,
   .glow-pulse,
-  .shimmer {
+  .shimmer,
+  .pbubble,
+  .punread {
     animation: none !important;
     opacity: 1 !important;
   }
@@ -477,6 +548,7 @@
   .pcard-hover,
   .prow,
   .press,
+  .pbubble,
   .pnav svg {
     transition: none !important;
   }

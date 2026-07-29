@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Plus, KeyRound, UserX, UserCheck, Wallet, UserPlus, Trash2, Users } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,8 @@ export interface PortalUser {
 }
 
 export default function People() {
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<PortalUser[]>([]);
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState<PortalUser | null>(null);
@@ -83,8 +85,13 @@ export default function People() {
     api<{ departments: Department[] }>('/departments').then((r) => setDepartments(r.departments)).catch(() => {});
   };
 
+  // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
+  // React re-renders to disable the button. A state-only check is too late —
+  // rapid clicks all read the stale value. See Chat.tsx for the incident.
   const createUser = async () => {
-    if (!canCreateUser) return;
+    if (!canCreateUser || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api('/users', {
         method: 'POST',
@@ -103,6 +110,9 @@ export default function People() {
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -338,7 +348,7 @@ export default function People() {
           <DialogFooter>
             <Button
               onClick={createUser}
-              disabled={!canCreateUser}
+              disabled={!canCreateUser || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Create user

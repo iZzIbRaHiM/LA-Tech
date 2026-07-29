@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Link } from 'react-router';
 import { Plus, Trash2, CheckSquare, CalendarDays, Users2, FolderKanban } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -68,6 +68,8 @@ const PRIORITY_PILL_ACTIVE: Record<string, string> = {
 
 export default function Tasks() {
   const { user } = useAuth();
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [view, setView] = useState('board');
   const [creating, setCreating] = useState(false);
@@ -124,8 +126,13 @@ export default function Tasks() {
 
   const canSubmitTask = form.title.trim() !== '' && (!user?.isCeo || form.departmentId !== '');
 
+  // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
+  // React re-renders to disable the button. A state-only check is too late —
+  // rapid clicks all read the stale value. See Chat.tsx for the incident.
   const createTask = async () => {
-    if (!canSubmitTask) return;
+    if (!canSubmitTask || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api('/tasks', {
         method: 'POST',
@@ -145,6 +152,9 @@ export default function Tasks() {
       toast.success('Task created');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -483,7 +493,7 @@ export default function Tasks() {
           <DialogFooter>
             <Button
               onClick={createTask}
-              disabled={!canSubmitTask}
+              disabled={!canSubmitTask || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Create task

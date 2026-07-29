@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Download, Pencil, Plus, Trash2, FolderKanban, Receipt, Wallet } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -215,6 +215,8 @@ export function FinanceOverview() {
 
 export function FinanceLedger() {
   const { projectId } = useParams();
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [entries, setEntries] = useState<Entry[]>([]);
   const [form, setForm] = useState({ type: 'expense', amount: '', category: '', note: '' });
@@ -234,8 +236,13 @@ export function FinanceLedger() {
 
   const canAddEntry = Number.isFinite(Number(form.amount)) && Number(form.amount) > 0;
 
+  // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
+  // React re-renders to disable the button. A state-only check is too late —
+  // rapid clicks all read the stale value. See Chat.tsx for the incident.
   const addEntry = async () => {
-    if (!canAddEntry) return;
+    if (!canAddEntry || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api(`/finance/projects/${projectId}/entries`, {
         method: 'POST',
@@ -246,6 +253,9 @@ export function FinanceLedger() {
       toast.success('Entry added');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -340,7 +350,7 @@ export function FinanceLedger() {
         />
         <Button
           onClick={addEntry}
-          disabled={!canAddEntry}
+          disabled={!canAddEntry || busy}
           className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
         >
           <Plus size={14} className="mr-1" /> Add

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState, useRef } from 'react';
 import { Check, X, Plus, CalendarDays, Paperclip, Ban } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -98,6 +98,8 @@ function MonthCalendar({ leaves, month }: { leaves: LeaveRequest[]; month: strin
 
 export default function Leave() {
   const { user } = useAuth();
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [own, setOwn] = useState<LeaveRequest[]>([]);
   const [team, setTeam] = useState<LeaveRequest[]>([]);
   const [calendar, setCalendar] = useState<LeaveRequest[]>([]);
@@ -124,8 +126,13 @@ export default function Leave() {
 
   const canSubmit = form.startDate !== '' && form.endDate !== '';
 
+  // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
+  // React re-renders to disable the button. A state-only check is too late —
+  // rapid clicks all read the stale value. See Chat.tsx for the incident.
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api('/leave', { method: 'POST', body: form });
       setCreating(false);
@@ -134,6 +141,9 @@ export default function Leave() {
       toast.success('Leave request submitted');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -431,7 +441,7 @@ export default function Leave() {
           <DialogFooter>
             <Button
               onClick={submit}
-              disabled={!canSubmit}
+              disabled={!canSubmit || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Submit request

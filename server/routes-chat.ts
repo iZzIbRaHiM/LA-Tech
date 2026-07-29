@@ -14,15 +14,29 @@ const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB, matches the generic attachment
 // Groups the current user belongs to — a non-member can't discover a group
 // exists at all, so every route below re-checks membership per group.
 chatRouter.get('/chat/groups', requireAuth, async (req, res) => {
+  // unread_count = messages newer than this member's read marker, excluding
+  // their own. Ordered so groups with unread messages float to the top, then
+  // by most recent activity — a busy group shouldn't be buried under an old
+  // quiet one.
   const groups = await db
     .prepare(
-      `SELECT g.id, g.name, g.created_by, g.created_at,
-              (SELECT COUNT(*) FROM chat_group_members m WHERE m.group_id = g.id) AS member_count
-       FROM chat_groups g
-       JOIN chat_group_members gm ON gm.group_id = g.id AND gm.user_id = ?
-       ORDER BY g.created_at DESC`
+      // Wrapped in an outer SELECT because Postgres won't let an ORDER BY
+      // *expression* reference a select alias (`unread_count > 0` fails with
+      // 42703); from the outer query the aliases are real columns.
+      `SELECT * FROM (
+         SELECT g.id, g.name, g.created_by, g.created_at,
+                (SELECT COUNT(*) FROM chat_group_members m WHERE m.group_id = g.id) AS member_count,
+                (SELECT COUNT(*) FROM chat_messages c
+                   WHERE c.group_id = g.id
+                     AND c.id > gm.last_read_message_id
+                     AND c.sender_id != ?) AS unread_count,
+                (SELECT MAX(c2.id) FROM chat_messages c2 WHERE c2.group_id = g.id) AS last_message_id
+         FROM chat_groups g
+         JOIN chat_group_members gm ON gm.group_id = g.id AND gm.user_id = ?
+       ) t
+       ORDER BY (t.unread_count > 0) DESC, t.last_message_id DESC NULLS LAST, t.created_at DESC`
     )
-    .all(req.user!.id);
+    .all(req.user!.id, req.user!.id);
   res.json({ groups });
 });
 
@@ -99,15 +113,73 @@ chatRouter.delete('/chat/groups/:id', requireAuth, requireCeo, async (req, res) 
   res.json({ ok: true });
 });
 
+// One unread notification per group, per member — not one per message.
+// A busy group would otherwise flood the bell; instead the existing unread
+// entry is refreshed so it reads as "this group has new messages" and floats
+// to the top. Deliberately in-app only (email: false): chat is a
+// message-frequency event and must never produce message-frequency email.
+async function notifyGroupMessage(groupId: number, senderId: number) {
+  const group = await db.prepare('SELECT name FROM chat_groups WHERE id = ?').get(groupId) as
+    | { name: string }
+    | undefined;
+  if (!group) return;
+  const link = `/portal/chat?group=${groupId}`;
+  const message = `New messages in ${group.name}`;
+  const members = (await db
+    .prepare('SELECT user_id FROM chat_group_members WHERE group_id = ? AND user_id != ?')
+    .all(groupId, senderId)) as Array<{ user_id: number }>;
+
+  for (const m of members) {
+    const existing = (await db
+      .prepare("SELECT id FROM notifications WHERE user_id = ? AND type = 'chat' AND link = ? AND read_at IS NULL")
+      .get(m.user_id, link)) as { id: number } | undefined;
+    if (existing) {
+      await db
+        .prepare("UPDATE notifications SET created_at = to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS') WHERE id = ?")
+        .run(existing.id);
+    } else {
+      await notify(m.user_id, 'chat', message, link, { email: false });
+    }
+  }
+}
+
+// Opening a group clears its unread state. Kept as its own endpoint rather
+// than folded into GET /messages, because that route is polled every couple of
+// seconds and would otherwise issue a write on every single poll.
+chatRouter.post('/chat/groups/:id/read', requireAuth, async (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  await db
+    .prepare(
+      `UPDATE chat_group_members
+         SET last_read_message_id = COALESCE((SELECT MAX(id) FROM chat_messages WHERE group_id = ?), 0)
+       WHERE group_id = ? AND user_id = ?`
+    )
+    .run(groupId, groupId, req.user!.id);
+  await db
+    .prepare("UPDATE notifications SET read_at = datetime('now') WHERE user_id = ? AND type = 'chat' AND link = ? AND read_at IS NULL")
+    .run(req.user!.id, `/portal/chat?group=${groupId}`);
+  res.json({ ok: true });
+});
+
 chatRouter.get('/chat/groups/:id/messages', requireAuth, async (req, res) => {
   const groupId = Number(req.params.id);
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  // Take the NEWEST 200, then flip back to chronological for display.
+  // This was `ORDER BY created_at ASC LIMIT 200`, which takes the OLDEST 200 —
+  // so once a group passed 200 messages every new one became permanently
+  // invisible, and the window never advanced.
+  // Ordering is by id, not created_at: created_at is TEXT with second
+  // granularity, so messages sent in the same second sorted arbitrarily and
+  // could visibly reorder between polls. id is monotonic, so it's stable.
   const messages = await db
     .prepare(
-      `SELECT m.id, m.body, m.created_at, m.edited_at, m.sender_id, u.name AS sender_name,
-              m.attachment_filename, m.attachment_size
-       FROM chat_messages m JOIN users u ON u.id = m.sender_id
-       WHERE m.group_id = ? ORDER BY m.created_at ASC LIMIT 200`
+      `SELECT * FROM (
+         SELECT m.id, m.body, m.created_at, m.edited_at, m.sender_id, u.name AS sender_name,
+                m.attachment_filename, m.attachment_size
+         FROM chat_messages m JOIN users u ON u.id = m.sender_id
+         WHERE m.group_id = ? ORDER BY m.id DESC LIMIT 200
+       ) recent ORDER BY recent.id ASC`
     )
     .all(groupId);
   res.json({ messages });
@@ -121,6 +193,12 @@ chatRouter.post('/chat/groups/:id/messages', requireAuth, async (req, res) => {
   const info = await db
     .prepare('INSERT INTO chat_messages (group_id, sender_id, body) VALUES (?, ?, ?)')
     .run(groupId, req.user!.id, body.trim());
+  // Sender has implicitly read their own message — keep their marker current
+  // so their own send never shows up as unread to themselves.
+  await db
+    .prepare('UPDATE chat_group_members SET last_read_message_id = ? WHERE group_id = ? AND user_id = ?')
+    .run(Number(info.lastInsertRowid), groupId, req.user!.id);
+  await notifyGroupMessage(groupId, req.user!.id);
   res.json({ id: Number(info.lastInsertRowid) });
 });
 
@@ -155,6 +233,10 @@ chatRouter.post(
          VALUES (?, ?, '', ?, ?, ?)`
       )
       .run(groupId, req.user!.id, filename, storedName, body.length);
+    await db
+      .prepare('UPDATE chat_group_members SET last_read_message_id = ? WHERE group_id = ? AND user_id = ?')
+      .run(Number(info.lastInsertRowid), groupId, req.user!.id);
+    await notifyGroupMessage(groupId, req.user!.id);
     res.json({ id: Number(info.lastInsertRowid) });
   }
 );

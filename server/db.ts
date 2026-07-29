@@ -124,7 +124,16 @@ export async function logActivity(
   ).run(actorId, entityType, entityId, action, JSON.stringify(metadata));
 }
 
-export async function notify(userId: number, type: string, message: string, link = '') {
+// `email: false` writes the in-app notification without sending mail. Chat
+// uses it — a message-frequency event must never generate a message-frequency
+// email. Defaults to true so every existing caller is unaffected.
+export async function notify(
+  userId: number,
+  type: string,
+  message: string,
+  link = '',
+  opts: { email?: boolean } = {}
+) {
   await db.prepare('INSERT INTO notifications (user_id, type, message, link) VALUES (?, ?, ?, ?)').run(
     userId,
     type,
@@ -138,6 +147,7 @@ export async function notify(userId: number, type: string, message: string, link
     .prepare("DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < to_char(now() - INTERVAL '30 days', 'YYYY-MM-DD HH24:MI:SS')")
     .run();
 
+  if (opts.email === false) return;
   const user = await db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string } | undefined;
   if (user) {
     sendEmail(user.email, `LA Tech Portal — ${message}`, message, link);
@@ -487,6 +497,11 @@ export async function initDb() {
       added_at TEXT NOT NULL DEFAULT to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'),
       PRIMARY KEY (group_id, user_id)
     );
+
+    -- Per-member read marker: the id of the newest message this user has seen
+    -- in this group. Unread count is simply "messages newer than this", which
+    -- is exact and needs no extra table. 0 means "never opened".
+    ALTER TABLE chat_group_members ADD COLUMN IF NOT EXISTS last_read_message_id INTEGER NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       id SERIAL PRIMARY KEY,

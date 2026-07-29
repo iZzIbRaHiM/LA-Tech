@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile } from '../api';
 import { usePolling } from '../usePolling';
+import { fmtTime, fmtDateTime, fmtDayLabel, dayKey } from '../formatTime';
 import type { PortalUser } from './People';
 
 interface ChatGroup {
@@ -33,6 +34,8 @@ interface ChatGroup {
   name: string;
   created_by: number;
   member_count: number;
+  // Postgres COUNT() comes back as a string over JSON — coerce before compare.
+  unread_count: number | string;
 }
 
 interface Member {
@@ -54,7 +57,49 @@ interface Message {
 
 const fmtSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 
-const POLL_MS = 6000;
+// Vercel's serverless runtime can't hold a websocket open, so chat is polled.
+// A flat 6s felt laggy, but polling fast forever burns free-tier quota on an
+// idle tab. So: poll fast while the conversation is actually moving, and back
+// off once it goes quiet. Any new message, send, or group switch snaps it back
+// to fast. usePolling already stops entirely when the tab is hidden.
+// Defined at module scope, NOT inside Chat. As an inner function it was a new
+// component *type* on every render, so React unmounted and remounted the whole
+// picker each time the message poll fired — every 2s while a dialog was open,
+// which is why editing members felt unreliable.
+function MemberPicker({
+  allUsers,
+  selfId,
+  selected,
+  onToggle,
+}: {
+  allUsers: PortalUser[];
+  selfId: number | undefined;
+  selected: number[];
+  onToggle: (id: number, checked: boolean) => void;
+}) {
+  const others = allUsers.filter((u) => u.id !== selfId);
+  return (
+    <div className="space-y-1.5">
+      <Label>Members</Label>
+      <div className="space-y-1.5 border border-[#1f1f23] p-3 max-h-56 overflow-auto">
+        {others.map((u) => (
+          <label
+            key={u.id}
+            className="flex items-center gap-2 text-sm cursor-pointer px-1 py-0.5 rounded transition-colors hover:bg-[#141417]"
+          >
+            <Checkbox checked={selected.includes(u.id)} onCheckedChange={(c) => onToggle(u.id, !!c)} />
+            {u.name} <span className="text-[#71717A]">({u.email})</span>
+          </label>
+        ))}
+        {others.length === 0 && <p className="text-xs text-[#71717A]">No other users yet.</p>}
+      </div>
+    </div>
+  );
+}
+
+const POLL_FAST_MS = 2000;
+const POLL_IDLE_MS = 10000;
+const IDLE_AFTER_MS = 60000;
 
 export default function Chat() {
   const { user } = useAuth();
@@ -85,32 +130,75 @@ export default function Chat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadGroups = () => {
+  const loadGroups = useCallback(() => {
     api<{ groups: ChatGroup[] }>('/chat/groups')
       .then((r) => {
         setGroups(r.groups);
         setActiveId((cur) => cur ?? r.groups[0]?.id ?? null);
       })
-      .catch((e) => toast.error(e.message));
-  };
-  useEffect(loadGroups, []);
+      .catch(() => {}); // silent: this now runs on a timer, so a blip shouldn't toast
+  }, []);
+  useEffect(() => {
+    loadGroups();
+  }, [loadGroups]);
 
   useEffect(() => {
     if (!user?.isCeo) return;
     api<{ users: PortalUser[] }>('/users').then((r) => setAllUsers(r.users)).catch(() => {});
   }, [user]);
 
+  const [pollMs, setPollMs] = useState(POLL_FAST_MS);
+  const lastChangeRef = useRef(Date.now());
+  const newestIdRef = useRef(0);
+
+  // Called whenever the user does something that implies they're engaged, so
+  // the poll goes back to fast even if the room has been quiet.
+  const markActive = useCallback(() => {
+    lastChangeRef.current = Date.now();
+    setPollMs(POLL_FAST_MS);
+  }, []);
+
   const loadMessages = useCallback(() => {
     if (!activeId) return;
     api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`)
-      .then((r) => setMessages(r.messages))
+      .then((r) => {
+        setMessages(r.messages);
+        // Only treat *new* traffic as activity — a poll returning the same
+        // messages shouldn't keep the fast interval alive forever.
+        const newest = r.messages.length ? r.messages[r.messages.length - 1].id : 0;
+        if (newest !== newestIdRef.current) {
+          newestIdRef.current = newest;
+          lastChangeRef.current = Date.now();
+          setPollMs(POLL_FAST_MS);
+          // Anything new that arrived while this group is open counts as read.
+          api(`/chat/groups/${activeId}/read`, { method: 'POST' })
+            .then(loadGroups)
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
   }, [activeId]);
+
+  // Poll BOTH: messages for the open group, and the group list so unread
+  // badges appear as messages land elsewhere. Polling only messages meant
+  // unread counts were stale until a manual reload.
+  const refresh = useCallback(() => {
+    loadMessages();
+    loadGroups();
+  }, [loadMessages, loadGroups]);
 
   // Instant load when switching groups; visibility-aware refresh after —
   // a backgrounded chat tab generates zero requests.
   useEffect(loadMessages, [loadMessages]);
-  usePolling(loadMessages, POLL_MS);
+  usePolling(refresh, pollMs);
+
+  // Demote to the slow interval once the room has been quiet for a while.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (Date.now() - lastChangeRef.current > IDLE_AFTER_MS) setPollMs(POLL_IDLE_MS);
+    }, 5000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -121,6 +209,7 @@ export default function Chat() {
     const body = draft;
     setDraft('');
     setSending(true);
+    markActive();
     try {
       await api(`/chat/groups/${activeId}/messages`, { method: 'POST', body: { body } });
       const r = await api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`);
@@ -271,28 +360,6 @@ export default function Chat() {
 
   const activeGroup = groups.find((g) => g.id === activeId);
 
-  const MemberPicker = () => (
-    <div className="space-y-1.5">
-      <Label>Members</Label>
-      <div className="space-y-1.5 border border-[#1f1f23] p-3 max-h-56 overflow-auto">
-        {allUsers
-          .filter((u) => u.id !== user?.id)
-          .map((u) => (
-            <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox
-                checked={selectedMembers.includes(u.id)}
-                onCheckedChange={(c) =>
-                  setSelectedMembers((prev) => (c ? [...prev, u.id] : prev.filter((id) => id !== u.id)))
-                }
-              />
-              {u.name} <span className="text-[#71717A]">({u.email})</span>
-            </label>
-          ))}
-        {allUsers.length === 0 && <p className="text-xs text-[#71717A]">No other users yet.</p>}
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex h-full">
       <div className="w-64 shrink-0 border-r border-[#1f1f23] flex flex-col">
@@ -311,12 +378,25 @@ export default function Chat() {
               className={`prow flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm border-b border-[#141417] ${
                 activeId === g.id ? 'bg-[#1c1c20] shadow-[inset_2px_0_0_#DFE104]' : ''
               }`}
-              onClick={() => setActiveId(g.id)}
+              onClick={() => {
+                setActiveId(g.id);
+                markActive();
+              }}
             >
-              <div className="min-w-0">
-                <div className="truncate">{g.name}</div>
+              <div className="min-w-0 flex-1">
+                <div className={`truncate ${Number(g.unread_count) > 0 && activeId !== g.id ? 'font-semibold text-[#FAFAFA]' : ''}`}>
+                  {g.name}
+                </div>
                 <div className="text-xs text-[#71717A]">{g.member_count} members</div>
               </div>
+              {/* Unread pill: exact count up to 9, then "10+" so a very busy
+                  group can't stretch the row. Hidden for the group you're
+                  currently reading. */}
+              {Number(g.unread_count) > 0 && activeId !== g.id && (
+                <span className="punread shrink-0 mr-1.5 min-w-5 h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center">
+                  {Number(g.unread_count) > 9 ? '10+' : g.unread_count}
+                </span>
+              )}
               {user?.isCeo && (
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
@@ -353,61 +433,99 @@ export default function Chat() {
         {activeGroup ? (
           <>
             <div className="px-4 py-3 border-b border-[#1f1f23] font-medium text-sm">{activeGroup.name}</div>
-            <div className="flex-1 overflow-auto p-4 space-y-3">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`group flex items-end gap-1.5 ${m.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
-                >
-                  {m.sender_id === user?.id && !m.attachment_filename && (
-                    <span className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity mb-1">
-                      <button
-                        className="text-[#71717A] hover:text-[#DFE104]"
-                        onClick={() => {
-                          setEditingMessage(m);
-                          setEditDraft(m.body);
-                        }}
-                      >
-                        <Pencil size={12} />
-                      </button>
-                      <button className="text-[#71717A] hover:text-red-400" onClick={() => setDeletingMessage(m)}>
-                        <Trash2 size={12} />
-                      </button>
-                    </span>
-                  )}
-                  <div
-                    className={`animate-scale-in max-w-md px-3 py-2 text-sm transition-shadow ${
-                      m.sender_id === user?.id
-                        ? 'bg-[#DFE104] text-black shadow-[0_2px_12px_rgb(223_225_4/0.15)] hover:shadow-[0_2px_18px_rgb(223_225_4/0.3)]'
-                        : 'bg-[#141417] text-[#FAFAFA] shadow-[0_2px_8px_rgb(0_0_0/0.4)] hover:shadow-[0_2px_14px_rgb(0_0_0/0.6)]'
-                    }`}
-                  >
-                    {m.sender_id !== user?.id && (
-                      <div className="text-xs text-[#A1A1AA] mb-0.5">{m.sender_name}</div>
+            <div className="flex-1 overflow-auto p-4 space-y-1">
+              {messages.map((m, i) => {
+                const mine = m.sender_id === user?.id;
+                const prev = messages[i - 1];
+                const next = messages[i + 1];
+                // Group consecutive messages from the same sender on the same
+                // day: only the first shows a name, only the last gets the
+                // tail, and the gap between them tightens.
+                const startsGroup = !prev || prev.sender_id !== m.sender_id || dayKey(prev.created_at) !== dayKey(m.created_at);
+                const endsGroup = !next || next.sender_id !== m.sender_id || dayKey(next.created_at) !== dayKey(m.created_at);
+                const showDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+                // Tail only on the last bubble of a run; the others stay fully
+                // rounded so a group reads as one block of speech.
+                const corner = mine
+                  ? endsGroup
+                    ? 'rounded-2xl rounded-br-md'
+                    : 'rounded-2xl'
+                  : endsGroup
+                    ? 'rounded-2xl rounded-bl-md'
+                    : 'rounded-2xl';
+                return (
+                  <div key={m.id}>
+                    {showDay && (
+                      <div className="flex items-center justify-center my-4">
+                        <span className="px-3 py-1 rounded-full bg-[#141417] border border-[#1f1f23] text-[10px] uppercase tracking-wider text-[#71717A]">
+                          {fmtDayLabel(m.created_at)}
+                        </span>
+                      </div>
                     )}
-                    {m.attachment_filename ? (
-                      <button
-                        onClick={() => downloadAttachment(m)}
-                        className={`flex items-center gap-1.5 text-left hover:opacity-80 ${
-                          m.sender_id === user?.id ? 'text-black' : 'text-[#FAFAFA]'
+                    <div
+                      className={`group flex items-end gap-1.5 ${mine ? 'justify-end' : 'justify-start'} ${
+                        startsGroup ? 'mt-3' : 'mt-0.5'
+                      }`}
+                    >
+                      {mine && !m.attachment_filename && (
+                        <span className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 flex items-center gap-1.5 transition-all duration-200 mb-1.5">
+                          <button
+                            className="text-[#71717A] hover:text-[#DFE104] transition-colors"
+                            onClick={() => {
+                              setEditingMessage(m);
+                              setEditDraft(m.body);
+                            }}
+                            title="Edit message"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button
+                            className="text-[#71717A] hover:text-red-400 transition-colors"
+                            onClick={() => setDeletingMessage(m)}
+                            title="Delete message"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </span>
+                      )}
+                      <div
+                        className={`pbubble ${corner} max-w-md px-3.5 py-2 text-sm ${
+                          mine ? 'pbubble-mine bg-[#DFE104] text-black' : 'pbubble-theirs bg-[#141417] text-[#FAFAFA]'
                         }`}
                       >
-                        <FileText size={14} className="shrink-0" />
-                        <span className="truncate max-w-52">{m.attachment_filename}</span>
-                        {m.attachment_size != null && (
-                          <span className="text-xs opacity-70 shrink-0">{fmtSize(m.attachment_size)}</span>
+                        {!mine && startsGroup && (
+                          <div className="text-xs font-medium text-[#DFE104] mb-0.5">{m.sender_name}</div>
                         )}
-                      </button>
-                    ) : (
-                      <div className="whitespace-pre-wrap">{m.body}</div>
-                    )}
-                    <div className={`text-[10px] mt-1 ${m.sender_id === user?.id ? 'text-black/60' : 'text-[#71717A]'}`}>
-                      {m.created_at}
-                      {m.edited_at && ' · edited'}
+                        {m.attachment_filename ? (
+                          <button
+                            onClick={() => downloadAttachment(m)}
+                            className={`flex items-center gap-1.5 text-left transition-opacity hover:opacity-80 ${
+                              mine ? 'text-black' : 'text-[#FAFAFA]'
+                            }`}
+                          >
+                            <FileText size={14} className="shrink-0" />
+                            <span className="truncate max-w-52 underline decoration-dotted underline-offset-2">
+                              {m.attachment_filename}
+                            </span>
+                            {m.attachment_size != null && (
+                              <span className="text-xs opacity-70 shrink-0">{fmtSize(m.attachment_size)}</span>
+                            )}
+                          </button>
+                        ) : (
+                          <div className="whitespace-pre-wrap break-words">{m.body}</div>
+                        )}
+                        <div
+                          className={`text-[10px] mt-1 text-right ${mine ? 'text-black/55' : 'text-[#71717A]'}`}
+                          title={fmtDateTime(m.created_at)}
+                        >
+                          {fmtTime(m.created_at)}
+                          {m.edited_at && ' · edited'}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {messages.length === 0 && <EmptyState icon={MessageSquare} title="No messages yet — say hello." />}
               <div ref={bottomRef} />
             </div>
@@ -430,6 +548,7 @@ export default function Chat() {
                 placeholder="Message…"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onFocus={markActive}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />
               <Button onClick={send} disabled={!draft.trim() || sending} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
@@ -457,7 +576,14 @@ export default function Chat() {
               <Label>Name <span className="text-red-500">*</span></Label>
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} />
             </div>
-            <MemberPicker />
+            <MemberPicker
+              allUsers={allUsers}
+              selfId={user?.id}
+              selected={selectedMembers}
+              onToggle={(id, checked) =>
+                setSelectedMembers((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)))
+              }
+            />
           </div>
           <DialogFooter>
             <Button
@@ -484,7 +610,14 @@ export default function Chat() {
               <Label>Name <span className="text-red-500">*</span></Label>
               <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} />
             </div>
-            <MemberPicker />
+            <MemberPicker
+              allUsers={allUsers}
+              selfId={user?.id}
+              selected={selectedMembers}
+              onToggle={(id, checked) =>
+                setSelectedMembers((prev) => (checked ? [...prev, id] : prev.filter((x) => x !== id)))
+              }
+            />
           </div>
           <DialogFooter>
             <Button

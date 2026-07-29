@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router';
 import { Plus, Eye, FolderKanban } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -22,6 +22,8 @@ import { api, type Project, type Department } from '../api';
 
 export default function Projects() {
   const { user } = useAuth();
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [creating, setCreating] = useState(false);
@@ -40,8 +42,13 @@ export default function Projects() {
 
   const canCreate = form.name.trim() !== '' && form.startDate !== '' && form.endDate !== '';
 
+  // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
+  // React re-renders to disable the button. A state-only check is too late —
+  // rapid clicks all read the stale value. See Chat.tsx for the incident.
   const createProject = async () => {
-    if (!canCreate) return;
+    if (!canCreate || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
       await api('/projects', {
         method: 'POST',
@@ -60,6 +67,9 @@ export default function Projects() {
       toast.success('Project created');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -167,7 +177,7 @@ export default function Projects() {
           <DialogFooter>
             <Button
               onClick={createProject}
-              disabled={!canCreate}
+              disabled={!canCreate || busy}
               className="bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-50"
             >
               Create project
