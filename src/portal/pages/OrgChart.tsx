@@ -445,7 +445,12 @@ function OrgChartInner() {
         </ReactFlow>
       </div>
 
+      {/* Keyed on the selected person so switching target remounts the panel
+          with fresh state. The panel used to clear its own form and lists from
+          an effect; a key does it declaratively and cannot clobber in-progress
+          edits when /org-tree re-polls. */}
       <OrgProfilePanel
+        key={selected?.id ?? 'none'}
         employee={selected}
         allNodes={users}
         onClose={() => setSelectedId(null)}

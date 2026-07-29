@@ -111,6 +111,11 @@ function ResponsiveCamera() {
   useEffect(() => {
     const aspect = size.width / size.height;
     const persp = camera as THREE.PerspectiveCamera;
+    // react-hooks/immutability flags writes to values returned from a hook, but
+    // useThree() intentionally exposes the live three.js camera and mutating it
+    // is how r3f is meant to be driven — there is no immutable setter, and the
+    // renderer reads these fields straight off the object each frame.
+    // eslint-disable-next-line react-hooks/immutability
     persp.position.z = aspect < 1 ? 9 / aspect : 6.5;
     persp.updateProjectionMatrix();
   }, [size, camera]);

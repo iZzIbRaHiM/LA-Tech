@@ -75,19 +75,28 @@ export function translateQuery(sql: string): string {
   return translated;
 }
 
+// Anything pg can bind as a positional parameter. Arrays are included for
+// `= ANY($1)` style predicates. Exported so the `[column, value]` builders in
+// the route modules can type their pairs against what is actually bindable.
+export type SqlParam = string | number | boolean | null | undefined | Date | Buffer | readonly (string | number)[];
+
 export const db = {
   prepare(sql: string) {
     const pgSql = translateQuery(sql);
     return {
-      async all(...params: any[]): Promise<any[]> {
+      // Rows come back untyped from pg; callers assert the shape they expect
+      // (`as { ... }`), so the generic defaults to `unknown` rather than `any`
+      // — an unasserted row is then a type error at the call site instead of
+      // silently propagating.
+      async all<T = unknown>(...params: SqlParam[]): Promise<T[]> {
         const res = await pool.query(pgSql, params);
-        return res.rows;
+        return res.rows as T[];
       },
-      async get(...params: any[]): Promise<any | undefined> {
+      async get<T = unknown>(...params: SqlParam[]): Promise<T | undefined> {
         const res = await pool.query(pgSql, params);
-        return res.rows[0];
+        return res.rows[0] as T | undefined;
       },
-      async run(...params: any[]): Promise<{ lastInsertRowid?: number; changes: number }> {
+      async run(...params: SqlParam[]): Promise<{ lastInsertRowid?: number; changes: number }> {
         const res = await pool.query(pgSql, params);
         const lastInsertRowid = res.rows[0]?.id ? Number(res.rows[0].id) : undefined;
         return { lastInsertRowid, changes: res.rowCount ?? 0 };
@@ -201,10 +210,10 @@ export async function initDb() {
         RETURN CURRENT_DATE + INTERVAL '1 day';
       END IF;
       IF modifier LIKE '+% day' OR modifier LIKE '+% days' THEN
-        RETURN (val::date + (substring(modifier from '\d+')::integer * INTERVAL '1 day'))::date;
+        RETURN (val::date + (substring(modifier from '\\d+')::integer * INTERVAL '1 day'))::date;
       END IF;
       IF modifier LIKE '-% day' OR modifier LIKE '-% days' THEN
-        RETURN (val::date - (substring(modifier from '\d+')::integer * INTERVAL '1 day'))::date;
+        RETURN (val::date - (substring(modifier from '\\d+')::integer * INTERVAL '1 day'))::date;
       END IF;
       RETURN val::date;
     END;

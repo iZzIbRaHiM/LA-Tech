@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db.js';
+import { db, logActivity, notify, type SqlParam } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 
 // Multiple office timings: CEO-managed schedules assigned to a department
@@ -99,7 +99,7 @@ schedulesRouter.patch('/schedules/:id', requireAuth, requireCeo, async (req, res
   ) {
     return res.status(400).json({ error: 'Thresholds must be numbers (minutes)' });
   }
-  const sets: Array<[string, unknown]> = [];
+  const sets: Array<[string, SqlParam]> = [];
   if (name?.trim()) sets.push(['name', name.trim()]);
   if (officeStartTime !== undefined) sets.push(['office_start_time', officeStartTime]);
   if (officeEndTime !== undefined) sets.push(['office_end_time', officeEndTime]);

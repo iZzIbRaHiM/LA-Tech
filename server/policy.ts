@@ -11,7 +11,7 @@
 // - An employee's world is rows tied to them personally.
 // - Finance is CEO + explicitly granted delegates, nothing else.
 // - Project existence itself is confidential outside the allow-list.
-import { db } from './db.js';
+import { db, type SqlParam } from './db.js';
 import type { SessionUser } from './auth.js';
 import { isAncestor, hasDirectReports } from './org-hierarchy.js';
 
@@ -37,7 +37,7 @@ export async function userCanSeeProject(user: SessionUser, projectId: number): P
 // ---------- Tasks ----------
 // WHERE-clause fragment applied to every task query (lists, detail,
 // sub-tasks, search). CEO: all; head: own department; employee: own rows.
-export function taskVisibilityWhere(user: SessionUser): { where: string; params: unknown[] } {
+export function taskVisibilityWhere(user: SessionUser): { where: string; params: SqlParam[] } {
   if (user.isCeo) return { where: '1=1', params: [] };
   if (user.role === 'head') return { where: 't.department_id = ?', params: [user.departmentId] };
   return { where: 't.assigned_to = ?', params: [user.id] };

@@ -30,6 +30,51 @@ interface AttendanceSettings {
 
 const DEDUCTION_LABEL: Record<string, string> = { fixed: 'Fixed amount', percentage: '% of salary' };
 
+// Declared at module scope, not inside Settings(). Defined inline it was a new
+// component type on every render, so React unmounted and remounted the Select
+// and Input each keystroke — which loses focus and closes an open dropdown.
+function DeductionRow({
+  label,
+  typeKey,
+  amountKey,
+  form,
+  setForm,
+}: {
+  label: string;
+  typeKey: keyof AttendanceSettings;
+  amountKey: keyof AttendanceSettings;
+  form: AttendanceSettings;
+  setForm: (next: AttendanceSettings) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_140px_120px] gap-3 items-end">
+      <Label className="mb-2">{label}</Label>
+      <Select
+        value={form[typeKey] as string}
+        onValueChange={(v) => setForm({ ...form, [typeKey]: v as 'fixed' | 'percentage' })}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(DEDUCTION_LABEL).map(([v, l]) => (
+            <SelectItem key={v} value={v}>
+              {l}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={form[amountKey] as number}
+        onChange={(e) => setForm({ ...form, [amountKey]: Number(e.target.value) })}
+      />
+    </div>
+  );
+}
+
 export default function Settings() {
   const [form, setForm] = useState<AttendanceSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,42 +116,6 @@ export default function Settings() {
   };
 
   if (!form) return <DetailSkeleton />;
-
-  const DeductionRow = ({
-    label,
-    typeKey,
-    amountKey,
-  }: {
-    label: string;
-    typeKey: keyof AttendanceSettings;
-    amountKey: keyof AttendanceSettings;
-  }) => (
-    <div className="grid grid-cols-[1fr_140px_120px] gap-3 items-end">
-      <Label className="mb-2">{label}</Label>
-      <Select
-        value={form[typeKey] as string}
-        onValueChange={(v) => setForm({ ...form, [typeKey]: v as 'fixed' | 'percentage' })}
-      >
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.entries(DEDUCTION_LABEL).map(([v, l]) => (
-            <SelectItem key={v} value={v}>
-              {l}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        type="number"
-        min={0}
-        step="0.01"
-        value={form[amountKey] as number}
-        onChange={(e) => setForm({ ...form, [amountKey]: Number(e.target.value) })}
-      />
-    </div>
-  );
 
   return (
     <div className="p-4 sm:p-8 max-w-2xl animate-fade-up">
@@ -185,12 +194,26 @@ export default function Settings() {
       <section className="mb-8">
         <h2 className="psection mb-4">Salary deductions</h2>
         <div className="space-y-4 max-w-xl">
-          <DeductionRow label="Late check-in (per occurrence)" typeKey="late_deduction_type" amountKey="late_deduction_amount" />
-          <DeductionRow label="Half day (per occurrence)" typeKey="half_day_deduction_type" amountKey="half_day_deduction_amount" />
+          <DeductionRow
+            label="Late check-in (per occurrence)"
+            typeKey="late_deduction_type"
+            amountKey="late_deduction_amount"
+            form={form}
+            setForm={setForm}
+          />
+          <DeductionRow
+            label="Half day (per occurrence)"
+            typeKey="half_day_deduction_type"
+            amountKey="half_day_deduction_amount"
+            form={form}
+            setForm={setForm}
+          />
           <DeductionRow
             label="Absence beyond the allowance (per day)"
             typeKey="absent_deduction_type"
             amountKey="absent_deduction_amount"
+            form={form}
+            setForm={setForm}
           />
         </div>
         <p className="text-xs text-[#71717A] mt-3">

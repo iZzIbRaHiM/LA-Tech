@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity } from './db.js';
+import { db, logActivity, type SqlParam } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 
 export const settingsRouter = Router();
@@ -65,7 +65,7 @@ settingsRouter.patch('/settings/attendance', requireAuth, requireCeo, async (req
     return res.status(400).json({ error: 'Half-day threshold must be greater than the late threshold' });
   }
 
-  const sets: Array<[string, unknown]> = [];
+  const sets: Array<[string, SqlParam]> = [];
   if (officeStartTime !== undefined) sets.push(['office_start_time', officeStartTime]);
   if (officeEndTime !== undefined) sets.push(['office_end_time', officeEndTime]);
   if (lateThresholdMinutes !== undefined) sets.push(['late_threshold_minutes', Number(lateThresholdMinutes)]);

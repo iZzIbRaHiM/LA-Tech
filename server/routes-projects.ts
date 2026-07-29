@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db.js';
+import { db, logActivity, notify, type SqlParam } from './db.js';
 import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
 
 export const projectsRouter = Router();
@@ -11,7 +11,7 @@ const PROJECT_STATUSES = ['active', 'on_hold', 'completed', 'archived'];
 // even learn a project exists — so listing filters at the query level.
 projectsRouter.get('/projects', requireAuth, async (req, res) => {
   const user = req.user!;
-  let rows;
+  let rows: unknown[];
   // CEO can optionally scope the list to what a specific department can
   // see — used by the New Task form so the project picker only offers
   // projects the target department is actually allow-listed for.
@@ -135,7 +135,7 @@ projectsRouter.patch('/projects/:id', requireAuth, requireCeo, async (req, res) 
     return res.status(400).json({ error: 'Invalid status' });
   }
 
-  const sets: Array<[string, unknown]> = [];
+  const sets: Array<[string, SqlParam]> = [];
   if (name?.trim()) sets.push(['name', name.trim()]);
   if (description !== undefined) sets.push(['description', description]);
   if (status) sets.push(['status', status]);

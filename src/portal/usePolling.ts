@@ -7,8 +7,14 @@ import { useEffect, useRef } from 'react';
 // Fires immediately on mount and again the moment the tab regains
 // visibility, so returning users always see fresh data.
 export function usePolling(fn: () => void, ms: number) {
+  // Synced in an effect rather than assigned during render: writing to a ref
+  // mid-render is a side effect, and under StrictMode/concurrent rendering a
+  // render that never commits would still have mutated it. This effect is
+  // declared first, so it commits before the interval below reads the ref.
   const fnRef = useRef(fn);
-  fnRef.current = fn;
+  useEffect(() => {
+    fnRef.current = fn;
+  }, [fn]);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;

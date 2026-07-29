@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db.js';
+import { db, logActivity, notify, type SqlParam } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 import { taskVisibilityWhere, userCanSeeProject, canManageTask, departmentCanSeeProject } from './policy.js';
 
@@ -186,7 +186,7 @@ tasksRouter.patch('/tasks/:id', requireAuth, async (req, res) => {
     }
   }
 
-  const fields: Array<[string, unknown]> = [];
+  const fields: Array<[string, SqlParam]> = [];
   if (newAssignee !== undefined) fields.push(['assigned_to', newAssignee]);
   if (status) fields.push(['status', status]);
   if (canManage) {

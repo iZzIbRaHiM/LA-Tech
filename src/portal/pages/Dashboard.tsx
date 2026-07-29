@@ -11,6 +11,7 @@ import { useAuth } from '../AuthContext';
 import { api, type Task, type Project, type ResolvedSchedule } from '../api';
 import TodayStrip from '../components/TodayStrip';
 import { useCountUp } from '../useCountUp';
+import { useStoredFlag } from '@/hooks/useStoredFlag';
 
 // recharts is a heavy dependency used nowhere else in the app — lazy-load
 // it so only a CEO's browser ever downloads it, not every portal user.
@@ -47,11 +48,7 @@ export default function Dashboard() {
   // Dismissal is keyed per user — a single shared key meant one person
   // dismissing it hid the checklist for everyone else on the same browser.
   const dismissKey = user?.id != null ? `portal-onboarding-dismissed:${user.id}` : null;
-  const [checklistDismissed, setChecklistDismissed] = useState(false);
-  useEffect(() => {
-    if (!dismissKey) return;
-    setChecklistDismissed(localStorage.getItem(dismissKey) === '1');
-  }, [dismissKey]);
+  const [checklistDismissed, setChecklistDismissed] = useStoredFlag(dismissKey);
   const [tasksLoaded, setTasksLoaded] = useState(false);
 
   const loadProfile = useCallback(() => {
@@ -126,10 +123,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-[#DFE104]">Getting started</span>
             <button
-              onClick={() => {
-                if (dismissKey) localStorage.setItem(dismissKey, '1');
-                setChecklistDismissed(true);
-              }}
+              onClick={() => setChecklistDismissed(true)}
               className="text-[#71717A] hover:text-[#FAFAFA] transition-colors"
               title="Dismiss"
             >

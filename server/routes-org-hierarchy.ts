@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity, notify } from './db.js';
+import { db, logActivity, notify, type SqlParam } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 import { wouldCreateCycle } from './org-hierarchy.js';
 
@@ -45,7 +45,7 @@ orgHierarchyRouter.patch('/org-tree/users/:id', requireAuth, requireCeo, async (
   if (!target.active) return res.status(400).json({ error: 'User is deactivated — reactivate first' });
 
   const { managerId, title, phone, name, email } = req.body ?? {};
-  const sets: Array<[string, unknown]> = [];
+  const sets: Array<[string, SqlParam]> = [];
 
   // Name/email were previously only writable at creation — a typo'd name,
   // or an email (the login identifier) that changed, was permanently stuck.

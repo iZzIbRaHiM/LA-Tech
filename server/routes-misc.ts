@@ -90,7 +90,7 @@ miscRouter.get('/search', requireAuth, async (req, res) => {
       .all(q, user.id);
   }
 
-  let projects;
+  let projects: unknown[];
   if (user.isCeo) {
     projects = await db.prepare('SELECT id, name, status FROM projects WHERE name LIKE ? LIMIT 10').all(q);
   } else if (user.departmentId != null) {

@@ -1,7 +1,8 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -34,14 +35,10 @@ export default function Process() {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  // Was a local resize listener writing to state; the shared hook subscribes to
+  // the same breakpoint through a media query and reports correctly on the
+  // first render, so the mobile branch below no longer runs one pass as desktop.
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!sectionRef.current || !headingRef.current || !stepsRef.current) return;
@@ -111,7 +108,9 @@ export default function Process() {
     }, sectionRef);
 
     return () => ctx.revert();
-  }, [reducedMotion]);
+  // isMobile is a real dependency: the timeline animates along X on desktop and
+  // Y on mobile, so crossing the breakpoint must revert and rebuild it.
+  }, [reducedMotion, isMobile]);
 
   return (
     <section

@@ -105,15 +105,20 @@ export default function Tasks() {
   useEffect(() => {
     if (!canCreate) return;
     if (user?.isCeo) {
-      if (!form.departmentId) {
-        setProjects([]);
-        return;
-      }
+      // No department chosen yet means there is nothing to scope a fetch to.
+      // `projects` deliberately keeps whatever it last held — `visibleProjects`
+      // below derives the empty list, so there is no need to clear state here
+      // (a synchronous setState in an effect just forces a second render).
+      if (!form.departmentId) return;
       api<{ projects: Project[] }>(`/projects?departmentId=${form.departmentId}`).then((r) => setProjects(r.projects)).catch(() => {});
     } else {
       api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch(() => {});
     }
   }, [canCreate, user?.isCeo, form.departmentId]);
+
+  // A CEO with no department selected must not be offered projects from the
+  // previously selected one.
+  const visibleProjects = user?.isCeo && !form.departmentId ? [] : projects;
 
   // Head assigns within own department; CEO picks a department.
   const assignableMembers = useMemo(() => {
@@ -463,17 +468,17 @@ export default function Tasks() {
                     <Select
                       value={form.projectId}
                       onValueChange={(v) => setForm({ ...form, projectId: v })}
-                      disabled={projects.length === 0}
+                      disabled={visibleProjects.length === 0}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue
                           placeholder={
-                            projects.length === 0 ? "No projects visible to this department" : 'No project'
+                            visibleProjects.length === 0 ? "No projects visible to this department" : 'No project'
                           }
                         />
                       </SelectTrigger>
                       <SelectContent>
-                        {projects.map((p) => (
+                        {visibleProjects.map((p) => (
                           <SelectItem key={p.id} value={String(p.id)}>
                             {p.name}
                           </SelectItem>
@@ -482,7 +487,7 @@ export default function Tasks() {
                     </Select>
                   </div>
                 )}
-                {user?.isCeo && form.departmentId && projects.length === 0 && (
+                {user?.isCeo && form.departmentId && visibleProjects.length === 0 && (
                   <p className="text-xs text-[#71717A]">
                     This department hasn't been granted visibility into any project yet.
                   </p>

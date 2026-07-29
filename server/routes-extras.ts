@@ -243,8 +243,11 @@ extrasRouter.get('/cron/reminders', async (req, res) => {
     await sendDueReminders();
     await sweepAbsences();
     res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err) {
     console.error('[cron] Reminders/absence-sweep execution error:', err);
-    res.status(500).json({ error: 'Reminders execution failed', detail: err.message });
+    res.status(500).json({
+      error: 'Reminders execution failed',
+      detail: err instanceof Error ? err.message : String(err),
+    });
   }
 });

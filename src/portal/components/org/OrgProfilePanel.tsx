@@ -127,7 +127,15 @@ export default function OrgProfilePanel({
 }) {
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ title: '', phone: '', name: '', email: '' });
+  // Seeded from the employee this panel mounted for. Safe as an initialiser
+  // because OrgChart remounts the panel (via key) whenever the selection
+  // changes, so this runs exactly once per selected person.
+  const [form, setForm] = useState({
+    title: employee?.title ?? '',
+    phone: employee?.phone ?? '',
+    name: employee?.name ?? '',
+    email: employee?.email ?? '',
+  });
   const [managerOpen, setManagerOpen] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -151,37 +159,36 @@ export default function OrgProfilePanel({
   );
   const manager = employee?.manager_id != null ? nodesById.get(employee.manager_id) : undefined;
 
-  // Reset per-employee state whenever the panel targets someone new. Keyed on
-  // employee.id (not the object) on purpose: the Org Chart re-polls /org-tree
-  // every few seconds and hands us a fresh employee object each time — keying
-  // on the object would re-run this on every poll and clobber whatever the CEO
-  // is typing in the form. Only a genuine change of selected person resets it.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Load this employee's detail. OrgChart keys the panel on the selected id, so
+  // a change of person remounts us and every piece of state starts fresh —
+  // there is nothing to reset here, and no synchronous setState in an effect.
+  //
+  // The deps are the two primitives the effect actually reads, not the
+  // `employee` object: /org-tree re-polls every few seconds and hands us a new
+  // object each time, so depending on it would refetch continuously (and, when
+  // this also reset the form, would wipe whatever the CEO was typing).
+  const employeeId = employee?.id;
+  const employeeIsCeo = employee?.is_ceo;
   useEffect(() => {
-    if (!employee) return;
-    setForm({ title: employee.title, phone: employee.phone, name: employee.name, email: employee.email });
-    setTasks([]);
-    setAttendance([]);
-    setSalary(null);
-    setPayments([]);
+    if (employeeId == null) return;
     api<{ departments: Department[] }>('/departments')
       .then((r) => setDepartments(r.departments))
       .catch(() => {});
     api<{ tasks: Task[] }>('/tasks')
-      .then((r) => setTasks(r.tasks.filter((t) => t.assigned_to === employee.id)))
+      .then((r) => setTasks(r.tasks.filter((t) => t.assigned_to === employeeId)))
       .catch(() => {});
-    if (!employee.is_ceo) {
-      api<{ own: AttendanceRecord[] }>(`/attendance?userId=${employee.id}`)
+    if (!employeeIsCeo) {
+      api<{ own: AttendanceRecord[] }>(`/attendance?userId=${employeeId}`)
         .then((r) => setAttendance(r.own))
         .catch(() => {});
       api<{ employees: Array<{ id: number; salary: number | null }> }>('/salary/employees')
-        .then((r) => setSalary(r.employees.find((e) => e.id === employee.id)?.salary ?? null))
+        .then((r) => setSalary(r.employees.find((e) => e.id === employeeId)?.salary ?? null))
         .catch(() => {});
-      api<{ payments: Payment[] }>(`/salary/${employee.id}/payments`)
+      api<{ payments: Payment[] }>(`/salary/${employeeId}/payments`)
         .then((r) => setPayments(r.payments))
         .catch(() => {});
     }
-  }, [employee?.id]);
+  }, [employeeId, employeeIsCeo]);
 
   const run = useCallback(
     async (fn: () => Promise<void>, successMsg: string) => {
