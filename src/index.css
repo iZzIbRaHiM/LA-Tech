@@ -220,106 +220,254 @@
     letter-spacing: 0.025em;
   }
 
-  /* Chat bubble — arrives with a pop, then lifts and glows on hover. The
-     earlier 1px lift was effectively invisible; this is deliberately legible
-     motion (3px + slight scale) so the bubble clearly responds to the cursor
-     without the column feeling unstable while reading. */
+  /* ============ Chat design system (Linear/Telegram-grade) ============
+     Layers: app #0A0A0B · sidebar #111113 · elevated #1A1A1D ·
+     border rgba(255,255,255,0.06). Accent is muted gold #E8C547 (not the
+     marketing site's #DFE104): sent bubbles #E8C547 on #1A1A00 text,
+     received #1F1F23 on #EDEDED. 8px grid, 12px surface radius, 18px
+     bubbles, 120–150ms transitions. */
+  .chat-root {
+    background: #0A0A0B;
+  }
+  .chat-sidebar {
+    background: #111113;
+    border-right: 1px solid rgb(255 255 255 / 0.06);
+  }
+  .chat-elevated {
+    background: #1A1A1D;
+    border: 1px solid rgb(255 255 255 / 0.06);
+    border-radius: 12px;
+  }
+
+  /* Sidebar row — rounded highlight rather than a full-width rectangle. */
+  .chat-item {
+    border-radius: 10px;
+    transition: background-color 0.12s ease, transform 0.12s ease;
+  }
+  .chat-item:hover {
+    background: rgb(255 255 255 / 0.04);
+  }
+  .chat-item-active {
+    background: rgb(232 197 71 / 0.09);
+    box-shadow: inset 0 0 0 1px rgb(232 197 71 / 0.18);
+  }
+
+  /* Avatar — initials over a per-name gradient (hue set inline via --av). */
+  .chat-avatar {
+    border-radius: 9999px;
+    background: linear-gradient(135deg, hsl(var(--av, 200) 45% 38%), hsl(calc(var(--av, 200) + 40) 55% 26%));
+    color: #fff;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .chat-unread {
+    background: #E8C547;
+    color: #1A1A00;
+    font-weight: 700;
+    box-shadow: 0 0 10px rgb(232 197 71 / 0.4);
+    animation: p-unread-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Header pins over the scroll area; blur shows when content passes under. */
+  .chat-header {
+    background: rgb(10 10 11 / 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  }
+  .chat-iconbtn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #a1a1aa;
+    transition: background-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+  }
+  .chat-iconbtn:hover {
+    background: rgb(255 255 255 / 0.06);
+    color: #ededed;
+  }
+  .chat-iconbtn:active {
+    transform: scale(0.92);
+  }
+
+  /* Bubbles — 18px radius, 6px on the corner facing the sender. */
   .pbubble {
     position: relative;
-    animation: p-bubble-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
-    transition:
-      transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.28s ease,
-      filter 0.22s ease;
-    will-change: transform;
-  }
-  .pbubble:hover {
-    transform: translateY(-3px) scale(1.015);
-    z-index: 1;
-  }
-  .pbubble:active {
-    transform: translateY(-1px) scale(0.995);
+    font-size: 15px;
+    line-height: 1.45;
+    animation: p-bubble-in 0.2s ease-out both;
+    transition: box-shadow 0.15s ease, filter 0.15s ease;
   }
   .pbubble-mine {
-    box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.35),
-      0 3px 14px rgb(223 225 4 / 0.18);
+    background: #E8C547;
+    color: #1A1A00;
+    border-radius: 18px 18px 6px 18px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 10px rgb(232 197 71 / 0.14);
+  }
+  .pbubble-mine.pbubble-cont {
+    border-radius: 18px;
   }
   .pbubble-mine:hover {
-    box-shadow:
-      0 4px 8px rgb(0 0 0 / 0.45),
-      0 14px 38px rgb(223 225 4 / 0.42),
-      0 0 0 1.5px rgb(223 225 4 / 0.55);
-    filter: brightness(1.06);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.4), 0 6px 22px rgb(232 197 71 / 0.32);
+    filter: brightness(1.04);
   }
   .pbubble-theirs {
-    box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.4),
-      0 3px 12px rgb(0 0 0 / 0.4);
+    background: #1F1F23;
+    color: #EDEDED;
+    border-radius: 18px 18px 18px 6px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 2px 8px rgb(0 0 0 / 0.3);
+  }
+  .pbubble-theirs.pbubble-cont {
+    border-radius: 18px;
   }
   .pbubble-theirs:hover {
-    box-shadow:
-      0 4px 10px rgb(0 0 0 / 0.55),
-      0 16px 40px rgb(0 0 0 / 0.65),
-      0 0 0 1.5px rgb(223 225 4 / 0.3);
-    filter: brightness(1.12);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.5), 0 8px 24px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(232 197 71 / 0.16);
+    filter: brightness(1.08);
   }
 
-  /* Edit/delete controls beside your own message. Previously they were fully
-     transparent until hover, so most people never discovered them — now they
-     sit at low opacity and slide+scale in, which reads as "these exist". */
-  .pmsg-actions {
-    opacity: 0.28;
-    transform: translateX(6px) scale(0.9);
-    transition:
-      opacity 0.2s ease,
-      transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Floating action pill above a hovered message (reply/edit/delete). */
+  .chat-pill {
+    position: absolute;
+    top: -34px;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    background: #1A1A1D;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 9999px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 0.5);
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    z-index: 2;
   }
-  .group:hover .pmsg-actions {
+  .group:hover .chat-pill,
+  .chat-pill:focus-within {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
   }
-  .pmsg-actions button {
-    transition: transform 0.16s ease, color 0.16s ease;
+  .chat-pill button {
+    width: 28px;
+    height: 28px;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #a1a1aa;
+    transition: background-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
   }
-  .pmsg-actions button:hover {
-    transform: scale(1.25);
-  }
-
-  /* Send button — pulls focus once there's something to send. */
-  .psend {
-    transition:
-      transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.24s ease;
-  }
-  .psend:not(:disabled):hover {
-    transform: scale(1.08);
-    box-shadow: 0 0 22px rgb(223 225 4 / 0.55);
-  }
-  .psend:not(:disabled):active {
-    transform: scale(0.94);
-  }
-  .psend:not(:disabled):hover svg {
-    animation: p-send-nudge 0.6s ease-in-out infinite;
+  .chat-pill button:hover {
+    background: rgb(255 255 255 / 0.07);
+    color: #ededed;
+    transform: scale(1.1);
   }
 
-  /* Attachment button — a small tilt on hover, so it feels physical. */
-  .pattach {
-    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+  /* Date divider — centered pill with hairlines out to each side. */
+  .chat-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
-  .pattach:hover {
-    transform: rotate(-12deg) scale(1.1);
-    border-color: rgb(223 225 4 / 0.5);
+  .chat-divider::before,
+  .chat-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgb(255 255 255 / 0.06);
   }
 
-  /* Unread pill on a chat row — pulses so a new message is noticed
-     without the whole row flashing. */
-  .punread {
-    background: #DFE104;
-    color: #000;
-    font-weight: 700;
-    box-shadow: 0 0 10px rgb(223 225 4 / 0.45);
-    animation: p-unread-pulse 2.4s ease-in-out infinite;
+  /* Input bar — one rounded container housing attach/emoji/textarea. */
+  .chat-inputwrap {
+    background: #1A1A1D;
+    border: 1px solid rgb(255 255 255 / 0.06);
+    border-radius: 24px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .chat-inputwrap:focus-within {
+    border-color: rgb(232 197 71 / 0.3);
+    box-shadow: 0 0 0 1px rgb(232 197 71 / 0.3);
+  }
+  .chat-inputwrap textarea {
+    background: transparent;
+    border: none;
+    outline: none;
+    resize: none;
+    font-size: 15px;
+    line-height: 1.45;
+    max-height: calc(5 * 1.45 * 15px);
+  }
+
+  /* Send — a 40px gold circle that scales in only when there's text. */
+  .chat-send {
+    width: 40px;
+    height: 40px;
+    border-radius: 9999px;
+    background: #E8C547;
+    color: #1A1A00;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transform: scale(0);
+    opacity: 0;
+    transition: transform 0.15s cubic-bezier(0.34, 1.4, 0.64, 1), opacity 0.12s ease, box-shadow 0.15s ease;
+  }
+  .chat-send.chat-send-on {
+    transform: scale(1);
+    opacity: 1;
+  }
+  .chat-send:hover {
+    box-shadow: 0 0 18px rgb(232 197 71 / 0.5);
+  }
+  .chat-send:active {
+    transform: scale(0.9);
+  }
+
+  /* Typing dots. */
+  .chat-typing-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: #a1a1aa;
+    animation: p-typing 1.2s ease-in-out infinite;
+  }
+  .chat-typing-dot:nth-child(2) { animation-delay: 0.15s; }
+  .chat-typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  /* Floating "new messages" chip over the scroll area. */
+  .chat-jump {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1A1A1D;
+    border: 1px solid rgb(232 197 71 / 0.3);
+    color: #E8C547;
+    border-radius: 9999px;
+    box-shadow: 0 6px 20px rgb(0 0 0 / 0.5);
+    animation: p-fade-up 0.2s ease-out both;
+    transition: transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .chat-jump:hover {
+    transform: translateX(-50%) translateY(-2px);
+    box-shadow: 0 8px 26px rgb(0 0 0 / 0.6), 0 0 14px rgb(232 197 71 / 0.25);
+  }
+
+  /* Chat-list skeleton rows. */
+  .chat-skel {
+    background: linear-gradient(100deg, #17171a 40%, #1f1f24 50%, #17171a 60%);
+    background-size: 200% 100%;
+    animation: p-skel 1.4s ease-in-out infinite;
+    border-radius: 8px;
   }
 
   /* Dialog title icon badge — a small glowing square that gives every
@@ -486,26 +634,38 @@
   }
 }
 
-/* Message arrival: rises slightly and settles, rather than just fading —
-   reads as the message "landing" in the conversation. */
+/* Message arrival: rises 8px and fades in over 200ms (spec) — reads as the
+   message "landing" in the conversation. */
 @keyframes p-bubble-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
-@keyframes p-send-nudge {
+@keyframes p-typing {
   0%,
+  60%,
   100% {
-    transform: translateX(0);
+    transform: translateY(0);
+    opacity: 0.4;
   }
-  50% {
-    transform: translateX(2px);
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@keyframes p-skel {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
   }
 }
 
@@ -610,7 +770,10 @@
     animation: none !important;
     opacity: 1 !important;
   }
-  .psend:not(:disabled):hover svg {
+  .chat-typing-dot,
+  .chat-skel,
+  .chat-jump,
+  .chat-unread {
     animation: none !important;
   }
   .pcard,
@@ -618,9 +781,11 @@
   .prow,
   .press,
   .pbubble,
-  .pmsg-actions,
-  .psend,
-  .pattach,
+  .chat-pill,
+  .chat-send,
+  .chat-item,
+  .chat-iconbtn,
+  .chat-inputwrap,
   .pnav svg {
     transition: none !important;
   }

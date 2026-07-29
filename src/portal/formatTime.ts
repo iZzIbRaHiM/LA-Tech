@@ -57,6 +57,29 @@ export function fmtDayLabel(stored: string | null | undefined): string {
   return fmtDate(stored);
 }
 
+/**
+ * Compact relative label for chat-list rows: "now", "5m", "2h", then
+ * weekday for this week, then a short date. Matches messenger conventions.
+ */
+export function fmtRelative(stored: string | null | undefined): string {
+  const d = toDate(stored);
+  if (!d) return '';
+  const mins = (Date.now() - d.getTime()) / 60000;
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${Math.floor(mins)}m`;
+  if (mins < 24 * 60) return `${Math.floor(mins / 60)}h`;
+  if (mins < 7 * 24 * 60) return d.toLocaleDateString('en-PK', { timeZone: TZ, weekday: 'short' });
+  return d.toLocaleDateString('en-PK', { timeZone: TZ, day: '2-digit', month: 'short' });
+}
+
+/** Minutes between two stored timestamps — for message grouping windows. */
+export function minutesBetween(a: string, b: string): number {
+  const da = toDate(a);
+  const db_ = toDate(b);
+  if (!da || !db_) return Infinity;
+  return Math.abs(db_.getTime() - da.getTime()) / 60000;
+}
+
 /** Stable YYYY-MM-DD key in Pakistan time, for grouping messages by day. */
 export function dayKey(stored: string | null | undefined): string {
   const d = toDate(stored);

@@ -1,5 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, Plus, Pencil, Trash2, Send, Paperclip, FileText } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  MessageSquare,
+  Plus,
+  Pencil,
+  Trash2,
+  Send,
+  Paperclip,
+  FileText,
+  Search,
+  Phone,
+  Info,
+  Smile,
+  Mic,
+  Check,
+  CheckCheck,
+  CornerUpLeft,
+  ArrowDown,
+  X,
+} from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +46,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile } from '../api';
 import { usePolling } from '../usePolling';
-import { fmtTime, fmtDateTime, fmtDayLabel, dayKey } from '../formatTime';
+import { fmtTime, fmtDateTime, fmtDayLabel, fmtRelative, minutesBetween, dayKey } from '../formatTime';
 import type { PortalUser } from './People';
 
 interface ChatGroup {
@@ -36,13 +56,45 @@ interface ChatGroup {
   member_count: number;
   // Postgres COUNT() comes back as a string over JSON — coerce before compare.
   unread_count: number | string;
+  last_body: string | null;
+  last_attachment: string | null;
+  last_at: string | null;
+  last_sender: string | null;
 }
 
 interface Member {
   id: number;
   name: string;
   email: string;
+  online?: boolean;
 }
+
+// Deterministic avatar hue from the name, so a group/user keeps its color
+// across sessions without storing anything.
+function avatarHue(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
+}
+
+function Avatar({ name, size }: { name: string; size: number }) {
+  return (
+    <span
+      className="chat-avatar"
+      style={{ width: size, height: size, fontSize: size * 0.36, ['--av' as string]: avatarHue(name) }}
+      aria-hidden="true"
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '👏', '🙏', '🔥', '💯', '😊', '😅', '🤝', '✅', '👀', '⏳', '😢', '💡'];
 
 interface Message {
   id: number;
@@ -138,11 +190,48 @@ export default function Chat() {
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+
+  // Premium-chat state: read receipts, typing, header presence, in-chat
+  // search, scroll position, and the initial-load skeleton flag.
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [readUpTo, setReadUpTo] = useState(0);
+  const [typingNames, setTypingNames] = useState<string[]>([]);
+  const [activeMembers, setActiveMembers] = useState<Member[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [msgQuery, setMsgQuery] = useState('');
+  const [nearBottom, setNearBottom] = useState(true);
+  const [hasNewBelow, setHasNewBelow] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastTypingPingRef = useRef(0);
+
+  // Throttled "I'm typing" ping — at most one request per 2.5s of typing,
+  // matched to the server's 6-second liveness window.
+  const pingTyping = useCallback(() => {
+    if (!activeId) return;
+    const now = Date.now();
+    if (now - lastTypingPingRef.current < 2500) return;
+    lastTypingPingRef.current = now;
+    api(`/chat/groups/${activeId}/typing`, { method: 'POST' }).catch(() => {});
+  }, [activeId]);
+
+  // Header presence: fetched with the members list when the group changes,
+  // then refreshed by the same poll cadence as messages (cheap, small query).
+  const loadActiveMembers = useCallback(() => {
+    if (!activeId) return;
+    api<{ members: Member[] }>(`/chat/groups/${activeId}/members`)
+      .then((r) => setActiveMembers(r.members))
+      .catch(() => {});
+  }, [activeId]);
+  useEffect(loadActiveMembers, [loadActiveMembers]);
 
   const loadGroups = useCallback(() => {
     api<{ groups: ChatGroup[] }>('/chat/groups')
       .then((r) => {
         setGroups(r.groups);
+        setGroupsLoaded(true);
         setActiveId((cur) => cur ?? r.groups[0]?.id ?? null);
       })
       .catch(() => {}); // silent: this now runs on a timer, so a blip shouldn't toast
@@ -169,9 +258,11 @@ export default function Chat() {
 
   const loadMessages = useCallback(() => {
     if (!activeId) return;
-    api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`)
+    api<{ messages: Message[]; readUpTo: number; typing: string[] }>(`/chat/groups/${activeId}/messages`)
       .then((r) => {
         setMessages(r.messages);
+        setReadUpTo(r.readUpTo ?? 0);
+        setTypingNames(r.typing ?? []);
         // Only treat *new* traffic as activity — a poll returning the same
         // messages shouldn't keep the fast interval alive forever.
         const newest = r.messages.length ? r.messages[r.messages.length - 1].id : 0;
@@ -179,6 +270,9 @@ export default function Chat() {
           newestIdRef.current = newest;
           lastChangeRef.current = Date.now();
           setPollMs(POLL_FAST_MS);
+          // If the reader is scrolled up in history, don't yank them down —
+          // surface the floating "new messages" chip instead.
+          if (!nearBottomRef.current) setHasNewBelow(true);
           // Anything new that arrived while this group is open counts as read.
           api(`/chat/groups/${activeId}/read`, { method: 'POST' })
             .then(loadGroups)
@@ -186,7 +280,7 @@ export default function Chat() {
         }
       })
       .catch(() => {});
-  }, [activeId]);
+  }, [activeId, loadGroups]);
 
   // Poll BOTH: messages for the open group, and the group list so unread
   // badges appear as messages land elsewhere. Polling only messages meant
@@ -194,7 +288,8 @@ export default function Chat() {
   const refresh = useCallback(() => {
     loadMessages();
     loadGroups();
-  }, [loadMessages, loadGroups]);
+    loadActiveMembers(); // keeps the header's "N online" presence current
+  }, [loadMessages, loadGroups, loadActiveMembers]);
 
   // Instant load when switching groups; visibility-aware refresh after —
   // a backgrounded chat tab generates zero requests.
@@ -209,9 +304,49 @@ export default function Chat() {
     return () => clearInterval(t);
   }, []);
 
+  // Autoscroll only while the reader is already at the bottom; if they've
+  // scrolled up into history, new arrivals must not yank the view down.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
+    if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
+
+  const onScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    nearBottomRef.current = near;
+    setNearBottom(near);
+    if (near) setHasNewBelow(false);
+  }, []);
+
+  const jumpToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    setHasNewBelow(false);
+  }, []);
+
+  // Autogrow the composer up to ~5 lines (CSS caps max-height).
+  const autogrow = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const insertEmoji = useCallback(
+    (e: string) => {
+      setDraft((d) => d + e);
+      inputRef.current?.focus();
+    },
+    []
+  );
+
+  // Reply = quote into the composer. Plain-text quoting works with the
+  // existing message storage; a threaded reply model would need schema.
+  const replyTo = useCallback((m: Message) => {
+    const excerpt = m.attachment_filename ?? (m.body.length > 80 ? `${m.body.slice(0, 80)}…` : m.body);
+    setDraft((d) => `> ${m.sender_name}: ${excerpt.replace(/\n/g, ' ')}\n${d}`);
+    inputRef.current?.focus();
+  }, []);
 
   const send = async () => {
     if (!activeId || !draft.trim() || sending) return;
@@ -368,211 +503,494 @@ export default function Chat() {
   };
 
   const activeGroup = groups.find((g) => g.id === activeId);
+  const onlineCount = activeMembers.filter((m) => m.online).length;
+
+  // In-chat search filters the rendered list; grouping/day dividers are
+  // computed off the filtered set so a search result never shows a stale
+  // "continuation" bubble with no head.
+  const visibleMessages = useMemo(() => {
+    const q = msgQuery.trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter(
+      (m) => m.body.toLowerCase().includes(q) || (m.attachment_filename ?? '').toLowerCase().includes(q)
+    );
+  }, [messages, msgQuery]);
 
   return (
-    <div className="flex h-full">
-      <div className="w-64 shrink-0 border-r border-[#1f1f23] flex flex-col">
-        <div className="px-4 py-3 flex items-center justify-between border-b border-[#1f1f23]">
-          <h2 className="psection">Chats</h2>
+    <div className="chat-root flex h-full">
+      {/* ---------------- Sidebar ---------------- */}
+      <aside className="chat-sidebar w-72 shrink-0 flex flex-col">
+        <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[#EDEDED] px-1">Chats</h2>
           {user?.isCeo && (
-            <Button variant="ghost" size="sm" onClick={openCreate} className="text-[#DFE104]">
-              <Plus size={14} />
-            </Button>
+            <button
+              onClick={openCreate}
+              className="chat-iconbtn"
+              style={{ color: '#E8C547' }}
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus size={18} />
+            </button>
           )}
         </div>
-        <div className="flex-1 overflow-auto">
-          {groups.map((g) => (
-            <div
-              key={g.id}
-              className={`prow flex items-center justify-between px-4 py-2.5 cursor-pointer text-sm border-b border-[#141417] ${
-                activeId === g.id ? 'bg-[#1c1c20] shadow-[inset_2px_0_0_#DFE104]' : ''
-              }`}
-              onClick={() => {
-                setActiveId(g.id);
-                markActive();
-              }}
-            >
-              <div className="min-w-0 flex-1">
-                <div className={`truncate ${Number(g.unread_count) > 0 && activeId !== g.id ? 'font-semibold text-[#FAFAFA]' : ''}`}>
-                  {g.name}
+
+        <div className="flex-1 overflow-auto px-2 pb-2 space-y-0.5">
+          {!groupsLoaded &&
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-2" aria-hidden="true">
+                <div className="chat-skel" style={{ width: 40, height: 40, borderRadius: 9999 }} />
+                <div className="flex-1 space-y-2">
+                  <div className="chat-skel h-3 w-1/2" />
+                  <div className="chat-skel h-2.5 w-3/4" />
                 </div>
-                <div className="text-xs text-[#71717A]">{g.member_count} members</div>
               </div>
-              {/* Unread pill: exact count up to 9, then "10+" so a very busy
-                  group can't stretch the row. Hidden for the group you're
-                  currently reading. */}
-              {Number(g.unread_count) > 0 && activeId !== g.id && (
-                <span className="punread shrink-0 mr-1.5 min-w-5 h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center">
-                  {Number(g.unread_count) > 9 ? '10+' : g.unread_count}
-                </span>
-              )}
-              {user?.isCeo && (
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEdit(g);
-                    }}
-                    className="text-[#71717A] hover:text-[#FAFAFA] p-1 transition-colors"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleting(g);
-                    }}
-                    className="text-[#71717A] hover:text-red-400 p-1 transition-colors"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+            ))}
+
+          {groupsLoaded &&
+            groups.map((g) => {
+              const unread = Number(g.unread_count);
+              const isActive = activeId === g.id;
+              const preview = g.last_attachment
+                ? `📎 ${g.last_attachment}`
+                : g.last_body
+                  ? `${g.last_sender ? `${g.last_sender.split(' ')[0]}: ` : ''}${g.last_body}`
+                  : `${g.member_count} members`;
+              return (
+                <div
+                  key={g.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`chat-item group flex items-center gap-3 p-2 cursor-pointer ${isActive ? 'chat-item-active' : ''}`}
+                  onClick={() => {
+                    setActiveId(g.id);
+                    markActive();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setActiveId(g.id);
+                      markActive();
+                    }
+                  }}
+                >
+                  <Avatar name={g.name} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`truncate text-sm ${unread > 0 && !isActive ? 'font-semibold text-[#EDEDED]' : 'font-medium text-[#EDEDED]'}`}
+                      >
+                        {g.name}
+                      </span>
+                      <span className="ml-auto shrink-0 text-[11px] text-[#EDEDED]/[0.48] tabular-nums">
+                        {fmtRelative(g.last_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-[13px] text-[#EDEDED]/55">{preview}</span>
+                      {unread > 0 && !isActive && (
+                        <span
+                          className="chat-unread ml-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[11px] flex items-center justify-center"
+                          aria-label={`${unread} unread messages`}
+                        >
+                          {unread > 9 ? '10+' : unread}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {user?.isCeo && (
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEdit(g);
+                        }}
+                        className="chat-iconbtn"
+                        style={{ width: 28, height: 28 }}
+                        title="Edit group"
+                        aria-label={`Edit ${g.name}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleting(g);
+                        }}
+                        className="chat-iconbtn hover:!text-red-400"
+                        style={{ width: 28, height: 28 }}
+                        title="Delete group"
+                        aria-label={`Delete ${g.name}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
-          {groups.length === 0 && (
-            <p className="text-sm text-[#71717A] p-4">
-              {user?.isCeo ? 'No groups yet — create one.' : "You're not in any chat groups yet."}
+              );
+            })}
+
+          {groupsLoaded && groups.length === 0 && (
+            <p className="text-[13px] text-[#EDEDED]/55 p-3">
+              {user?.isCeo ? 'No chats yet — create one.' : "You're not in any chats yet."}
             </p>
           )}
         </div>
-      </div>
+      </aside>
 
-      <div className="flex-1 flex flex-col">
+      {/* ---------------- Conversation ---------------- */}
+      <div className="flex-1 flex flex-col min-w-0 relative">
         {activeGroup ? (
           <>
-            <div className="px-4 py-3 border-b border-[#1f1f23] font-medium text-sm">{activeGroup.name}</div>
-            <div className="flex-1 overflow-auto p-4 space-y-1">
-              {messages.map((m, i) => {
-                const mine = m.sender_id === user?.id;
-                const prev = messages[i - 1];
-                const next = messages[i + 1];
-                // Group consecutive messages from the same sender on the same
-                // day: only the first shows a name, only the last gets the
-                // tail, and the gap between them tightens.
-                const startsGroup = !prev || prev.sender_id !== m.sender_id || dayKey(prev.created_at) !== dayKey(m.created_at);
-                const endsGroup = !next || next.sender_id !== m.sender_id || dayKey(next.created_at) !== dayKey(m.created_at);
-                const showDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
-                // Tail only on the last bubble of a run; the others stay fully
-                // rounded so a group reads as one block of speech.
-                const corner = mine
-                  ? endsGroup
-                    ? 'rounded-2xl rounded-br-md'
-                    : 'rounded-2xl'
-                  : endsGroup
-                    ? 'rounded-2xl rounded-bl-md'
-                    : 'rounded-2xl';
-                return (
-                  <div key={m.id}>
-                    {showDay && (
-                      <div className="flex items-center justify-center my-4">
-                        <span className="px-3 py-1 rounded-full bg-[#141417] border border-[#1f1f23] text-[10px] uppercase tracking-wider text-[#71717A]">
-                          {fmtDayLabel(m.created_at)}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                      className={`group flex items-end gap-1.5 ${mine ? 'justify-end' : 'justify-start'} ${
-                        startsGroup ? 'mt-3' : 'mt-0.5'
-                      }`}
-                    >
-                      {mine && !m.attachment_filename && (user?.isCeo || withinEditWindow(m.created_at)) && (
-                        <span className="pmsg-actions flex items-center gap-1 mb-1.5">
-                          <button
-                            className="text-[#71717A] hover:text-[#DFE104] transition-colors"
-                            onClick={() => {
-                              setEditingMessage(m);
-                              setEditDraft(m.body);
-                            }}
-                            title="Edit message"
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          <button
-                            className="text-[#71717A] hover:text-red-400 transition-colors"
-                            onClick={() => setDeletingMessage(m)}
-                            title="Delete message"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </span>
+            <header className="chat-header sticky top-0 z-10 px-4 py-2.5 flex items-center gap-3">
+              <Avatar name={activeGroup.name} size={36} />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[#EDEDED] truncate">{activeGroup.name}</div>
+                <div className="flex items-center gap-1.5 text-[11px] text-[#EDEDED]/[0.48]">
+                  <span>{activeGroup.member_count} members</span>
+                  {onlineCount > 0 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" aria-hidden="true" />
+                        {onlineCount} online
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  className="chat-iconbtn"
+                  onClick={() => setSearchOpen((v) => !v)}
+                  title="Search in conversation"
+                  aria-label="Search in conversation"
+                  aria-pressed={searchOpen}
+                >
+                  <Search size={17} />
+                </button>
+                <button
+                  className="chat-iconbtn"
+                  onClick={() => navigate('/portal/meetings')}
+                  title="Start a call (Meetings)"
+                  aria-label="Start a call"
+                >
+                  <Phone size={17} />
+                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button className="chat-iconbtn" title="Conversation info" aria-label="Conversation info">
+                      <Info size={17} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-64 p-0 chat-elevated">
+                    <div className="px-3 py-2 text-[13px] font-semibold text-[#EDEDED] border-b border-white/[0.06]">
+                      Members
+                    </div>
+                    <div className="max-h-64 overflow-auto py-1">
+                      {activeMembers.map((m) => (
+                        <div key={m.id} className="flex items-center gap-2.5 px-3 py-1.5">
+                          <Avatar name={m.name} size={28} />
+                          <span className="text-[13px] text-[#EDEDED] truncate flex-1">{m.name}</span>
+                          {m.online && (
+                            <span
+                              className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                              title="Online"
+                              aria-label="Online"
+                            />
+                          )}
+                        </div>
+                      ))}
+                      {activeMembers.length === 0 && (
+                        <p className="px-3 py-2 text-[13px] text-[#EDEDED]/55">No members.</p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </header>
+
+            {searchOpen && (
+              <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-2">
+                <Search size={14} className="text-[#EDEDED]/[0.48] shrink-0" />
+                <input
+                  autoFocus
+                  value={msgQuery}
+                  onChange={(e) => setMsgQuery(e.target.value)}
+                  placeholder="Search in this conversation…"
+                  aria-label="Search in this conversation"
+                  className="flex-1 bg-transparent border-0 outline-none text-sm text-[#EDEDED] placeholder:text-[#EDEDED]/35"
+                />
+                <span className="text-[11px] text-[#EDEDED]/[0.48] tabular-nums">
+                  {msgQuery.trim() ? `${visibleMessages.length} found` : ''}
+                </span>
+                <button
+                  className="chat-iconbtn"
+                  style={{ width: 28, height: 28 }}
+                  onClick={() => {
+                    setSearchOpen(false);
+                    setMsgQuery('');
+                  }}
+                  aria-label="Close search"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto px-4 py-4">
+              <div className="mx-auto w-full max-w-[720px]">
+                {visibleMessages.map((m, i) => {
+                  const mine = m.sender_id === user?.id;
+                  const prev = visibleMessages[i - 1];
+                  const next = visibleMessages[i + 1];
+                  const sameDayAsPrev = prev && dayKey(prev.created_at) === dayKey(m.created_at);
+                  // A "run" is consecutive messages from one sender inside a
+                  // 2-minute window — they get a tighter gap and share one
+                  // timestamp under the last bubble.
+                  const contPrev =
+                    !!prev && prev.sender_id === m.sender_id && !!sameDayAsPrev && minutesBetween(prev.created_at, m.created_at) <= 2;
+                  const contNext =
+                    !!next &&
+                    next.sender_id === m.sender_id &&
+                    dayKey(next.created_at) === dayKey(m.created_at) &&
+                    minutesBetween(m.created_at, next.created_at) <= 2;
+                  const showDay = !prev || !sameDayAsPrev;
+                  const canModify = mine && !m.attachment_filename && (user?.isCeo || withinEditWindow(m.created_at));
+
+                  return (
+                    <div key={m.id}>
+                      {showDay && (
+                        <div className="chat-divider my-5" role="separator">
+                          <span className="px-3 py-1 rounded-full bg-[#1A1A1D] border border-white/[0.06] text-[11px] text-[#EDEDED]/[0.48]">
+                            {fmtDayLabel(m.created_at)}
+                          </span>
+                        </div>
                       )}
                       <div
-                        className={`pbubble ${corner} max-w-md px-3.5 py-2 text-sm ${
-                          mine ? 'pbubble-mine bg-[#DFE104] text-black' : 'pbubble-theirs bg-[#141417] text-[#FAFAFA]'
-                        }`}
+                        className={`group flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}
+                        style={{ marginTop: contPrev ? 4 : 12 }}
                       >
-                        {!mine && startsGroup && (
-                          <div className="text-xs font-medium text-[#DFE104] mb-0.5">{m.sender_name}</div>
+                        {/* Avatar gutter: rendered only on the LAST message of
+                            a received run, so a run reads as one block. */}
+                        {!mine && (
+                          <div className="w-8 shrink-0" aria-hidden={contNext}>
+                            {!contNext && <Avatar name={m.sender_name} size={32} />}
+                          </div>
                         )}
-                        {m.attachment_filename ? (
-                          <button
-                            onClick={() => downloadAttachment(m)}
-                            className={`flex items-center gap-1.5 text-left transition-opacity hover:opacity-80 ${
-                              mine ? 'text-black' : 'text-[#FAFAFA]'
+
+                        <div className={`relative max-w-[75%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
+                          {!mine && !contPrev && (
+                            <span className="text-[13px] font-medium mb-1 ml-1" style={{ color: '#E8C547' }}>
+                              {m.sender_name}
+                            </span>
+                          )}
+
+                          {/* Floating action pill on hover */}
+                          <div className={`chat-pill ${mine ? 'right-0' : 'left-0'}`}>
+                            <button onClick={() => replyTo(m)} title="Reply" aria-label="Reply to message">
+                              <CornerUpLeft size={14} />
+                            </button>
+                            {canModify && (
+                              <button
+                                onClick={() => {
+                                  setEditingMessage(m);
+                                  setEditDraft(m.body);
+                                }}
+                                title="Edit"
+                                aria-label="Edit message"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {canModify && (
+                              <button
+                                onClick={() => setDeletingMessage(m)}
+                                title="Delete"
+                                aria-label="Delete message"
+                                className="hover:!text-red-400"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+
+                          <div
+                            className={`pbubble px-3.5 py-2 ${contPrev ? 'pbubble-cont' : ''} ${
+                              mine ? 'pbubble-mine' : 'pbubble-theirs'
                             }`}
                           >
-                            <FileText size={14} className="shrink-0" />
-                            <span className="truncate max-w-52 underline decoration-dotted underline-offset-2">
-                              {m.attachment_filename}
-                            </span>
-                            {m.attachment_size != null && (
-                              <span className="text-xs opacity-70 shrink-0">{fmtSize(m.attachment_size)}</span>
+                            {m.attachment_filename ? (
+                              <button
+                                onClick={() => downloadAttachment(m)}
+                                className="flex items-center gap-1.5 text-left hover:opacity-80 transition-opacity duration-150"
+                              >
+                                <FileText size={14} className="shrink-0" />
+                                <span className="truncate max-w-52 underline decoration-dotted underline-offset-2">
+                                  {m.attachment_filename}
+                                </span>
+                                {m.attachment_size != null && (
+                                  <span className="text-[11px] opacity-70 shrink-0">{fmtSize(m.attachment_size)}</span>
+                                )}
+                              </button>
+                            ) : (
+                              <div className="whitespace-pre-wrap break-words">{m.body}</div>
                             )}
-                          </button>
-                        ) : (
-                          <div className="whitespace-pre-wrap break-words">{m.body}</div>
-                        )}
-                        <div
-                          className={`text-[10px] mt-1 text-right ${mine ? 'text-black/55' : 'text-[#71717A]'}`}
-                          title={fmtDateTime(m.created_at)}
-                        >
-                          {fmtTime(m.created_at)}
-                          {m.edited_at && ' · edited'}
+                          </div>
+
+                          {/* One timestamp per run, under the last bubble. */}
+                          {!contNext && (
+                            <div
+                              className="flex items-center gap-1 mt-1 px-1 text-[11px] text-[#EDEDED]/[0.48]"
+                              title={fmtDateTime(m.created_at)}
+                            >
+                              <span className="tabular-nums">{fmtTime(m.created_at)}</span>
+                              {m.edited_at && <span>· edited</span>}
+                              {mine &&
+                                (m.id <= readUpTo ? (
+                                  <CheckCheck size={13} style={{ color: '#E8C547' }} aria-label="Read by everyone" />
+                                ) : (
+                                  <Check size={13} aria-label="Sent" />
+                                ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-              {messages.length === 0 && <EmptyState icon={MessageSquare} title="No messages yet — say hello." />}
-              <div ref={bottomRef} />
+                  );
+                })}
+
+                {visibleMessages.length === 0 && !msgQuery.trim() && (
+                  <EmptyState icon={MessageSquare} title="No messages yet — say hello 👋" />
+                )}
+                {visibleMessages.length === 0 && msgQuery.trim() && (
+                  <EmptyState compact icon={Search} title={`No messages match "${msgQuery}"`} />
+                )}
+                <div ref={bottomRef} />
+              </div>
             </div>
-            <div className="p-3 border-t border-[#1f1f23] flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
-              />
-              <Button
-                variant="outline"
-                className="pattach"
-                disabled={uploading}
-                onClick={() => fileInputRef.current?.click()}
-                title="Attach a file"
-              >
-                <Paperclip size={14} />
-              </Button>
-              <Input
-                placeholder="Message…"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onFocus={markActive}
-                onKeyDown={(e) => e.key === 'Enter' && send()}
-              />
-              <Button onClick={send} disabled={!draft.trim() || sending} className="psend bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-40">
-                <Send size={14} />
-              </Button>
+
+            {/* Floating jump-to-latest */}
+            {(!nearBottom || hasNewBelow) && (
+              <button className="chat-jump px-3 py-1.5 text-[13px] flex items-center gap-1.5" onClick={jumpToBottom}>
+                <ArrowDown size={14} />
+                {hasNewBelow ? 'New messages' : 'Jump to latest'}
+              </button>
+            )}
+
+            {/* Typing indicator sits directly above the composer */}
+            <div className="px-4 h-5 flex items-end" aria-live="polite">
+              {typingNames.length > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px] text-[#EDEDED]/55 pb-0.5">
+                  <span className="flex items-center gap-0.5" aria-hidden="true">
+                    <span className="chat-typing-dot" />
+                    <span className="chat-typing-dot" />
+                    <span className="chat-typing-dot" />
+                  </span>
+                  {typingNames.length === 1
+                    ? `${typingNames[0]} is typing…`
+                    : `${typingNames.length} people are typing…`}
+                </div>
+              )}
+            </div>
+
+            {/* ---------------- Composer ---------------- */}
+            <div className="px-4 pb-4 pt-1">
+              <div className="mx-auto w-full max-w-[720px] flex items-end gap-2">
+                <div className="chat-inputwrap flex-1 flex items-end gap-1 px-2 py-1.5">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])}
+                  />
+                  <button
+                    className="chat-iconbtn shrink-0"
+                    disabled={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach a file"
+                    aria-label="Attach a file"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+
+                  <textarea
+                    ref={inputRef}
+                    rows={1}
+                    value={draft}
+                    placeholder="Message…"
+                    aria-label="Message"
+                    className="flex-1 py-2 text-[#EDEDED] placeholder:text-[#EDEDED]/35"
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      autogrow();
+                      pingTyping();
+                    }}
+                    onFocus={markActive}
+                    onKeyDown={(e) => {
+                      // Enter sends; Shift+Enter makes a new line.
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                  />
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="chat-iconbtn shrink-0" title="Emoji" aria-label="Insert emoji">
+                        <Smile size={18} />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-56 p-2 chat-elevated">
+                      <div className="grid grid-cols-8 gap-1">
+                        {COMMON_EMOJI.map((e) => (
+                          <button
+                            key={e}
+                            onClick={() => insertEmoji(e)}
+                            className="h-7 w-7 rounded hover:bg-white/[0.07] transition-colors duration-150 text-base"
+                            aria-label={`Insert ${e}`}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Send scales in only when there's text; mic placeholder otherwise. */}
+                {draft.trim() ? (
+                  <button
+                    onClick={send}
+                    disabled={sending}
+                    className="chat-send chat-send-on shrink-0 disabled:opacity-50"
+                    title="Send"
+                    aria-label="Send message"
+                  >
+                    <Send size={17} />
+                  </button>
+                ) : (
+                  <button
+                    className="chat-iconbtn shrink-0"
+                    style={{ width: 40, height: 40 }}
+                    title="Voice messages aren't supported yet"
+                    aria-label="Voice message (unavailable)"
+                    disabled
+                  >
+                    <Mic size={18} />
+                  </button>
+                )}
+              </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-sm text-[#71717A]">
-            <MessageSquare size={16} className="mr-2" /> Select a chat
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyState icon={MessageSquare} title="Select a chat to start messaging" />
           </div>
         )}
       </div>
-
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-sm">
           <DialogHeader className="flex-row items-center gap-3 space-y-0">

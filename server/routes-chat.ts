@@ -30,7 +30,12 @@ chatRouter.get('/chat/groups', requireAuth, async (req, res) => {
                    WHERE c.group_id = g.id
                      AND c.id > gm.last_read_message_id
                      AND c.sender_id != ?) AS unread_count,
-                (SELECT MAX(c2.id) FROM chat_messages c2 WHERE c2.group_id = g.id) AS last_message_id
+                (SELECT MAX(c2.id) FROM chat_messages c2 WHERE c2.group_id = g.id) AS last_message_id,
+                (SELECT c3.body FROM chat_messages c3 WHERE c3.group_id = g.id ORDER BY c3.id DESC LIMIT 1) AS last_body,
+                (SELECT c4.attachment_filename FROM chat_messages c4 WHERE c4.group_id = g.id ORDER BY c4.id DESC LIMIT 1) AS last_attachment,
+                (SELECT c5.created_at FROM chat_messages c5 WHERE c5.group_id = g.id ORDER BY c5.id DESC LIMIT 1) AS last_at,
+                (SELECT u5.name FROM chat_messages c6 JOIN users u5 ON u5.id = c6.sender_id
+                   WHERE c6.group_id = g.id ORDER BY c6.id DESC LIMIT 1) AS last_sender
          FROM chat_groups g
          JOIN chat_group_members gm ON gm.group_id = g.id AND gm.user_id = ?
        ) t
@@ -43,9 +48,13 @@ chatRouter.get('/chat/groups', requireAuth, async (req, res) => {
 chatRouter.get('/chat/groups/:id/members', requireAuth, async (req, res) => {
   const groupId = Number(req.params.id);
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  // `online` mirrors the org chart's presence rule: a heartbeat within the
+  // last 3 minutes. Drives the header's "N online" and the info panel dots.
   const members = await db
     .prepare(
-      `SELECT u.id, u.name, u.email FROM chat_group_members m
+      `SELECT u.id, u.name, u.email,
+              (u.last_seen_at IS NOT NULL AND u.last_seen_at::timestamp > now() - INTERVAL '3 minutes') AS online
+       FROM chat_group_members m
        JOIN users u ON u.id = m.user_id WHERE m.group_id = ? ORDER BY u.name`
     )
     .all(groupId);
@@ -143,6 +152,17 @@ async function notifyGroupMessage(groupId: number, senderId: number) {
   }
 }
 
+// Typing ping — the client sends this (throttled) while the user composes.
+// Deliberately not audit-logged and not notified: it's ephemeral presence.
+chatRouter.post('/chat/groups/:id/typing', requireAuth, async (req, res) => {
+  const groupId = Number(req.params.id);
+  if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
+  await db
+    .prepare("UPDATE chat_group_members SET last_typing_at = datetime('now') WHERE group_id = ? AND user_id = ?")
+    .run(groupId, req.user!.id);
+  res.json({ ok: true });
+});
+
 // Opening a group clears its unread state. Kept as its own endpoint rather
 // than folded into GET /messages, because that route is polled every couple of
 // seconds and would otherwise issue a write on every single poll.
@@ -182,7 +202,24 @@ chatRouter.get('/chat/groups/:id/messages', requireAuth, async (req, res) => {
        ) recent ORDER BY recent.id ASC`
     )
     .all(groupId);
-  res.json({ messages });
+  // Read receipt: your message is "read" once EVERY other member's read
+  // marker has passed it — the strictest interpretation, so a double-check
+  // never overpromises. Groups with no other members read as never-read.
+  const readRow = (await db
+    .prepare(
+      'SELECT MIN(last_read_message_id) AS read_up_to FROM chat_group_members WHERE group_id = ? AND user_id != ?'
+    )
+    .get(groupId, req.user!.id)) as { read_up_to: number | null } | undefined;
+  // Typing: anyone (not me) who pinged /typing in the last 6 seconds.
+  const typing = (await db
+    .prepare(
+      `SELECT u.name FROM chat_group_members m JOIN users u ON u.id = m.user_id
+       WHERE m.group_id = ? AND m.user_id != ?
+         AND m.last_typing_at IS NOT NULL
+         AND m.last_typing_at::timestamp > now() - INTERVAL '6 seconds'`
+    )
+    .all(groupId, req.user!.id)) as Array<{ name: string }>;
+  res.json({ messages, readUpTo: readRow?.read_up_to ?? 0, typing: typing.map((t) => t.name) });
 });
 
 chatRouter.post('/chat/groups/:id/messages', requireAuth, async (req, res) => {

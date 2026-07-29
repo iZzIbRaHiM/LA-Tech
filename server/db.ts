@@ -502,6 +502,10 @@ export async function initDb() {
     -- in this group. Unread count is simply "messages newer than this", which
     -- is exact and needs no extra table. 0 means "never opened".
     ALTER TABLE chat_group_members ADD COLUMN IF NOT EXISTS last_read_message_id INTEGER NOT NULL DEFAULT 0;
+    -- Typing indicator: client pings while composing; anyone whose stamp is
+    -- within the last few seconds is "typing". Works on serverless because
+    -- state lives in the DB, not process memory.
+    ALTER TABLE chat_group_members ADD COLUMN IF NOT EXISTS last_typing_at TEXT;
 
     CREATE TABLE IF NOT EXISTS chat_messages (
       id SERIAL PRIMARY KEY,
