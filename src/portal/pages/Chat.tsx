@@ -97,6 +97,15 @@ function MemberPicker({
   );
 }
 
+// Mirrors MESSAGE_EDIT_WINDOW_MINUTES in server/routes-chat.ts. The server is
+// the authority; this only hides controls that would fail, so nobody is
+// offered an edit/delete that then errors.
+const EDIT_WINDOW_MINUTES = 15;
+
+function withinEditWindow(createdAt: string): boolean {
+  return (Date.now() - new Date(`${createdAt.replace(' ', 'T')}Z`).getTime()) / 60000 <= EDIT_WINDOW_MINUTES;
+}
+
 const POLL_FAST_MS = 2000;
 const POLL_IDLE_MS = 10000;
 const IDLE_AFTER_MS = 60000;
@@ -467,8 +476,8 @@ export default function Chat() {
                         startsGroup ? 'mt-3' : 'mt-0.5'
                       }`}
                     >
-                      {mine && !m.attachment_filename && (
-                        <span className="opacity-0 group-hover:opacity-100 translate-x-1 group-hover:translate-x-0 flex items-center gap-1.5 transition-all duration-200 mb-1.5">
+                      {mine && !m.attachment_filename && (user?.isCeo || withinEditWindow(m.created_at)) && (
+                        <span className="pmsg-actions flex items-center gap-1 mb-1.5">
                           <button
                             className="text-[#71717A] hover:text-[#DFE104] transition-colors"
                             onClick={() => {
@@ -538,6 +547,7 @@ export default function Chat() {
               />
               <Button
                 variant="outline"
+                className="pattach"
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
                 title="Attach a file"
@@ -551,7 +561,7 @@ export default function Chat() {
                 onFocus={markActive}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
               />
-              <Button onClick={send} disabled={!draft.trim() || sending} className="bg-[#DFE104] text-black hover:bg-[#c9cb04]">
+              <Button onClick={send} disabled={!draft.trim() || sending} className="psend bg-[#DFE104] text-black hover:bg-[#c9cb04] disabled:opacity-40">
                 <Send size={14} />
               </Button>
             </div>

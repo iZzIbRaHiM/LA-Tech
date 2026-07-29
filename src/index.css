@@ -220,43 +220,99 @@
     letter-spacing: 0.025em;
   }
 
-  /* Chat bubble — arrives with a soft pop, lifts and deepens its shadow on
-     hover. The lift is small on purpose: a chat log is a dense list, so a
-     large transform would make the whole column feel unstable while reading. */
+  /* Chat bubble — arrives with a pop, then lifts and glows on hover. The
+     earlier 1px lift was effectively invisible; this is deliberately legible
+     motion (3px + slight scale) so the bubble clearly responds to the cursor
+     without the column feeling unstable while reading. */
   .pbubble {
     position: relative;
-    animation: p-bubble-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: p-bubble-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
     transition:
-      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 0.25s ease;
+      transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.28s ease,
+      filter 0.22s ease;
+    will-change: transform;
   }
   .pbubble:hover {
-    transform: translateY(-1px);
+    transform: translateY(-3px) scale(1.015);
+    z-index: 1;
+  }
+  .pbubble:active {
+    transform: translateY(-1px) scale(0.995);
   }
   .pbubble-mine {
     box-shadow:
       0 1px 2px rgb(0 0 0 / 0.35),
-      0 2px 12px rgb(223 225 4 / 0.16);
+      0 3px 14px rgb(223 225 4 / 0.18);
   }
   .pbubble-mine:hover {
     box-shadow:
-      0 2px 4px rgb(0 0 0 / 0.4),
-      0 8px 24px rgb(223 225 4 / 0.32),
-      0 0 0 1px rgb(223 225 4 / 0.35);
+      0 4px 8px rgb(0 0 0 / 0.45),
+      0 14px 38px rgb(223 225 4 / 0.42),
+      0 0 0 1.5px rgb(223 225 4 / 0.55);
+    filter: brightness(1.06);
   }
   .pbubble-theirs {
     box-shadow:
       0 1px 2px rgb(0 0 0 / 0.4),
-      0 2px 10px rgb(0 0 0 / 0.35);
+      0 3px 12px rgb(0 0 0 / 0.4);
   }
   .pbubble-theirs:hover {
     box-shadow:
-      0 2px 6px rgb(0 0 0 / 0.5),
-      0 10px 28px rgb(0 0 0 / 0.55),
-      0 0 0 1px rgb(255 255 255 / 0.06);
+      0 4px 10px rgb(0 0 0 / 0.55),
+      0 16px 40px rgb(0 0 0 / 0.65),
+      0 0 0 1.5px rgb(223 225 4 / 0.3);
+    filter: brightness(1.12);
   }
 
-  /* Unread pill on a chat row — pulses gently so a new message is noticed
+  /* Edit/delete controls beside your own message. Previously they were fully
+     transparent until hover, so most people never discovered them — now they
+     sit at low opacity and slide+scale in, which reads as "these exist". */
+  .pmsg-actions {
+    opacity: 0.28;
+    transform: translateX(6px) scale(0.9);
+    transition:
+      opacity 0.2s ease,
+      transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .group:hover .pmsg-actions {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+  .pmsg-actions button {
+    transition: transform 0.16s ease, color 0.16s ease;
+  }
+  .pmsg-actions button:hover {
+    transform: scale(1.25);
+  }
+
+  /* Send button — pulls focus once there's something to send. */
+  .psend {
+    transition:
+      transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.24s ease;
+  }
+  .psend:not(:disabled):hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 22px rgb(223 225 4 / 0.55);
+  }
+  .psend:not(:disabled):active {
+    transform: scale(0.94);
+  }
+  .psend:not(:disabled):hover svg {
+    animation: p-send-nudge 0.6s ease-in-out infinite;
+  }
+
+  /* Attachment button — a small tilt on hover, so it feels physical. */
+  .pattach {
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease;
+  }
+  .pattach:hover {
+    transform: rotate(-12deg) scale(1.1);
+    border-color: rgb(223 225 4 / 0.5);
+  }
+
+  /* Unread pill on a chat row — pulses so a new message is noticed
      without the whole row flashing. */
   .punread {
     background: #DFE104;
@@ -443,6 +499,16 @@
   }
 }
 
+@keyframes p-send-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(2px);
+  }
+}
+
 @keyframes p-unread-pulse {
   0%,
   100% {
@@ -544,11 +610,17 @@
     animation: none !important;
     opacity: 1 !important;
   }
+  .psend:not(:disabled):hover svg {
+    animation: none !important;
+  }
   .pcard,
   .pcard-hover,
   .prow,
   .press,
   .pbubble,
+  .pmsg-actions,
+  .psend,
+  .pattach,
   .pnav svg {
     transition: none !important;
   }

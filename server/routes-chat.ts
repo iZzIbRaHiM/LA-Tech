@@ -262,6 +262,19 @@ chatRouter.get('/chat/groups/:id/messages/:messageId/download', requireAuth, asy
   }
 });
 
+// How long an ordinary member may still edit or delete their own message.
+// After this the message is part of the record and can't be quietly rewritten
+// — otherwise someone could alter what they said long after colleagues acted
+// on it. The CEO is exempt (moderation/cleanup).
+export const MESSAGE_EDIT_WINDOW_MINUTES = 15;
+
+// created_at is stored as a UTC 'YYYY-MM-DD HH:MM:SS' string with no zone
+// suffix, so it must be pinned with 'Z' before parsing or this would be off
+// by the server's local offset.
+function minutesSince(stored: string): number {
+  return (Date.now() - new Date(`${stored.replace(' ', 'T')}Z`).getTime()) / 60000;
+}
+
 // Edit/delete are author-only — even the CEO can't rewrite someone else's
 // words (group management is CEO-only, but a message belongs to whoever
 // sent it). Only text messages can be edited; a file "message" has nothing
@@ -270,12 +283,17 @@ chatRouter.patch('/chat/groups/:id/messages/:messageId', requireAuth, async (req
   const groupId = Number(req.params.id);
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
   const message = await db
-    .prepare('SELECT id, sender_id, attachment_stored_name FROM chat_messages WHERE id = ? AND group_id = ?')
+    .prepare('SELECT id, sender_id, created_at, attachment_stored_name FROM chat_messages WHERE id = ? AND group_id = ?')
     .get(Number(req.params.messageId), groupId) as
-    | { id: number; sender_id: number; attachment_stored_name: string | null }
+    | { id: number; sender_id: number; created_at: string; attachment_stored_name: string | null }
     | undefined;
   if (!message) return res.status(404).json({ error: 'Not found' });
   if (message.sender_id !== req.user!.id) return res.status(403).json({ error: 'You can only edit your own messages' });
+  if (!req.user!.isCeo && minutesSince(message.created_at) > MESSAGE_EDIT_WINDOW_MINUTES) {
+    return res
+      .status(403)
+      .json({ error: `Messages can only be edited within ${MESSAGE_EDIT_WINDOW_MINUTES} minutes of sending` });
+  }
   if (message.attachment_stored_name) return res.status(400).json({ error: 'File messages cannot be edited' });
 
   const { body } = req.body ?? {};
@@ -290,10 +308,17 @@ chatRouter.delete('/chat/groups/:id/messages/:messageId', requireAuth, async (re
   const groupId = Number(req.params.id);
   if (!(await isGroupMember(req.user!.id, groupId))) return res.status(404).json({ error: 'Not found' });
   const message = await db
-    .prepare('SELECT id, sender_id FROM chat_messages WHERE id = ? AND group_id = ?')
-    .get(Number(req.params.messageId), groupId) as { id: number; sender_id: number } | undefined;
+    .prepare('SELECT id, sender_id, created_at FROM chat_messages WHERE id = ? AND group_id = ?')
+    .get(Number(req.params.messageId), groupId) as
+    | { id: number; sender_id: number; created_at: string }
+    | undefined;
   if (!message) return res.status(404).json({ error: 'Not found' });
   if (message.sender_id !== req.user!.id) return res.status(403).json({ error: 'You can only delete your own messages' });
+  if (!req.user!.isCeo && minutesSince(message.created_at) > MESSAGE_EDIT_WINDOW_MINUTES) {
+    return res
+      .status(403)
+      .json({ error: `Messages can only be deleted within ${MESSAGE_EDIT_WINDOW_MINUTES} minutes of sending` });
+  }
   await db.prepare('DELETE FROM chat_messages WHERE id = ?').run(message.id);
   res.json({ ok: true });
 });
