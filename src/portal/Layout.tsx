@@ -177,6 +177,17 @@ export default function Layout() {
 
   const unread = notifications.filter((n) => !n.read_at).length;
 
+  // Ring the bell when the unread count actually RISES. The previous version
+  // keyed the animation off `unread > 0`, so it played once on mount and never
+  // again — the one moment it should fire (a notification arriving) was the
+  // one it missed. Bumping the key remounts the icon, replaying the keyframes.
+  const [ringKey, setRingKey] = useState(0);
+  const prevUnreadRef = useRef(unread);
+  useEffect(() => {
+    if (unread > prevUnreadRef.current) setRingKey((k) => k + 1);
+    prevUnreadRef.current = unread;
+  }, [unread]);
+
   // Grouped so the sidebar reads as sections instead of one flat list of 14
   // links — Overview / Organization / Work / Collaborate / Money / Admin.
   // Explicitly typed: without it TS infers a union where only the Dashboard
@@ -335,7 +346,7 @@ export default function Layout() {
           }}>
             <PopoverTrigger asChild>
               <Button variant="ghost" size="icon" className="relative press">
-                <Bell size={15} className={unread > 0 ? 'animate-[wiggle_0.8s_ease-in-out]' : ''} />
+                <Bell key={ringKey} size={15} className={ringKey > 0 ? 'bell-ring' : ''} />
                 {unread > 0 && (
                   <span className="glow-pulse absolute -top-0.5 -right-0.5 bg-[#DFE104] text-black text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                     {unread}

@@ -470,6 +470,104 @@
     border-radius: 8px;
   }
 
+  /* ================= Motion layer =================
+     Two curves only, per spec: --spring for anything that should feel
+     physical (overshoots), --ease for standard moves. Everything here
+     animates transform/opacity only, so it stays on the compositor. */
+  .chat-root {
+    --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Presence dot: gentle pulse plus an expanding ring, every 3s. The ring is
+     a pseudo-element so the dot itself never changes layout. */
+  .chat-presence {
+    position: relative;
+    animation: p-presence 3s var(--ease, ease) infinite;
+  }
+  .chat-presence::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    box-shadow: 0 0 0 0 rgb(52 211 153 / 0.6);
+    animation: p-presence-ring 3s var(--ease, ease) infinite;
+  }
+
+  /* Mic → Send swap: the outgoing icon rotates out while the incoming one
+     rotates and springs in, WhatsApp-style. Both share the grid cell so
+     nothing reflows during the swap. */
+  .chat-swap {
+    display: grid;
+    place-items: center;
+  }
+  .chat-swap > * {
+    grid-area: 1 / 1;
+    transition:
+      transform 0.22s var(--spring),
+      opacity 0.16s var(--ease);
+  }
+  .chat-swap-out {
+    transform: rotate(-45deg) scale(0.6);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .chat-swap-in {
+    transform: rotate(0) scale(1);
+    opacity: 1;
+  }
+
+  /* Press feedback: instant down, springy release. */
+  .chat-iconbtn:active,
+  .chat-pill button:active,
+  .chat-item:active {
+    transform: scale(0.97);
+    transition-duration: 0.06s;
+  }
+
+  /* Sidebar avatar lifts slightly with its row. */
+  .chat-item .chat-avatar {
+    transition: transform 0.12s var(--ease);
+  }
+  .chat-item:hover .chat-avatar {
+    transform: scale(1.03);
+  }
+
+  /* Action-pill icons scale individually on hover (pill rise is in JS). */
+  .chat-pill button:hover {
+    transform: scale(1.15);
+  }
+
+  /* Sticky date pill: pinned while scrolling, fades once scrolling stops.
+     Opacity-only so it never triggers layout. */
+  .chat-daypill {
+    position: sticky;
+    top: 4px;
+    z-index: 3;
+    transition: opacity 0.3s var(--ease);
+  }
+  .chat-scroll:not(.chat-scrolling) .chat-daypill-floating {
+    opacity: 0;
+  }
+
+  /* Rubber-band at the ends of the message list instead of scroll chaining
+     to the page. */
+  .chat-scroll {
+    overscroll-behavior: contain;
+  }
+
+  /* Notification bell rings with a decaying rotation when something lands. */
+  .bell-ring {
+    animation: p-bell 0.9s var(--ease, ease) 1;
+    transform-origin: 50% 12%;
+  }
+
+  /* will-change is applied only while an element is actually animating,
+     then dropped — leaving it on permanently pins compositor layers. */
+  .chat-animating {
+    will-change: transform, opacity;
+  }
+
   /* Dialog title icon badge — a small glowing square that gives every
      popup's header a focal point instead of bare text. */
   .dialog-icon-badge {
@@ -669,6 +767,43 @@
   }
 }
 
+/* Presence: a small breath on the dot, and a ring that expands then clears.
+   Both idle for most of the 3s cycle so it reads as "alive", not "blinking". */
+@keyframes p-presence {
+  0%,
+  70%,
+  100% {
+    transform: scale(1);
+  }
+  80% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes p-presence-ring {
+  0%,
+  70% {
+    box-shadow: 0 0 0 0 rgb(52 211 153 / 0.6);
+  }
+  90% {
+    box-shadow: 0 0 0 5px rgb(52 211 153 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(52 211 153 / 0);
+  }
+}
+
+/* Bell: ±15° swings that decay to rest. */
+@keyframes p-bell {
+  0% { transform: rotate(0deg); }
+  15% { transform: rotate(15deg); }
+  30% { transform: rotate(-13deg); }
+  45% { transform: rotate(9deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+  100% { transform: rotate(0deg); }
+}
+
 @keyframes p-unread-pulse {
   0%,
   100% {
@@ -773,8 +908,21 @@
   .chat-typing-dot,
   .chat-skel,
   .chat-jump,
-  .chat-unread {
+  .chat-unread,
+  .chat-presence,
+  .chat-presence::after,
+  .bell-ring {
     animation: none !important;
+  }
+  /* Spec: with reduced motion, every transition collapses to a plain 100ms
+     opacity fade — no transforms, no springs. */
+  .chat-root *,
+  .chat-root *::before,
+  .chat-root *::after {
+    transition-property: opacity !important;
+    transition-duration: 100ms !important;
+    transition-timing-function: linear !important;
+    transform: none !important;
   }
   .pcard,
   .pcard-hover,

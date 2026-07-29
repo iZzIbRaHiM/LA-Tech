@@ -17,7 +17,9 @@ import {
   CornerUpLeft,
   ArrowDown,
   X,
+  Clock,
 } from 'lucide-react';
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import EmptyState from '../components/EmptyState';
@@ -95,6 +97,66 @@ function Avatar({ name, size }: { name: string; size: number }) {
 }
 
 const COMMON_EMOJI = ['👍', '❤️', '😂', '🎉', '👏', '🙏', '🔥', '💯', '😊', '😅', '🤝', '✅', '👀', '⏳', '😢', '💡'];
+
+// Spec springs. 400/28 is the "launch from the input" feel; the softer
+// 300/30 is for list reordering and layout shifts, where overshoot on a
+// whole row reads as noise rather than physicality.
+const SPRING_SEND = { type: 'spring' as const, stiffness: 400, damping: 28 };
+const SPRING_SOFT = { type: 'spring' as const, stiffness: 300, damping: 30 };
+const SPRING_POP = { type: 'spring' as const, stiffness: 500, damping: 18 };
+
+// Optimistic delivery state for a message the user just sent.
+type SendState = 'sending' | 'sent';
+
+// Sound-ready hooks: fire DOM events so audio (or haptics) can be attached
+// later without touching this component.
+function emitChatEvent(name: 'chat:send' | 'chat:receive', detail?: unknown) {
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+// Vertical number-roll for the unread badge: the old value slides up and
+// out while the new one slides in from below.
+function RollingCount({ value }: { value: number }) {
+  const reduce = useReducedMotion();
+  const label = value > 9 ? '10+' : String(value);
+  return (
+    <span className="relative inline-flex overflow-hidden h-4 items-center justify-center" style={{ minWidth: '1ch' }}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={label}
+          initial={reduce ? { opacity: 0 } : { y: 12, opacity: 0 }}
+          animate={reduce ? { opacity: 1 } : { y: 0, opacity: 1 }}
+          exit={reduce ? { opacity: 0 } : { y: -12, opacity: 0 }}
+          transition={reduce ? { duration: 0.1 } : SPRING_POP}
+          className="block leading-none"
+        >
+          {label}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+// Preview text crossfades when it changes, rather than snapping.
+function CrossfadeText({ text, className }: { text: string; className?: string }) {
+  const reduce = useReducedMotion();
+  return (
+    <span className={`relative block ${className ?? ''}`}>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={text}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: reduce ? 0.1 : 0.18 }}
+          className="block truncate"
+        >
+          {text}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
 
 interface Message {
   id: number;
@@ -206,6 +268,17 @@ export default function Chat() {
   const nearBottomRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingPingRef = useRef(0);
+  const reduce = useReducedMotion();
+
+  // Optimistic outbox: a message appears instantly at 70% opacity with a
+  // clock, then resolves to a real row once the server confirms. Keyed by a
+  // temporary negative id so it can never collide with a real one.
+  const [pending, setPending] = useState<Array<{ id: number; body: string; created_at: string; state: SendState }>>([]);
+  const tempIdRef = useRef(-1);
+
+  // Sticky date pill fades out ~1s after scrolling stops.
+  const [scrolling, setScrolling] = useState(false);
+  const scrollIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Throttled "I'm typing" ping — at most one request per 2.5s of typing,
   // matched to the server's 6-second liveness window.
@@ -267,9 +340,12 @@ export default function Chat() {
         // messages shouldn't keep the fast interval alive forever.
         const newest = r.messages.length ? r.messages[r.messages.length - 1].id : 0;
         if (newest !== newestIdRef.current) {
+          const isIncoming =
+            newestIdRef.current !== 0 && r.messages[r.messages.length - 1]?.sender_id !== user?.id;
           newestIdRef.current = newest;
           lastChangeRef.current = Date.now();
           setPollMs(POLL_FAST_MS);
+          if (isIncoming) emitChatEvent('chat:receive', { id: newest });
           // If the reader is scrolled up in history, don't yank them down —
           // surface the floating "new messages" chip instead.
           if (!nearBottomRef.current) setHasNewBelow(true);
@@ -280,7 +356,7 @@ export default function Chat() {
         }
       })
       .catch(() => {});
-  }, [activeId, loadGroups]);
+  }, [activeId, loadGroups, user?.id]);
 
   // Poll BOTH: messages for the open group, and the group list so unread
   // badges appear as messages land elsewhere. Polling only messages meant
@@ -317,12 +393,20 @@ export default function Chat() {
     nearBottomRef.current = near;
     setNearBottom(near);
     if (near) setHasNewBelow(false);
+    // Keep the floating date pill visible while scrolling, fade 1s after stop.
+    setScrolling(true);
+    if (scrollIdleRef.current) clearTimeout(scrollIdleRef.current);
+    scrollIdleRef.current = setTimeout(() => setScrolling(false), 1000);
+  }, []);
+
+  useEffect(() => () => {
+    if (scrollIdleRef.current) clearTimeout(scrollIdleRef.current);
   }, []);
 
   const jumpToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'end' });
     setHasNewBelow(false);
-  }, []);
+  }, [reduce]);
 
   // Autogrow the composer up to ~5 lines (CSS caps max-height).
   const autogrow = useCallback(() => {
@@ -351,16 +435,36 @@ export default function Chat() {
   const send = async () => {
     if (!activeId || !draft.trim() || sending) return;
     const body = draft;
+    const tempId = tempIdRef.current--;
     setDraft('');
+    if (inputRef.current) inputRef.current.style.height = 'auto'; // collapse the autogrown box
     setSending(true);
     markActive();
+    emitChatEvent('chat:send', { body });
+
+    // Show it immediately — perceived latency matters more than accuracy for
+    // the ~200ms before the server answers.
+    setPending((p) => [
+      ...p,
+      { id: tempId, body, created_at: new Date().toISOString().slice(0, 19).replace('T', ' '), state: 'sending' },
+    ]);
+    nearBottomRef.current = true; // sending always pulls you to the bottom
+
     try {
       await api(`/chat/groups/${activeId}/messages`, { method: 'POST', body: { body } });
-      const r = await api<{ messages: Message[] }>(`/chat/groups/${activeId}/messages`);
+      // Mark confirmed briefly so the clock → check transition is visible,
+      // then let the real row from the server take over.
+      setPending((p) => p.map((m) => (m.id === tempId ? { ...m, state: 'sent' } : m)));
+      const r = await api<{ messages: Message[]; readUpTo: number; typing: string[] }>(
+        `/chat/groups/${activeId}/messages`
+      );
       setMessages(r.messages);
+      setReadUpTo(r.readUpTo ?? 0);
+      setPending((p) => p.filter((m) => m.id !== tempId));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to send');
-      setDraft(body);
+      setPending((p) => p.filter((m) => m.id !== tempId));
+      setDraft(body); // hand the text back so nothing is lost
     } finally {
       setSending(false);
     }
@@ -536,19 +640,31 @@ export default function Chat() {
         </div>
 
         <div className="flex-1 overflow-auto px-2 pb-2 space-y-0.5">
-          {!groupsLoaded &&
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-2" aria-hidden="true">
-                <div className="chat-skel" style={{ width: 40, height: 40, borderRadius: 9999 }} />
-                <div className="flex-1 space-y-2">
-                  <div className="chat-skel h-3 w-1/2" />
-                  <div className="chat-skel h-2.5 w-3/4" />
-                </div>
-              </div>
-            ))}
+          {/* Skeletons crossfade out rather than popping when data lands. */}
+          <AnimatePresence initial={false}>
+            {!groupsLoaded && (
+              <motion.div
+                key="skeletons"
+                initial={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: reduce ? 0.1 : 0.2 }}
+                aria-hidden="true"
+              >
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2">
+                    <div className="chat-skel" style={{ width: 40, height: 40, borderRadius: 9999 }} />
+                    <div className="flex-1 space-y-2">
+                      <div className="chat-skel h-3 w-1/2" />
+                      <div className="chat-skel h-2.5 w-3/4" />
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {groupsLoaded &&
-            groups.map((g) => {
+            groups.map((g, gi) => {
               const unread = Number(g.unread_count);
               const isActive = activeId === g.id;
               const preview = g.last_attachment
@@ -557,8 +673,13 @@ export default function Chat() {
                   ? `${g.last_sender ? `${g.last_sender.split(' ')[0]}: ` : ''}${g.last_body}`
                   : `${g.member_count} members`;
               return (
-                <div
+                <motion.div
                   key={g.id}
+                  layout={reduce ? false : 'position'}
+                  transition={reduce ? { duration: 0.1 } : SPRING_SOFT}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, x: -8 }}
+                  animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                  style={{ transitionDelay: `${Math.min(gi, 12) * 30}ms` }}
                   role="button"
                   tabIndex={0}
                   aria-current={isActive ? 'true' : undefined}
@@ -588,15 +709,22 @@ export default function Chat() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-[13px] text-[#EDEDED]/55">{preview}</span>
-                      {unread > 0 && !isActive && (
-                        <span
-                          className="chat-unread ml-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[11px] flex items-center justify-center"
-                          aria-label={`${unread} unread messages`}
-                        >
-                          {unread > 9 ? '10+' : unread}
-                        </span>
-                      )}
+                      <CrossfadeText text={preview} className="min-w-0 flex-1 text-[13px] text-[#EDEDED]/55" />
+                      <AnimatePresence initial={false}>
+                        {unread > 0 && !isActive && (
+                          <motion.span
+                            key="unread"
+                            initial={reduce ? { opacity: 0 } : { scale: 0, opacity: 0 }}
+                            animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+                            exit={reduce ? { opacity: 0 } : { scale: 0, opacity: 0 }}
+                            transition={reduce ? { duration: 0.1 } : SPRING_POP}
+                            className="chat-unread ml-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[11px] flex items-center justify-center"
+                            aria-label={`${unread} unread messages`}
+                          >
+                            <RollingCount value={unread} />
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
                   {user?.isCeo && (
@@ -627,7 +755,7 @@ export default function Chat() {
                       </button>
                     </div>
                   )}
-                </div>
+                </motion.div>
               );
             })}
 
@@ -653,7 +781,7 @@ export default function Chat() {
                     <>
                       <span aria-hidden="true">·</span>
                       <span className="inline-flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" aria-hidden="true" />
+                        <span className="chat-presence w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" aria-hidden="true" />
                         {onlineCount} online
                       </span>
                     </>
@@ -695,7 +823,7 @@ export default function Chat() {
                           <span className="text-[13px] text-[#EDEDED] truncate flex-1">{m.name}</span>
                           {m.online && (
                             <span
-                              className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                              className="chat-presence w-1.5 h-1.5 rounded-full bg-emerald-400"
                               title="Online"
                               aria-label="Online"
                             />
@@ -739,8 +867,24 @@ export default function Chat() {
               </div>
             )}
 
-            <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-auto px-4 py-4">
-              <div className="mx-auto w-full max-w-[720px]">
+            <div
+              ref={scrollRef}
+              onScroll={onScroll}
+              className={`chat-scroll flex-1 overflow-auto px-4 py-4 ${scrolling ? 'chat-scrolling' : ''}`}
+            >
+              {/* Keyed on the group so switching chats crossfades with an 8px
+                  slide instead of hard-swapping the content. */}
+              <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeId}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, x: 8 }}
+                animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: -8 }}
+                transition={{ duration: reduce ? 0.1 : 0.15 }}
+                className="mx-auto w-full max-w-[720px]"
+              >
+              <LayoutGroup>
+                <AnimatePresence initial={false} mode="popLayout">
                 {visibleMessages.map((m, i) => {
                   const mine = m.sender_id === user?.id;
                   const prev = visibleMessages[i - 1];
@@ -760,9 +904,29 @@ export default function Chat() {
                   const canModify = mine && !m.attachment_filename && (user?.isCeo || withinEditWindow(m.created_at));
 
                   return (
-                    <div key={m.id}>
+                    <motion.div
+                      key={m.id}
+                      layout={reduce ? false : 'position'}
+                      initial={
+                        reduce
+                          ? { opacity: 0 }
+                          : mine
+                            // Sent: launches from the composer — scales up and
+                            // rises into place with the 400/28 spring.
+                            ? { opacity: 0, scale: 0.85, y: 12 }
+                            // Received: slides in from the left with a slight
+                            // overshoot.
+                            : { opacity: 0, x: -16 }
+                      }
+                      animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, x: 0, y: 0 }}
+                      exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                      transition={
+                        reduce ? { duration: 0.1 } : mine ? SPRING_SEND : { ...SPRING_SOFT, duration: 0.25 }
+                      }
+                      onAnimationStart={(d: unknown) => void d}
+                    >
                       {showDay && (
-                        <div className="chat-divider my-5" role="separator">
+                        <div className="chat-divider my-5 chat-daypill" role="separator">
                           <span className="px-3 py-1 rounded-full bg-[#1A1A1D] border border-white/[0.06] text-[11px] text-[#EDEDED]/[0.48]">
                             {fmtDayLabel(m.created_at)}
                           </span>
@@ -857,42 +1021,110 @@ export default function Chat() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
+                </AnimatePresence>
 
-                {visibleMessages.length === 0 && !msgQuery.trim() && (
+                {/* Optimistic outbox — rendered instantly at 70% opacity with a
+                    clock, snapping to full opacity + a single check the moment
+                    the server confirms. Hidden while searching, since these
+                    aren't real results yet. */}
+                {!msgQuery.trim() &&
+                  pending.map((pm) => (
+                    <motion.div
+                      key={pm.id}
+                      layout={reduce ? false : 'position'}
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.85, y: 12 }}
+                      animate={reduce ? { opacity: 1 } : { opacity: pm.state === 'sending' ? 0.7 : 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={reduce ? { duration: 0.1 } : SPRING_SEND}
+                      className="flex items-end gap-2 justify-end"
+                      style={{ marginTop: 12 }}
+                    >
+                      <div className="max-w-[75%] flex flex-col items-end">
+                        <div className="pbubble pbubble-mine px-3.5 py-2">
+                          <div className="whitespace-pre-wrap break-words">{pm.body}</div>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1 px-1 text-[11px] text-[#EDEDED]/[0.48]">
+                          <span className="tabular-nums">{fmtTime(pm.created_at)}</span>
+                          <AnimatePresence mode="wait" initial={false}>
+                            <motion.span
+                              key={pm.state}
+                              initial={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+                              animate={reduce ? { opacity: 1 } : { scale: 1, opacity: 1 }}
+                              exit={reduce ? { opacity: 0 } : { scale: 0.6, opacity: 0 }}
+                              transition={reduce ? { duration: 0.1 } : SPRING_POP}
+                              className="inline-flex"
+                            >
+                              {pm.state === 'sending' ? (
+                                <Clock size={13} aria-label="Sending" />
+                              ) : (
+                                <Check size={13} aria-label="Sent" />
+                              )}
+                            </motion.span>
+                          </AnimatePresence>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                {visibleMessages.length === 0 && pending.length === 0 && !msgQuery.trim() && (
                   <EmptyState icon={MessageSquare} title="No messages yet — say hello 👋" />
                 )}
                 {visibleMessages.length === 0 && msgQuery.trim() && (
                   <EmptyState compact icon={Search} title={`No messages match "${msgQuery}"`} />
                 )}
                 <div ref={bottomRef} />
-              </div>
+              </LayoutGroup>
+              </motion.div>
+              </AnimatePresence>
             </div>
 
             {/* Floating jump-to-latest */}
-            {(!nearBottom || hasNewBelow) && (
-              <button className="chat-jump px-3 py-1.5 text-[13px] flex items-center gap-1.5" onClick={jumpToBottom}>
-                <ArrowDown size={14} />
-                {hasNewBelow ? 'New messages' : 'Jump to latest'}
-              </button>
-            )}
+            <AnimatePresence>
+              {(!nearBottom || hasNewBelow) && (
+                <motion.button
+                  key="jump"
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+                  animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, x: '-50%' }}
+                  exit={reduce ? { opacity: 0 } : { opacity: 0, y: 20, scale: 0.9, x: '-50%' }}
+                  transition={reduce ? { duration: 0.1 } : SPRING_POP}
+                  className="chat-jump px-3 py-1.5 text-[13px] flex items-center gap-1.5"
+                  onClick={jumpToBottom}
+                >
+                  <ArrowDown size={14} />
+                  {hasNewBelow ? 'New messages' : 'Jump to latest'}
+                </motion.button>
+              )}
+            </AnimatePresence>
 
             {/* Typing indicator sits directly above the composer */}
-            <div className="px-4 h-5 flex items-end" aria-live="polite">
-              {typingNames.length > 0 && (
-                <div className="flex items-center gap-1.5 text-[11px] text-[#EDEDED]/55 pb-0.5">
-                  <span className="flex items-center gap-0.5" aria-hidden="true">
-                    <span className="chat-typing-dot" />
-                    <span className="chat-typing-dot" />
-                    <span className="chat-typing-dot" />
-                  </span>
-                  {typingNames.length === 1
-                    ? `${typingNames[0]} is typing…`
-                    : `${typingNames.length} people are typing…`}
-                </div>
-              )}
+            <div className="px-4 min-h-[34px] flex items-end" aria-live="polite">
+              <AnimatePresence initial={false}>
+                {typingNames.length > 0 && (
+                  <motion.div
+                    key="typing"
+                    initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: 6 }}
+                    animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                    exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.8, y: 6 }}
+                    transition={reduce ? { duration: 0.1 } : SPRING_POP}
+                    className="mx-auto w-full max-w-[720px] flex items-center gap-2 pb-1"
+                  >
+                    {/* Dots live in a mini received-style bubble */}
+                    <span className="pbubble pbubble-theirs inline-flex items-center gap-1 px-3 py-2" aria-hidden="true">
+                      <span className="chat-typing-dot" />
+                      <span className="chat-typing-dot" />
+                      <span className="chat-typing-dot" />
+                    </span>
+                    <span className="text-[11px] text-[#EDEDED]/55">
+                      {typingNames.length === 1
+                        ? `${typingNames[0]} is typing…`
+                        : `${typingNames.length} people are typing…`}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* ---------------- Composer ---------------- */}
@@ -960,28 +1192,25 @@ export default function Chat() {
                   </Popover>
                 </div>
 
-                {/* Send scales in only when there's text; mic placeholder otherwise. */}
-                {draft.trim() ? (
-                  <button
-                    onClick={send}
-                    disabled={sending}
-                    className="chat-send chat-send-on shrink-0 disabled:opacity-50"
-                    title="Send"
-                    aria-label="Send message"
-                  >
+                {/* Mic ⇄ Send: both share one grid cell and rotate past each
+                    other, so the swap never reflows the composer. */}
+                <motion.button
+                  onClick={() => draft.trim() && send()}
+                  disabled={sending || !draft.trim()}
+                  whileTap={reduce ? undefined : { scale: 0.9 }}
+                  transition={SPRING_POP}
+                  className={`chat-swap shrink-0 ${draft.trim() ? 'chat-send chat-send-on' : 'chat-iconbtn'}`}
+                  style={{ width: 40, height: 40 }}
+                  title={draft.trim() ? 'Send' : "Voice messages aren't supported yet"}
+                  aria-label={draft.trim() ? 'Send message' : 'Voice message (unavailable)'}
+                >
+                  <span className={draft.trim() ? 'chat-swap-in' : 'chat-swap-out'}>
                     <Send size={17} />
-                  </button>
-                ) : (
-                  <button
-                    className="chat-iconbtn shrink-0"
-                    style={{ width: 40, height: 40 }}
-                    title="Voice messages aren't supported yet"
-                    aria-label="Voice message (unavailable)"
-                    disabled
-                  >
+                  </span>
+                  <span className={draft.trim() ? 'chat-swap-out' : 'chat-swap-in'}>
                     <Mic size={18} />
-                  </button>
-                )}
+                  </span>
+                </motion.button>
               </div>
             </div>
           </>
