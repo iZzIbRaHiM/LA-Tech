@@ -2,8 +2,7 @@ import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
 import { canValidateAttendance } from './policy.js';
-import { computeCategory, nowUtcString, SESSION_BEAT_CAP_MINUTES, type CategorySettings } from './attendance.js';
-import { localDateOf } from './timezone.js';
+import { computeCategory, nowUtcString, resolveShift, SESSION_BEAT_CAP_MINUTES } from './attendance.js';
 import { resolveSchedule } from './routes-schedules.js';
 
 export const attendanceRouter = Router();
@@ -19,12 +18,6 @@ interface AttendanceRow {
   validated_by: number | null;
   validated_at: string | null;
   note: string;
-}
-
-async function getSettings(): Promise<CategorySettings & { max_absent_allowed: number }> {
-  return (await db.prepare('SELECT * FROM attendance_settings WHERE id = 1').get()) as CategorySettings & {
-    max_absent_allowed: number;
-  };
 }
 
 attendanceRouter.get('/attendance/status', requireAuth, async (req, res) => {
@@ -62,11 +55,11 @@ attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
   const user = req.user!;
   if (user.isCeo) return res.status(403).json({ error: 'Attendance tracking does not apply to the CEO account' });
   const checkInTime = nowUtcString();
-  // The record's day is the *Pakistan* calendar day, not the UTC one. Slicing
-  // the UTC string filed anyone checking in before 05:00 PKT under the previous
-  // day, which then collided with that day's existing record (or let them open a
-  // second one for a day they had already worked).
-  const today = localDateOf(checkInTime);
+  // Resolve the schedule first: the record's day is the date the *shift* began,
+  // which for an overnight timing is not the calendar day of the check-in. A
+  // 01:00 arrival on a 22:00-06:00 shift belongs to yesterday's row.
+  const schedule = await resolveSchedule(user.id);
+  const today = resolveShift(checkInTime, schedule).shiftDate;
 
   const existingToday = await db
     .prepare('SELECT id, validation_status FROM attendance WHERE user_id = ? AND record_date = ?')
@@ -83,7 +76,6 @@ attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
   // session tracker (presence heartbeat accumulating online_minutes) is the
   // monitor now, not a manual head/CEO validation step. Validators keep the
   // /validate endpoint for after-the-fact corrections only.
-  const schedule = await resolveSchedule(user.id);
   const category = computeCategory(checkInTime, schedule);
   const { note } = req.body ?? {};
   const info = await db
@@ -160,18 +152,19 @@ attendanceRouter.post('/attendance/manual', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid check-in or check-out time' });
   }
   if (checkOutMs <= checkInMs) return res.status(400).json({ error: 'Check-out must be after check-in' });
-  // Local (Pakistan) day, matching what check-in stores. Comparing the UTC
-  // slices instead would reject a legitimate 21:00-23:00 PKT session as
-  // spanning two days, because in UTC it does.
-  const recordDate = localDateOf(String(checkIn));
-  if (localDateOf(String(checkOut)) !== recordDate) {
-    return res.status(400).json({ error: 'Check-in and check-out must be on the same day' });
+  const schedule = await resolveSchedule(targetId);
+  // Both ends must belong to the same *shift*, not the same calendar day: an
+  // overnight shift legitimately starts and finishes on different dates, and
+  // comparing dates would reject it. Comparing the resolved shift also still
+  // rejects a genuine two-day span.
+  const recordDate = resolveShift(String(checkIn), schedule).shiftDate;
+  if (resolveShift(String(checkOut), schedule).shiftDate !== recordDate) {
+    return res.status(400).json({ error: 'Check-in and check-out must belong to the same shift' });
   }
 
   const existing = await db.prepare('SELECT id FROM attendance WHERE user_id = ? AND record_date = ?').get(targetId, recordDate);
   if (existing) return res.status(409).json({ error: 'A record already exists for that date — edit or delete it instead' });
 
-  const schedule = await resolveSchedule(targetId);
   const category = computeCategory(String(checkIn), schedule);
   const onlineMinutes = Math.round((checkOutMs - checkInMs) / 60000);
   const info = await db
@@ -250,11 +243,18 @@ attendanceRouter.post('/attendance/:id/validate', requireAuth, async (req, res) 
   // Approving can come with a corrected check-in time (validator knows the
   // employee's real arrival time didn't match what the app recorded).
   if (status === 'approved' && checkInTime) {
-    if (localDateOf(checkInTime) !== record.record_date) {
-      return res.status(400).json({ error: "Corrected time must stay on the record's original date" });
+    // Categorise against the record owner's own timing, not the company
+    // default: check-in resolves the individual > department > default chain, so
+    // using getSettings() here re-graded anyone on a custom shift against hours
+    // they don't work.
+    const schedule = await resolveSchedule(record.user_id);
+    // Compared as a shift, not a date. An overnight shift's corrected time can
+    // legitimately fall on the following calendar day while still belonging to
+    // this record.
+    if (resolveShift(checkInTime, schedule).shiftDate !== record.record_date) {
+      return res.status(400).json({ error: "Corrected time must stay within the record's original shift" });
     }
-    const settings = await getSettings();
-    const category = computeCategory(checkInTime, settings);
+    const category = computeCategory(checkInTime, schedule);
     await db.prepare('UPDATE attendance SET check_in = ?, category = ? WHERE id = ?').run(checkInTime, category, record.id);
   }
 

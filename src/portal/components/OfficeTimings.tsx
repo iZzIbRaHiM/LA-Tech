@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { isOvernightShift } from '../shift';
 import { Plus, Trash2, Pencil, X, Clock, Users2 } from 'lucide-react';
 import EmptyState from './EmptyState';
 import { toast } from 'sonner';
@@ -144,6 +145,18 @@ export default function OfficeTimings() {
                   <Badge variant="outline" className="text-xs">
                     {s.office_start_time} – {s.office_end_time}
                   </Badge>
+                  {/* Overnight is inferred from the hours rather than stored as a
+                      flag, so show that it was understood — otherwise a 22:00-06:00
+                      timing looks identical to a mistake. */}
+                  {isOvernightShift(s.office_start_time, s.office_end_time) && (
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-indigo-300 border-indigo-900"
+                      title="Ends the next morning. Attendance for this shift is filed under the date it started."
+                    >
+                      overnight
+                    </Badge>
+                  )}
                   <span className="text-xs text-[#71717A]">
                     late after {s.late_threshold_minutes}m · half-day after {s.half_day_threshold_minutes}m
                   </span>
@@ -207,6 +220,12 @@ export default function OfficeTimings() {
                   <Input type="time" value={editing.office_end_time} onChange={(e) => setEditing({ ...editing, office_end_time: e.target.value })} />
                 </div>
               </div>
+              {isOvernightShift(editing.office_start_time, editing.office_end_time) && (
+                <p className="text-xs text-indigo-300">
+                  Overnight shift — ends {editing.office_end_time} the next morning. Attendance is filed under the
+                  date the shift started, so a check-in after midnight still counts for the night before.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Late after (min)</Label>

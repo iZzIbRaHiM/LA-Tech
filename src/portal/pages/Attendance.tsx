@@ -32,6 +32,7 @@ import {
 import { toast } from 'sonner';
 import { fmtTime, toLocalInputValue, fromLocalInputValue } from '../formatTime';
 import { useTickingUtcNow } from '../useTickingUtcNow';
+import { formatShiftHours, isOvernightShift, shiftEndDate } from '../shift';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile, type ResolvedSchedule, type Department } from '../api';
 
@@ -209,7 +210,12 @@ export default function Attendance() {
           // Concatenating them raw sent 09:00 PKT as 09:00 UTC — a five-hour
           // shift that also mis-categorised the record as on-time or late.
           checkIn: fromInputValue(`${logForm.date}T${logForm.checkInTime}`),
-          checkOut: fromInputValue(`${logForm.date}T${logForm.checkOutTime}`),
+          // The end time rolls to the next date when the entered hours cross
+          // midnight, so a night shift can actually be backfilled — pinning both
+          // ends to one date put the check-out before the check-in.
+          checkOut: fromInputValue(
+            `${shiftEndDate(logForm.date, logForm.checkInTime, logForm.checkOutTime)}T${logForm.checkOutTime}`
+          ),
           note: logForm.note,
         },
       });
@@ -294,7 +300,7 @@ export default function Attendance() {
               </div>
               {mySchedule && (
                 <div className="text-xs text-[#71717A] mb-2">
-                  Your office hours: {mySchedule.office_start_time}–{mySchedule.office_end_time}
+                  Your office hours: {formatShiftHours(mySchedule.office_start_time, mySchedule.office_end_time)}
                   {mySchedule.schedule_name ? ` (${mySchedule.schedule_name})` : ' (company default)'}
                   {open
                     ? ` · on the clock ${duration(open.check_in, nowUtc)} · active ${formatMinutes(open.online_minutes ?? 0)}`
@@ -689,6 +695,15 @@ export default function Attendance() {
                 />
               </div>
             </div>
+            {/* Say out loud that the check-out landed on the following day, so an
+                entered 22:00-06:00 doesn't look like it was misread. */}
+            {isOvernightShift(logForm.checkInTime, logForm.checkOutTime) && (
+              <p className="text-xs text-indigo-300">
+                Crosses midnight — check-out is recorded on{' '}
+                {logForm.date ? shiftEndDate(logForm.date, logForm.checkInTime, logForm.checkOutTime) : 'the next day'},
+                and the record is filed under {logForm.date || 'the check-in date'}.
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label>Note</Label>
               <Textarea

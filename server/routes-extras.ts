@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
-import { isWeekday } from './attendance.js';
-import { localToday, localDatePlus, localWallClockToUtcMs, msToUtcString, utcStringToMs } from './timezone.js';
+import { isWeekday, shiftEndMs } from './attendance.js';
+import { localToday, localDatePlus, msToUtcString, utcStringToMs } from './timezone.js';
 import { resolveSchedule } from './routes-schedules.js';
 
 // Milestones (project timeline), CEO attendance reports, and the audit viewer.
@@ -267,13 +267,22 @@ export async function closeAbandonedSessions() {
   if (!open.length) return;
 
   let closed = 0;
+  const nowMs = Date.now();
   for (const row of open) {
     const schedule = await resolveSchedule(row.user_id);
-    const shiftEndMs = localWallClockToUtcMs(row.record_date, schedule.office_end_time);
-    // A shift ending before the check-in (joined after hours, or an overnight
-    // timing) would otherwise produce a negative span; clamp to the check-in so
-    // the record reads as zero worked rather than as time travel.
-    const checkOutMs = Math.max(shiftEndMs, utcStringToMs(row.check_in));
+    // Shift end derived through shiftEndMs, which lands on the *next* calendar
+    // day for an overnight timing. Using record_date directly would have closed
+    // a 22:00-06:00 shift at 06:00 on the evening it started — sixteen hours
+    // before it began.
+    const endMs = shiftEndMs(row.record_date, schedule);
+    // An overnight shift that started yesterday is still running in the early
+    // hours of today, and record_date < today alone would sweep it away
+    // mid-shift. Only close what has actually finished.
+    if (endMs > nowMs) continue;
+    // A shift ending before the check-in (someone joined after hours) would
+    // otherwise produce a negative span; clamp to the check-in so the record
+    // reads as zero worked rather than as time travel.
+    const checkOutMs = Math.max(endMs, utcStringToMs(row.check_in));
     await db
       .prepare(
         `UPDATE attendance
@@ -301,7 +310,7 @@ export async function closeAbandonedSessions() {
     );
     closed++;
   }
-  console.log(`[session-sweep] auto-closed ${closed} abandoned session(s)`);
+  if (closed) console.log(`[session-sweep] auto-closed ${closed} abandoned session(s)`);
 }
 
 // Secure Cron route for Vercel (invoked daily — see vercel.json; Hobby-tier

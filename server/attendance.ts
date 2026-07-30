@@ -1,6 +1,6 @@
 // Pure attendance business logic, shared between the check-in route and the
 // validation (approve-with-edited-time) route so the two can't drift.
-import { localDateOf, localWallClockToUtcMs, utcStringToMs } from './timezone.js';
+import { localDateOf, localDatePlus, localWallClockToUtcMs, utcStringToMs } from './timezone.js';
 
 export type AttendanceCategory = 'on_time' | 'late' | 'half_day';
 
@@ -20,14 +20,89 @@ export type AttendanceCategory = 'on_time' | 'late' | 'half_day';
  */
 export const SESSION_BEAT_CAP_MINUTES = 10;
 
-export interface CategorySettings {
-  office_start_time: string; // 'HH:MM'
+export interface ShiftTimes {
+  office_start_time: string; // 'HH:MM', Pakistan wall clock
+  office_end_time: string; // 'HH:MM', Pakistan wall clock
+}
+
+export interface CategorySettings extends ShiftTimes {
   late_threshold_minutes: number;
   half_day_threshold_minutes: number;
 }
 
 export function nowUtcString(): string {
   return new Date().toISOString().slice(0, 19).replace('T', ' ');
+}
+
+/**
+ * A shift crosses local midnight when its end reads earlier than its start —
+ * 22:00–06:00, say. Derived from the times themselves rather than a separate
+ * flag on the schedule: a flag can disagree with the hours next to it, and
+ * whoever edits the hours would have to remember to keep it in step.
+ *
+ * Equal times are treated as same-day rather than a 24-hour shift; a zero-length
+ * shift is a data-entry mistake, and reading it as a full day around the clock
+ * would classify every check-in against the wrong instant.
+ */
+export function isOvernightShift(s: ShiftTimes): boolean {
+  return toMinutes(s.office_end_time) < toMinutes(s.office_start_time);
+}
+
+function toMinutes(hhmm: string): number {
+  const [h = 0, m = 0] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/** The UTC instant a shift beginning on `shiftDate` (a local date) ends. */
+export function shiftEndMs(shiftDate: string, s: ShiftTimes): number {
+  const endDate = isOvernightShift(s) ? localDatePlus(shiftDate, 1) : shiftDate;
+  return localWallClockToUtcMs(endDate, s.office_end_time);
+}
+
+/**
+ * Which instance of a recurring shift a check-in belongs to, and when that
+ * instance runs. `shiftDate` is the date the shift *started*, which is what
+ * record_date stores — so a night is one row, not two half-rows either side of
+ * midnight, and the one-record-per-day guard still means something to night
+ * staff.
+ *
+ * A same-day shift keeps the plain rule: the local calendar date of the
+ * check-in. Deliberately not the nearest-start search below — that would also
+ * re-grade day shifts (a 00:30 arrival against a 15:00 start becomes "9h late"
+ * rather than "early for today"), and changing how existing live records are
+ * categorised is not something to do as a side effect of adding night support.
+ *
+ * Overnight shifts can't use the calendar date: someone joining a 22:00–06:00
+ * shift at 01:00 is three hours into *yesterday's* shift, not twenty-one hours
+ * early for tonight's. For those, the adjacent days are candidates too and the
+ * closest start wins — with the midpoint between two consecutive starts as the
+ * boundary. Ties go to the earlier start, since "very late" is the reading that
+ * deserves a look.
+ */
+export function resolveShift(
+  checkIn: string,
+  s: ShiftTimes
+): { shiftDate: string; startMs: number; endMs: number } {
+  const checkInMs = utcStringToMs(checkIn);
+  const today = localDateOf(checkInMs);
+
+  let shiftDate = today;
+  if (isOvernightShift(s)) {
+    let bestDelta = Infinity;
+    for (const offset of [-1, 0, 1]) {
+      const candidate = localDatePlus(today, offset);
+      const delta = Math.abs(checkInMs - localWallClockToUtcMs(candidate, s.office_start_time));
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        shiftDate = candidate;
+      }
+    }
+  }
+  return {
+    shiftDate,
+    startMs: localWallClockToUtcMs(shiftDate, s.office_start_time),
+    endMs: shiftEndMs(shiftDate, s),
+  };
 }
 
 /**
@@ -39,17 +114,10 @@ export function nowUtcString(): string {
  * instead of 10:00 UTC. Every check-in therefore looked five hours early, no
  * one was ever marked late or half-day, and the late/half-day salary deductions
  * could not fire at all.
- *
- * The comparison is anchored to the local calendar day of the check-in, so a
- * shift is assumed to start and be joined on the same Pakistan date. A shift
- * that spans local midnight would need an explicit end-before-start marker on
- * the schedule; none of the current timings do.
  */
 export function computeCategory(checkIn: string, settings: CategorySettings): AttendanceCategory {
-  const checkInMs = utcStringToMs(checkIn);
-  const localDay = localDateOf(checkInMs);
-  const officeStartMs = localWallClockToUtcMs(localDay, settings.office_start_time);
-  const diffMinutes = (checkInMs - officeStartMs) / 60000;
+  const { startMs } = resolveShift(checkIn, settings);
+  const diffMinutes = (utcStringToMs(checkIn) - startMs) / 60000;
   if (diffMinutes >= settings.half_day_threshold_minutes) return 'half_day';
   if (diffMinutes >= settings.late_threshold_minutes) return 'late';
   return 'on_time';
