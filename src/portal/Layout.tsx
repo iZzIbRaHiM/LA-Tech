@@ -47,6 +47,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { useAuth } from './AuthContext';
 import { api } from './api';
 import { usePolling } from './usePolling';
+import { useSessionKeepalive } from './useSessionKeepalive';
 
 interface NavItem {
   to: string;
@@ -174,6 +175,11 @@ export default function Layout() {
   // count was previously loaded once and went stale for the whole session.
   // Visibility-aware: a backgrounded tab polls nothing (free-tier quotas).
   usePolling(loadNotifications, 30000);
+
+  // Deliberately *not* visibility-aware, unlike everything above it: this is
+  // what keeps a work session accruing while the portal sits in a background
+  // tab. The CEO has no attendance record, so they never send it.
+  useSessionKeepalive(!!user && !user.isCeo);
 
   const unread = notifications.filter((n) => !n.read_at).length;
 

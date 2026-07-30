@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
 import { canValidateAttendance } from './policy.js';
-import { computeCategory, nowUtcString, type CategorySettings } from './attendance.js';
+import { computeCategory, nowUtcString, SESSION_BEAT_CAP_MINUTES, type CategorySettings } from './attendance.js';
+import { localDateOf } from './timezone.js';
 import { resolveSchedule } from './routes-schedules.js';
 
 export const attendanceRouter = Router();
@@ -33,11 +34,39 @@ attendanceRouter.get('/attendance/status', requireAuth, async (req, res) => {
   res.json({ open: open ?? null });
 });
 
+/**
+ * Keepalive for the work-session clock.
+ *
+ * requireAuth already advances last_seen_at and tops up online_minutes on every
+ * authenticated request, so this endpoint deliberately does nothing itself — it
+ * exists so the client has something cheap to call on a timer that is *not*
+ * gated on tab visibility.
+ *
+ * Why it is needed: usePolling stops every interval while document.hidden is
+ * true (a deliberate free-tier measure), which meant a portal left open in a
+ * background tab produced zero requests and therefore zero accrued time. A
+ * full day logged in showed as a couple of hours of "active".
+ */
+attendanceRouter.post('/attendance/heartbeat', requireAuth, async (req, res) => {
+  // Reported back so the client can beat slowly when there is no session to
+  // credit, instead of paying for a fast keepalive all day for nothing.
+  const open = await db
+    .prepare(
+      'SELECT 1 AS open FROM attendance WHERE user_id = ? AND check_out IS NULL AND check_in IS NOT NULL LIMIT 1'
+    )
+    .get(req.user!.id);
+  res.json({ ok: true, sessionOpen: Boolean(open) });
+});
+
 attendanceRouter.post('/attendance/check-in', requireAuth, async (req, res) => {
   const user = req.user!;
   if (user.isCeo) return res.status(403).json({ error: 'Attendance tracking does not apply to the CEO account' });
   const checkInTime = nowUtcString();
-  const today = checkInTime.slice(0, 10);
+  // The record's day is the *Pakistan* calendar day, not the UTC one. Slicing
+  // the UTC string filed anyone checking in before 05:00 PKT under the previous
+  // day, which then collided with that day's existing record (or let them open a
+  // second one for a day they had already worked).
+  const today = localDateOf(checkInTime);
 
   const existingToday = await db
     .prepare('SELECT id, validation_status FROM attendance WHERE user_id = ? AND record_date = ?')
@@ -78,9 +107,9 @@ attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => 
     .get(user.id) as { id: number } | undefined;
   if (!open) return res.status(409).json({ error: 'No open check-in' });
 
-  // Finalize the session: fold in the time since the last heartbeat (capped
-  // at 5 minutes, same as the heartbeat accumulator, so idle gaps don't
-  // count), stamp check-out. The record was auto-approved at check-in — no
+  // Finalize the session: fold in the time since the last heartbeat (capped the
+  // same as the heartbeat accumulator, so idle gaps don't count), stamp
+  // check-out. The record was auto-approved at check-in — no
   // validator round-trip.
   // COALESCE to check_in covers records opened before session tracking
   // shipped (their last_active_at is NULL — they still get the capped
@@ -88,7 +117,7 @@ attendanceRouter.post('/attendance/check-out', requireAuth, async (req, res) => 
   await db
     .prepare(
       `UPDATE attendance SET
-         online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - COALESCE(last_active_at, check_in)::timestamp)) / 60.0, 0), 5),
+         online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - COALESCE(last_active_at, check_in)::timestamp)) / 60.0, 0), ${SESSION_BEAT_CAP_MINUTES}),
          last_active_at = datetime('now'),
          check_out = datetime('now')
        WHERE id = ?`
@@ -131,8 +160,11 @@ attendanceRouter.post('/attendance/manual', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid check-in or check-out time' });
   }
   if (checkOutMs <= checkInMs) return res.status(400).json({ error: 'Check-out must be after check-in' });
-  const recordDate = String(checkIn).slice(0, 10);
-  if (String(checkOut).slice(0, 10) !== recordDate) {
+  // Local (Pakistan) day, matching what check-in stores. Comparing the UTC
+  // slices instead would reject a legitimate 21:00-23:00 PKT session as
+  // spanning two days, because in UTC it does.
+  const recordDate = localDateOf(String(checkIn));
+  if (localDateOf(String(checkOut)) !== recordDate) {
     return res.status(400).json({ error: 'Check-in and check-out must be on the same day' });
   }
 
@@ -218,7 +250,7 @@ attendanceRouter.post('/attendance/:id/validate', requireAuth, async (req, res) 
   // Approving can come with a corrected check-in time (validator knows the
   // employee's real arrival time didn't match what the app recorded).
   if (status === 'approved' && checkInTime) {
-    if (checkInTime.slice(0, 10) !== record.record_date) {
+    if (localDateOf(checkInTime) !== record.record_date) {
       return res.status(400).json({ error: "Corrected time must stay on the record's original date" });
     }
     const settings = await getSettings();

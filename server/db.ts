@@ -602,6 +602,11 @@ export async function initDb() {
     -- accumulates online_minutes; check-out finalizes the day's total.
     ALTER TABLE attendance ADD COLUMN IF NOT EXISTS online_minutes REAL NOT NULL DEFAULT 0;
     ALTER TABLE attendance ADD COLUMN IF NOT EXISTS last_active_at TEXT;
+
+    -- Set when the nightly sweep closed a session the employee never checked
+    -- out of. The check_out on such a row is the scheduled shift end, not an
+    -- observed event, so the UI labels it and validators are asked to confirm.
+    ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed INTEGER NOT NULL DEFAULT 0;
   `);
 
   await seedCeo();

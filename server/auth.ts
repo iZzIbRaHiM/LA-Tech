@@ -1,3 +1,4 @@
+import { SESSION_BEAT_CAP_MINUTES } from './attendance.js';
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from './db.js';
@@ -186,12 +187,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         if (r.changes > 0) {
           // While checked in, this same heartbeat is the work-session
           // monitor: accumulate active time on the open attendance row.
-          // Capped at 5 minutes per beat so time away (laptop closed,
-          // browser shut) never counts as online time.
+          // Capped per beat (SESSION_BEAT_CAP_MINUTES) so time away — laptop
+          // closed, browser shut — never counts as online time.
           return db
             .prepare(
               `UPDATE attendance SET
-                 online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - last_active_at::timestamp)) / 60.0, 0), 5),
+                 online_minutes = online_minutes + LEAST(GREATEST(EXTRACT(EPOCH FROM (now() - last_active_at::timestamp)) / 60.0, 0), ${SESSION_BEAT_CAP_MINUTES}),
                  last_active_at = datetime('now')
                WHERE user_id = ? AND check_out IS NULL AND check_in IS NOT NULL AND last_active_at IS NOT NULL`
             )

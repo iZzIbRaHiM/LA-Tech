@@ -30,6 +30,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
+import { fmtTime, toLocalInputValue, fromLocalInputValue } from '../formatTime';
+import { useTickingUtcNow } from '../useTickingUtcNow';
 import { useAuth } from '../AuthContext';
 import { api, downloadFile, type ResolvedSchedule, type Department } from '../api';
 
@@ -45,6 +47,8 @@ interface AttendanceRecord {
   validation_status: 'pending' | 'approved' | 'rejected';
   note: string;
   online_minutes?: number;
+  /** 1 when the nightly sweep closed a session nobody checked out of. */
+  auto_closed?: number;
 }
 
 const STATUS_BADGE: Record<AttendanceRecord['validation_status'], string> = {
@@ -76,6 +80,9 @@ function CategoryBadge({ category }: { category: Category }) {
   );
 }
 
+// Clock span: check-out minus check-in. Both operands are UTC so the arithmetic
+// is timezone-independent — this is the "on the clock" figure, distinct from
+// online_minutes, which only counts time the session was actually alive.
 function duration(a: string | null, b: string | null): string {
   if (!a || !b) return '—';
   const ms = new Date(b.replace(' ', 'T') + 'Z').getTime() - new Date(a.replace(' ', 'T') + 'Z').getTime();
@@ -84,9 +91,12 @@ function duration(a: string | null, b: string | null): string {
   return `${h}h ${m}m`;
 }
 
-// 'YYYY-MM-DD HH:MM:SS' <-> the value a datetime-local input wants/gives.
-const toInputValue = (checkIn: string) => checkIn.replace(' ', 'T').slice(0, 16);
-const fromInputValue = (value: string) => `${value.replace('T', ' ')}:00`;
+// Stored UTC <-> the value a datetime-local input wants/gives, via Pakistan
+// time. These used to be plain string surgery, which handed the input the raw
+// UTC clock: a validator correcting an arrival time saw 10:00 for a 15:00 PKT
+// check-in and "fixed" it into a five-hour error.
+const toInputValue = toLocalInputValue;
+const fromInputValue = fromLocalInputValue;
 
 const formatMinutes = (mins: number) => {
   const m = Math.round(mins);
@@ -95,6 +105,9 @@ const formatMinutes = (mins: number) => {
 
 export default function Attendance() {
   const { user } = useAuth();
+  // Ticks every 30s so the live "on the clock" figure advances while the page
+  // is open, instead of freezing at whatever it read on mount.
+  const nowUtc = useTickingUtcNow();
   const [open, setOpen] = useState<AttendanceRecord | null>(null);
   const [own, setOwn] = useState<AttendanceRecord[]>([]);
   const [team, setTeam] = useState<AttendanceRecord[]>([]);
@@ -192,8 +205,11 @@ export default function Attendance() {
         method: 'POST',
         body: {
           userId: Number(logForm.userId),
-          checkIn: `${logForm.date} ${logForm.checkInTime}:00`,
-          checkOut: `${logForm.date} ${logForm.checkOutTime}:00`,
+          // The validator types Pakistan wall-clock times; the API stores UTC.
+          // Concatenating them raw sent 09:00 PKT as 09:00 UTC — a five-hour
+          // shift that also mis-categorised the record as on-time or late.
+          checkIn: fromInputValue(`${logForm.date}T${logForm.checkInTime}`),
+          checkOut: fromInputValue(`${logForm.date}T${logForm.checkOutTime}`),
           note: logForm.note,
         },
       });
@@ -271,7 +287,7 @@ export default function Attendance() {
             <div className="min-w-0">
               <div className="text-sm text-[#A1A1AA] mb-1 flex items-center gap-1.5">
                 <Clock size={13} />
-                {open ? `Checked in at ${open.check_in}` : 'Not checked in'}
+                {open ? `Checked in at ${fmtTime(open.check_in)}` : 'Not checked in'}
               </div>
               <div className="font-display font-bold text-xl mb-1">
                 {open ? 'You are in the office' : 'Ready to start your day?'}
@@ -280,7 +296,9 @@ export default function Attendance() {
                 <div className="text-xs text-[#71717A] mb-2">
                   Your office hours: {mySchedule.office_start_time}–{mySchedule.office_end_time}
                   {mySchedule.schedule_name ? ` (${mySchedule.schedule_name})` : ' (company default)'}
-                  {open ? ` · ${formatMinutes(open.online_minutes ?? 0)} online so far` : ''}
+                  {open
+                    ? ` · on the clock ${duration(open.check_in, nowUtc)} · active ${formatMinutes(open.online_minutes ?? 0)}`
+                    : ''}
                 </div>
               )}
               {open ? (
@@ -338,7 +356,7 @@ export default function Attendance() {
                   <TableHead>Employee</TableHead>
                   <TableHead>Check in</TableHead>
                   <TableHead>Check out</TableHead>
-                  <TableHead>Duration</TableHead>
+                  <TableHead>On the clock</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead className="text-right">Validate</TableHead>
@@ -348,8 +366,8 @@ export default function Attendance() {
                 {pendingTeam.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.user_name}</TableCell>
-                    <TableCell className="text-xs text-[#A1A1AA]">{r.check_in}</TableCell>
-                    <TableCell className="text-xs text-[#A1A1AA]">{r.check_out}</TableCell>
+                    <TableCell className="text-xs text-[#A1A1AA]">{fmtTime(r.check_in)}</TableCell>
+                    <TableCell className="text-xs text-[#A1A1AA]">{fmtTime(r.check_out)}</TableCell>
                     <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
                     <TableCell>
                       <CategoryBadge category={r.category} />
@@ -458,8 +476,8 @@ export default function Attendance() {
                 <TableRow>
                   <TableHead>Check in</TableHead>
                   <TableHead>Check out</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Online time</TableHead>
+                  <TableHead>On the clock</TableHead>
+                  <TableHead>Active</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Note</TableHead>
                   <TableHead>Status</TableHead>
@@ -468,8 +486,22 @@ export default function Attendance() {
               <TableBody>
                 {own.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="text-xs">{r.check_in ?? '—'}</TableCell>
-                    <TableCell className="text-xs">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
+                    <TableCell className="text-xs">{r.check_in ? fmtTime(r.check_in) : '—'}</TableCell>
+                    <TableCell className="text-xs">
+                      {r.check_in ? (r.check_out ? fmtTime(r.check_out) : 'open') : '—'}
+                      {/* This check-out is the scheduled shift end, not something
+                          the employee actually did — say so rather than letting
+                          it read as a real punch. */}
+                      {r.auto_closed ? (
+                        <Badge
+                          variant="outline"
+                          className="ml-1.5 text-[10px] text-amber-400 border-amber-900"
+                          title="You didn't check out — the session was closed at your scheduled shift end and sent for review"
+                        >
+                          estimated
+                        </Badge>
+                      ) : null}
+                    </TableCell>
                     <TableCell>{duration(r.check_in, r.check_out)}</TableCell>
                     <TableCell className="text-xs">
                       {r.check_in ? formatMinutes(r.online_minutes ?? 0) : '—'}
@@ -512,8 +544,8 @@ export default function Attendance() {
               {team.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell>{r.user_name}</TableCell>
-                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ?? '—'}</TableCell>
-                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ? (r.check_out ?? 'open') : '—'}</TableCell>
+                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ? fmtTime(r.check_in) : '—'}</TableCell>
+                  <TableCell className="text-xs text-[#A1A1AA]">{r.check_in ? (r.check_out ? fmtTime(r.check_out) : 'open') : '—'}</TableCell>
                   <TableCell>
                     <CategoryBadge category={r.category} />
                   </TableCell>

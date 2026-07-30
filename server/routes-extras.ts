@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
 import { isWeekday } from './attendance.js';
+import { localToday, localDatePlus, localWallClockToUtcMs, msToUtcString, utcStringToMs } from './timezone.js';
+import { resolveSchedule } from './routes-schedules.js';
 
 // Milestones (project timeline), CEO attendance reports, and the audit viewer.
 export const extrasRouter = Router();
@@ -85,11 +87,16 @@ interface ReportRow {
 }
 
 async function attendanceReport(month: string): Promise<ReportRow[]> {
+  // month is 'YYYY-MM'; record_date is 'YYYY-MM-DD', so match on the prefix.
+  const monthPrefix = `${month}%`;
   return await db
     .prepare(
       `SELECT u.id AS user_id, u.name, d.name AS department,
         -- Rejected records don't count toward days/hours — that's the point of validation.
-        COUNT(DISTINCT CASE WHEN a.validation_status != 'rejected' THEN date(a.check_in) END) AS days_present,
+        -- Grouped on record_date (the local Pakistan day) rather than
+        -- date(check_in), which is the UTC day and lands in the wrong month
+        -- for anyone checking in before 05:00 PKT on the 1st.
+        COUNT(DISTINCT CASE WHEN a.validation_status != 'rejected' THEN a.record_date END) AS days_present,
         COALESCE(SUM(CASE WHEN a.validation_status != 'rejected'
           THEN EXTRACT(EPOCH FROM (a.check_out::timestamp - a.check_in::timestamp)) / 60 ELSE 0 END), 0) AS total_minutes,
         SUM(CASE WHEN a.validation_status = 'approved' THEN 1 ELSE 0 END) AS approved,
@@ -98,11 +105,11 @@ async function attendanceReport(month: string): Promise<ReportRow[]> {
        FROM users u
        LEFT JOIN memberships m ON m.user_id = u.id
        LEFT JOIN departments d ON d.id = m.department_id
-       JOIN attendance a ON a.user_id = u.id AND strftime('%Y-%m', a.check_in) = ? AND a.check_out IS NOT NULL
+       JOIN attendance a ON a.user_id = u.id AND a.record_date LIKE ? AND a.check_out IS NOT NULL
        WHERE u.is_ceo = 0
        GROUP BY u.id, u.name, d.name ORDER BY u.name`
     )
-    .all(month) as ReportRow[];
+    .all(monthPrefix) as ReportRow[];
 }
 
 const monthParam = (q: unknown) =>
@@ -192,7 +199,11 @@ export async function sendDueReminders() {
 // check-in to validate) but deletable by a validator if it's wrong.
 // The CEO is excluded entirely — attendance tracking doesn't apply to them.
 export async function sweepAbsences() {
-  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // Yesterday in *Pakistan*, not in UTC. The UTC-derived value disagreed with
+  // the local one for the five hours after local midnight, so a sweep running in
+  // that window marked people absent for the wrong date — and skipped the date
+  // that actually needed sweeping.
+  const yesterday = localDatePlus(localToday(), -1);
   if (!isWeekday(yesterday)) return;
 
   const ceo = await db.prepare('SELECT id FROM users WHERE is_ceo = 1').get() as { id: number } | undefined;
@@ -225,6 +236,74 @@ export async function sweepAbsences() {
   if (created) console.log(`[absence-sweep] marked ${created} absence(s) for ${yesterday}`);
 }
 
+/**
+ * Close sessions nobody checked out of.
+ *
+ * Without this a forgotten check-out left the row open forever: check_out stayed
+ * NULL, so the record never appeared in a validator's queue, and the presence
+ * heartbeat kept topping up online_minutes days later whenever that person
+ * loaded any page. The clock-span figure was unbounded too.
+ *
+ * check_out is stamped at the person's scheduled office_end_time on the record's
+ * own local date — an estimate, so auto_closed marks it and validation_status
+ * goes back to 'pending' to put it in front of a validator. Rows for *today* are
+ * left alone; someone mid-shift has not forgotten anything yet.
+ */
+export async function closeAbandonedSessions() {
+  const today = localToday();
+  const open = (await db
+    .prepare(
+      `SELECT id, user_id, check_in, record_date, online_minutes
+       FROM attendance
+       WHERE check_out IS NULL AND check_in IS NOT NULL AND record_date < ?`
+    )
+    .all(today)) as Array<{
+    id: number;
+    user_id: number;
+    check_in: string;
+    record_date: string;
+    online_minutes: number;
+  }>;
+  if (!open.length) return;
+
+  let closed = 0;
+  for (const row of open) {
+    const schedule = await resolveSchedule(row.user_id);
+    const shiftEndMs = localWallClockToUtcMs(row.record_date, schedule.office_end_time);
+    // A shift ending before the check-in (joined after hours, or an overnight
+    // timing) would otherwise produce a negative span; clamp to the check-in so
+    // the record reads as zero worked rather than as time travel.
+    const checkOutMs = Math.max(shiftEndMs, utcStringToMs(row.check_in));
+    await db
+      .prepare(
+        `UPDATE attendance
+           SET check_out = ?, auto_closed = 1, validation_status = 'pending',
+               note = CASE WHEN COALESCE(note, '') = '' THEN ?
+                           ELSE note || ' · ' || ? END
+         WHERE id = ?`
+      )
+      .run(
+        msToUtcString(checkOutMs),
+        'Auto-closed at scheduled shift end — no check-out recorded',
+        'auto-closed at scheduled shift end',
+        row.id
+      );
+    await logActivity(row.user_id, 'attendance', row.id, 'auto_closed', {
+      recordDate: row.record_date,
+      checkOut: msToUtcString(checkOutMs),
+      scheduleEnd: schedule.office_end_time,
+    });
+    await notify(
+      row.user_id,
+      'attendance',
+      `You didn't check out on ${row.record_date} — the session was closed at your shift end and sent for review`,
+      '/portal/attendance'
+    );
+    closed++;
+  }
+  console.log(`[session-sweep] auto-closed ${closed} abandoned session(s)`);
+}
+
 // Secure Cron route for Vercel (invoked daily — see vercel.json; Hobby-tier
 // cron jobs are limited to once per day)
 extrasRouter.get('/cron/reminders', async (req, res) => {
@@ -238,10 +317,11 @@ extrasRouter.get('/cron/reminders', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  console.log('[cron] Running due-date reminders and absence sweep...');
+  console.log('[cron] Running due-date reminders, absence sweep and session sweep...');
   try {
     await sendDueReminders();
     await sweepAbsences();
+    await closeAbandonedSessions();
     res.json({ ok: true });
   } catch (err) {
     console.error('[cron] Reminders/absence-sweep execution error:', err);

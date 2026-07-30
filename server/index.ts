@@ -12,7 +12,7 @@ import { financeRouter } from './routes-finance.js';
 import { attendanceRouter } from './routes-attendance.js';
 import { leaveRouter } from './routes-leave.js';
 import { attachmentsRouter } from './routes-attachments.js';
-import { extrasRouter, sendDueReminders, sweepAbsences } from './routes-extras.js';
+import { extrasRouter, sendDueReminders, sweepAbsences, closeAbandonedSessions } from './routes-extras.js';
 import { miscRouter } from './routes-misc.js';
 import { settingsRouter } from './routes-settings.js';
 import { salaryRouter } from './routes-salary.js';
@@ -101,12 +101,28 @@ if (!isVercel) {
   // Due-date reminders + absence sweep: once at boot, then hourly (the
   // sweep itself only actually does anything once per calendar day; the
   // hourly interval is just how often it checks, matching the reminders loop).
-  sendDueReminders().catch((err) => console.error('[reminders] error:', err));
-  sweepAbsences().catch((err) => console.error('[absence-sweep] error:', err));
-  setInterval(() => {
-    sendDueReminders().catch((err) => console.error('[reminders] error:', err));
-    sweepAbsences().catch((err) => console.error('[absence-sweep] error:', err));
-  }, 60 * 60 * 1000);
+  // These sweeps WRITE: they insert absence rows, close abandoned sessions,
+  // stamp check-outs and notify people. Running them automatically is only safe
+  // where the process is the real deployment — a developer starting the API
+  // locally is very often pointed at the production DATABASE_URL, and firing
+  // write jobs at boot turns "start the server to look at the UI" into a
+  // data migration. (That is not hypothetical: it is how a live attendance row
+  // got auto-closed during development of this feature.)
+  //
+  // Locally they stay reachable on demand via GET /api/cron/reminders, which is
+  // also how Vercel triggers them in production.
+  const IS_DEPLOYED = !!process.env.VERCEL || process.env.NODE_ENV === 'production';
+  if (IS_DEPLOYED) {
+    const runSweeps = () => {
+      sendDueReminders().catch((err) => console.error('[reminders] error:', err));
+      sweepAbsences().catch((err) => console.error('[absence-sweep] error:', err));
+      closeAbandonedSessions().catch((err) => console.error('[session-sweep] error:', err));
+    };
+    runSweeps();
+    setInterval(runSweeps, 60 * 60 * 1000);
+  } else {
+    console.log('[portal-api] local run — automatic reminder/absence/session sweeps are disabled (use /api/cron/reminders)');
+  }
 
   const PORT = Number(process.env.PORT_API || 5184);
   app.listen(PORT, () => console.log(`[portal-api] listening on http://localhost:${PORT}`));

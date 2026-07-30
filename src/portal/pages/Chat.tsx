@@ -16,6 +16,7 @@ import {
   CheckCheck,
   CornerUpLeft,
   ArrowDown,
+  ChevronLeft,
   X,
   Clock,
 } from 'lucide-react';
@@ -232,6 +233,16 @@ export default function Chat() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<ChatGroup[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
+  // Phone layout only: false shows the chat list, true shows the conversation.
+  // At md+ the classes force both panes visible and this is inert, so there is
+  // no need to branch on a breakpoint in JS.
+  const [showThread, setShowThread] = useState(false);
+
+  // Opening a conversation means "show me the conversation" on a phone.
+  const openThread = useCallback((id: number) => {
+    setActiveId(id);
+    setShowThread(true);
+  }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -588,7 +599,7 @@ export default function Chat() {
       toast.success('Group created');
       setCreating(false);
       loadGroups();
-      setActiveId(r.id);
+      openThread(r.id);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -624,7 +635,10 @@ export default function Chat() {
     try {
       await api(`/chat/groups/${deleting.id}`, { method: 'DELETE' });
       toast.success('Group deleted');
-      if (activeId === deleting.id) setActiveId(null);
+      if (activeId === deleting.id) {
+        setActiveId(null);
+        setShowThread(false);
+      }
       setDeleting(null);
       loadGroups();
     } catch (e) {
@@ -651,8 +665,16 @@ export default function Chat() {
 
   return (
     <div className="chat-root flex h-full">
-      {/* ---------------- Sidebar ---------------- */}
-      <aside className="chat-sidebar w-72 shrink-0 flex flex-col">
+      {/* ---------------- Sidebar ----------------
+          Phone layout is single-pane, like every native messenger: the list and
+          the conversation occupy the whole width and you move between them. A
+          288px sidebar rendered permanently left roughly 90px for messages on a
+          375px screen. */}
+      <aside
+        className={`chat-sidebar shrink-0 flex-col w-full md:w-72 md:flex ${
+          showThread ? 'hidden' : 'flex'
+        }`}
+      >
         <div className="px-3 pt-3 pb-2 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-[#EDEDED] px-1">Chats</h2>
           {user?.isCeo && (
@@ -714,13 +736,13 @@ export default function Chat() {
                   aria-current={isActive ? 'true' : undefined}
                   className={`chat-item group flex items-center gap-3 p-2 cursor-pointer ${isActive ? 'chat-item-active' : ''}`}
                   onClick={() => {
-                    setActiveId(g.id);
+                    openThread(g.id);
                     markActive();
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setActiveId(g.id);
+                      openThread(g.id);
                       markActive();
                     }
                   }}
@@ -797,10 +819,22 @@ export default function Chat() {
       </aside>
 
       {/* ---------------- Conversation ---------------- */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
+      <div
+        className={`flex-1 flex-col min-w-0 relative md:flex ${showThread ? 'flex' : 'hidden'}`}
+      >
         {activeGroup ? (
           <>
-            <header className="chat-header sticky top-0 z-10 px-4 py-2.5 flex items-center gap-3">
+            <header className="chat-header sticky top-0 z-10 px-2 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
+              {/* Only route back to the list on phones — on desktop both panes
+                  are visible and there is nowhere to go back to. */}
+              <button
+                className="chat-iconbtn md:hidden shrink-0"
+                onClick={() => setShowThread(false)}
+                title="Back to chats"
+                aria-label="Back to chats"
+              >
+                <ChevronLeft size={20} />
+              </button>
               <Avatar name={activeGroup.name} size={36} />
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-[#EDEDED] truncate">{activeGroup.name}</div>
@@ -899,7 +933,7 @@ export default function Chat() {
             <div
               ref={scrollRef}
               onScroll={onScroll}
-              className={`chat-scroll flex-1 overflow-auto px-4 py-4 ${scrolling ? 'chat-scrolling' : ''}`}
+              className={`chat-scroll flex-1 overflow-auto px-2 sm:px-4 py-4 ${scrolling ? 'chat-scrolling' : ''}`}
             >
               {/* Keyed on the group so switching chats crossfades with an 8px
                   slide instead of hard-swapping the content. */}
@@ -977,7 +1011,7 @@ export default function Chat() {
                           </div>
                         )}
 
-                        <div className={`relative max-w-[75%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
+                        <div className={`relative max-w-[85%] sm:max-w-[75%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
                           {!mine && !contPrev && (
                             <span className="text-[13px] font-medium mb-1 ml-1" style={{ color: '#E8C547' }}>
                               {m.sender_name}
@@ -1075,7 +1109,7 @@ export default function Chat() {
                       className="flex items-end gap-2 justify-end"
                       style={{ marginTop: 12 }}
                     >
-                      <div className="max-w-[75%] flex flex-col items-end">
+                      <div className="max-w-[85%] sm:max-w-[75%] flex flex-col items-end">
                         <div className="pbubble pbubble-mine px-3.5 py-2">
                           <div className="whitespace-pre-wrap break-words">{pm.body}</div>
                         </div>
