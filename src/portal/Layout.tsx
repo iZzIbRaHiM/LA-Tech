@@ -48,6 +48,7 @@ import { useAuth } from './AuthContext';
 import { api } from './api';
 import { usePolling } from './usePolling';
 import { useSessionKeepalive } from './useSessionKeepalive';
+import { fmtRelative } from './formatTime';
 
 interface NavItem {
   to: string;
@@ -391,7 +392,7 @@ export default function Layout() {
                         )}
                         <span>{n.message}</span>
                       </div>
-                      <div className="text-xs text-[#71717A] mt-0.5">{n.created_at}</div>
+                      <div className="text-xs text-[#71717A] mt-0.5">{fmtRelative(n.created_at)}</div>
                     </button>
                     <button
                       className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-400 transition-opacity"

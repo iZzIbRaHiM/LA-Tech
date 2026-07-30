@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { localMonth } from './timezone.js';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
 import { canDecideLeave } from './policy.js';
@@ -124,7 +125,7 @@ leaveRouter.get('/leave/calendar', requireAuth, async (req, res) => {
   const user = req.user!;
   const month = String(req.query.month ?? '').match(/^\d{4}-\d{2}$/)
     ? String(req.query.month)
-    : new Date().toISOString().slice(0, 7);
+    : localMonth();
   const monthStart = `${month}-01`;
   const monthEnd = `${month}-31`;
 

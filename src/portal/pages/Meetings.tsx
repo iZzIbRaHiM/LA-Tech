@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { fmtDateTime } from '../formatTime';
 import { useNavigate } from 'react-router';
 import { Ban, CalendarClock, Pencil, Play, Plus, Video } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -211,7 +212,7 @@ export default function Meetings() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{m.title}</div>
                   <div className="text-xs text-[#71717A]">
-                    by {m.creator_name} · scheduled for {m.scheduled_at}
+                    by {m.creator_name} · scheduled for {fmtDateTime(m.scheduled_at)}
                   </div>
                 </div>
                 {m.created_by === user?.id ? (
@@ -268,7 +269,7 @@ export default function Meetings() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{m.title}</div>
                   <div className="text-xs text-[#71717A]">
-                    by {m.creator_name} · {m.created_at}
+                    by {m.creator_name} · {fmtDateTime(m.created_at)}
                   </div>
                 </div>
                 {live && m.in_room_count > 0 && (

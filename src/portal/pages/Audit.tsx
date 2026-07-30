@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { fmtDateTime } from '../formatTime';
 import { Badge } from '@/components/ui/badge';
 import { ScrollText } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -100,7 +101,7 @@ export default function Audit() {
         <TableBody className="stagger">
           {rows.map((r) => (
             <TableRow key={r.id} className="transition-colors hover:bg-[#141417]">
-              <TableCell className="text-xs text-[#A1A1AA] whitespace-nowrap">{r.created_at}</TableCell>
+              <TableCell className="text-xs text-[#A1A1AA] whitespace-nowrap">{fmtDateTime(r.created_at)}</TableCell>
               <TableCell>{r.actor_name}</TableCell>
               <TableCell>
                 <Badge variant="outline" className="text-xs capitalize">

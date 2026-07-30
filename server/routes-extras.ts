@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo, userCanSeeProject } from './auth.js';
 import { isWeekday, shiftEndMs } from './attendance.js';
-import { localToday, localDatePlus, msToUtcString, utcStringToMs } from './timezone.js';
+import { localToday, localMonth, localDatePlus, msToUtcString, utcStringToMs } from './timezone.js';
 import { resolveSchedule } from './routes-schedules.js';
 
 // Milestones (project timeline), CEO attendance reports, and the audit viewer.
@@ -113,7 +113,7 @@ async function attendanceReport(month: string): Promise<ReportRow[]> {
 }
 
 const monthParam = (q: unknown) =>
-  String(q ?? '').match(/^\d{4}-\d{2}$/) ? String(q) : new Date().toISOString().slice(0, 7);
+  String(q ?? '').match(/^\d{4}-\d{2}$/) ? String(q) : localMonth();
 
 extrasRouter.get('/reports/attendance', requireAuth, requireCeo, async (req, res) => {
   const month = monthParam(req.query.month);

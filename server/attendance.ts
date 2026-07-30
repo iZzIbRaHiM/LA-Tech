@@ -66,18 +66,21 @@ export function shiftEndMs(shiftDate: string, s: ShiftTimes): number {
  * midnight, and the one-record-per-day guard still means something to night
  * staff.
  *
- * A same-day shift keeps the plain rule: the local calendar date of the
- * check-in. Deliberately not the nearest-start search below — that would also
- * re-grade day shifts (a 00:30 arrival against a 15:00 start becomes "9h late"
- * rather than "early for today"), and changing how existing live records are
- * categorised is not something to do as a side effect of adding night support.
+ * The shift instance is whichever one *starts closest* to the check-in, chosen
+ * from yesterday, today and tomorrow. The boundary therefore sits at the
+ * midpoint between two consecutive starts, and ties go to the earlier start,
+ * since "very late" is the reading that deserves a look.
  *
- * Overnight shifts can't use the calendar date: someone joining a 22:00–06:00
- * shift at 01:00 is three hours into *yesterday's* shift, not twenty-one hours
- * early for tonight's. For those, the adjacent days are candidates too and the
- * closest start wins — with the midpoint between two consecutive starts as the
- * boundary. Ties go to the earlier start, since "very late" is the reading that
- * deserves a look.
+ * Overnight shifts need this: someone joining a 22:00–06:00 shift at 01:00 is
+ * three hours into *yesterday's* shift, not twenty-one hours early for
+ * tonight's.
+ *
+ * Day shifts need it too, which is less obvious. Using the plain calendar date
+ * for them left a hole: a 00:30 arrival against a 15:00 start was measured as
+ * fourteen and a half hours *early*, and "early" grades as on time. Anyone
+ * checking in around midnight was recorded punctual, and the late/half-day
+ * deductions never applied. Nearest-start reads the same arrival as nine and a
+ * half hours late for the previous day's shift, which is what it is.
  */
 export function resolveShift(
   checkIn: string,
@@ -87,15 +90,13 @@ export function resolveShift(
   const today = localDateOf(checkInMs);
 
   let shiftDate = today;
-  if (isOvernightShift(s)) {
-    let bestDelta = Infinity;
-    for (const offset of [-1, 0, 1]) {
-      const candidate = localDatePlus(today, offset);
-      const delta = Math.abs(checkInMs - localWallClockToUtcMs(candidate, s.office_start_time));
-      if (delta < bestDelta) {
-        bestDelta = delta;
-        shiftDate = candidate;
-      }
+  let bestDelta = Infinity;
+  for (const offset of [-1, 0, 1]) {
+    const candidate = localDatePlus(today, offset);
+    const delta = Math.abs(checkInMs - localWallClockToUtcMs(candidate, s.office_start_time));
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      shiftDate = candidate;
     }
   }
   return {

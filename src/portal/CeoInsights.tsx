@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { localMonth } from './formatTime';
 import {
   ResponsiveContainer,
   BarChart,
@@ -119,7 +120,7 @@ export default function CeoInsights() {
       })
       .catch(() => {});
     api<{ rows: Array<{ category: string; count: number }> }>(
-      `/reports/attendance/summary?month=${new Date().toISOString().slice(0, 7)}`
+      `/reports/attendance/summary?month=${localMonth()}`
     )
       .then((r) => setAttendanceSummary(r.rows))
       .catch(() => {});

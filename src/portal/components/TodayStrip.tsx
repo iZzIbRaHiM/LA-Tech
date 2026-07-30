@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { fmtTime, localToday } from '../formatTime';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { CalendarClock, CheckCircle2, Circle, FileClock, Video } from 'lucide-react';
@@ -58,7 +59,7 @@ export default function TodayStrip({ tasks }: { tasks: Task[] }) {
     }
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const dueToday = tasks.filter((t) => t.status !== 'done' && t.due_date === today);
   const liveMeeting = meetings.find((m) => !m.ended_at && m.in_room_count > 0);
   const canDecideLeave = user?.isCeo || user?.role === 'head';
@@ -77,7 +78,7 @@ export default function TodayStrip({ tasks }: { tasks: Task[] }) {
               {openAttendance === undefined
                 ? 'Loading…'
                 : openAttendance
-                ? `Checked in at ${new Date(openAttendance.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                ? `Checked in at ${fmtTime(openAttendance.check_in)}`
                 : 'Not checked in today'}
             </span>
           </span>

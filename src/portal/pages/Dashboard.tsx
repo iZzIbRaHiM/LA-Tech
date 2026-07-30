@@ -1,4 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { localToday } from '../formatTime';
+import { formatShiftHours } from '../shift';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Activity as ActivityIcon, AlertTriangle, Check, CheckSquare, Circle, FolderKanban, Pencil, UserRound, X } from 'lucide-react';
@@ -82,7 +84,7 @@ export default function Dashboard() {
   };
 
   const open = tasks.filter((t) => t.status !== 'done');
-  const overdue = open.filter((t) => t.due_date && t.due_date < new Date().toISOString().slice(0, 10));
+  const overdue = open.filter((t) => t.due_date && t.due_date < localToday());
   const openCount = useCountUp(open.length);
   const overdueCount = useCountUp(overdue.length);
   const projectCount = useCountUp(projects.length);
@@ -167,7 +169,7 @@ export default function Dashboard() {
             <span className="text-[#A1A1AA]">
               Office hours:{' '}
               <span className="text-[#FAFAFA]">
-                {schedule.office_start_time}–{schedule.office_end_time}
+                {formatShiftHours(schedule.office_start_time, schedule.office_end_time)}
               </span>
               {schedule.schedule_name ? <span className="text-[#71717A]"> ({schedule.schedule_name})</span> : null}
             </span>

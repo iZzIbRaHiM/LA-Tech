@@ -134,6 +134,24 @@ export function fromLocalInputValue(value: string): string {
   return new Date(utc).toISOString().slice(0, 19).replace('T', ' ');
 }
 
+/**
+ * Today's date in Pakistan, as 'YYYY-MM-DD'.
+ *
+ * Use this instead of `new Date().toISOString().slice(0, 10)` for anything the
+ * user thinks of as "today" — due-today filters, overdue comparisons, the max
+ * on a date picker. The UTC form disagrees with the local one for the five hours
+ * after Pakistan midnight, so between 00:00 and 05:00 PKT "today" silently
+ * meant yesterday.
+ */
+export function localToday(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+}
+
+/** The current month in Pakistan, as 'YYYY-MM' — the default for report pickers. */
+export function localMonth(): string {
+  return localToday().slice(0, 7);
+}
+
 /** Stable YYYY-MM-DD key in Pakistan time, for grouping messages by day. */
 export function dayKey(stored: string | null | undefined): string {
   const d = toDate(stored);

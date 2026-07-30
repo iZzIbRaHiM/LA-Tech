@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { fmtDateTime } from '../formatTime';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Plus, Pencil, Trash2, MessageSquare } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -365,7 +366,7 @@ export default function TaskDetail() {
             <div key={c.id} className="pcard animate-fade-up px-3 py-2 group">
               <div className="text-xs text-[#71717A] mb-1 flex items-center gap-2">
                 <span className="flex-1">
-                  {c.author_name} · {c.created_at}
+                  {c.author_name} · {fmtDateTime(c.created_at)}
                   {c.edited_at && ' · edited'}
                 </span>
                 {c.author_id === user?.id && (

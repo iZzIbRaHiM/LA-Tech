@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
+import { fmtDateTime } from '../formatTime';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Download, Pencil, Plus, Trash2, FolderKanban, Receipt, Wallet } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
@@ -372,7 +373,7 @@ export function FinanceLedger() {
         <TableBody>
           {entries.map((e) => (
             <TableRow key={e.id}>
-              <TableCell className="text-xs text-[#A1A1AA]">{e.created_at}</TableCell>
+              <TableCell className="text-xs text-[#A1A1AA]">{fmtDateTime(e.created_at)}</TableCell>
               <TableCell className="capitalize">{e.type}</TableCell>
               <TableCell
                 className={`text-right ${

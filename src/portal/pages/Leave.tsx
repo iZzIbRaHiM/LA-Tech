@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState, useRef } from 'react';
+import { localMonth } from '../formatTime';
 import { Check, X, Plus, CalendarDays, Paperclip, Ban } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -103,7 +104,7 @@ export default function Leave() {
   const [own, setOwn] = useState<LeaveRequest[]>([]);
   const [team, setTeam] = useState<LeaveRequest[]>([]);
   const [calendar, setCalendar] = useState<LeaveRequest[]>([]);
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState(localMonth());
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ type: 'vacation', startDate: '', endDate: '', reason: '' });
   const [expandedId, setExpandedId] = useState<number | null>(null);

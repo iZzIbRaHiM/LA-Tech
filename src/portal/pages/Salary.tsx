@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { localMonth } from '../formatTime';
 import { Wallet, ChevronDown, ChevronUp, Check, Trash2, Undo2, Users } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -339,7 +340,7 @@ function PaymentDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [period, setPeriod] = useState(localMonth());
   const [preview, setPreview] = useState<Preview | null>(null);
   const [applyLate, setApplyLate] = useState(true);
   const [applyHalfDay, setApplyHalfDay] = useState(true);

@@ -30,7 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { fmtTime, toLocalInputValue, fromLocalInputValue } from '../formatTime';
+import { fmtTime, toLocalInputValue, fromLocalInputValue, localMonth, localToday } from '../formatTime';
 import { useTickingUtcNow } from '../useTickingUtcNow';
 import { formatShiftHours, isOvernightShift, shiftEndDate } from '../shift';
 import { useAuth } from '../AuthContext';
@@ -247,7 +247,7 @@ export default function Attendance() {
   const pendingTeam = team.filter((t) => t.check_out && t.validation_status === 'pending');
 
   // CEO monthly report
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [reportMonth, setReportMonth] = useState(localMonth());
   const [report, setReport] = useState<
     Array<{ user_id: number; name: string; department: string | null; days_present: number; total_minutes: number; approved: number; pending: number; rejected: number }>
   >([]);
@@ -672,7 +672,7 @@ export default function Attendance() {
               <Label>Date <span className="text-red-500">*</span></Label>
               <Input
                 type="date"
-                max={new Date().toISOString().slice(0, 10)}
+                max={localToday()}
                 value={logForm.date}
                 onChange={(e) => setLogForm({ ...logForm, date: e.target.value })}
               />

@@ -52,6 +52,17 @@ export function localToday(tz: string = COMPANY_TZ): string {
   return localDateOf(Date.now(), tz);
 }
 
+/**
+ * The current local (Pakistan) month as 'YYYY-MM'.
+ *
+ * Used for the "this month" default on reports and calendars. Deriving it from
+ * the UTC clock instead meant that for the five hours after local midnight on
+ * the 1st, the app defaulted to the *previous* month.
+ */
+export function localMonth(tz: string = COMPANY_TZ): string {
+  return localToday(tz).slice(0, 7);
+}
+
 /** Local calendar date `days` before the given local date. */
 export function localDatePlus(date: string, days: number): string {
   const ms = Date.parse(`${date}T00:00:00Z`) + days * 86400000;

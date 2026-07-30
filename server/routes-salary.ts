@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { localToday } from './timezone.js';
 import { db, logActivity, notify } from './db.js';
 import { requireAuth, requireCeo } from './auth.js';
 
@@ -74,7 +75,9 @@ salaryRouter.post('/salary/:userId/assign', ...gate, async (req, res) => {
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Salary must be a positive number' });
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Local day, not the UTC one: a salary set in the small hours of a Pakistan
+  // morning was being dated to the previous calendar day.
+  const today = localToday();
   await db
     .prepare('INSERT INTO salaries (user_id, amount, effective_from, set_by) VALUES (?, ?, ?, ?)')
     .run(userId, amt, today, req.user!.id);
