@@ -438,32 +438,32 @@ export default function Attendance() {
             })}
           </div>
 
-          <div className="flex items-end gap-2 ml-auto">
-            <div className="space-y-1">
+          <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto sm:ml-auto">
+            <div className="space-y-1 flex-1 min-w-[8rem] sm:flex-none">
               <Label className="text-[11px] text-[#71717A]">From</Label>
               <Input
                 type="date"
-                className="h-8 w-[9.5rem]"
+                className="h-8 w-full min-w-0 sm:w-[9.5rem]"
                 value={range.from}
                 max={range.to}
                 onChange={(e) => e.target.value && setRange({ ...range, from: e.target.value })}
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 flex-1 min-w-[8rem] sm:flex-none">
               <Label className="text-[11px] text-[#71717A]">To</Label>
               <Input
                 type="date"
-                className="h-8 w-[9.5rem]"
+                className="h-8 w-full min-w-0 sm:w-[9.5rem]"
                 value={range.to}
                 min={range.from}
                 onChange={(e) => e.target.value && setRange({ ...range, to: e.target.value })}
               />
             </div>
             {isValidator && loggableMembers.length > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-1 w-full sm:w-auto">
                 <Label className="text-[11px] text-[#71717A]">Employee</Label>
                 <Select value={teamFilter} onValueChange={setTeamFilter}>
-                  <SelectTrigger className="h-8 w-[11rem]">
+                  <SelectTrigger className="h-8 w-full min-w-0 sm:w-[11rem]">
                     <SelectValue placeholder="Everyone" />
                   </SelectTrigger>
                   <SelectContent>

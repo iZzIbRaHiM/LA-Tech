@@ -46,8 +46,10 @@ function DeductionRow({
   form: AttendanceSettings;
   setForm: (next: AttendanceSettings) => void;
 }) {
+  // Stacked on mobile: the two fixed tracks plus their gaps come to 284px,
+  // which left the label roughly 59px of width on a 375px screen.
   return (
-    <div className="grid grid-cols-[1fr_140px_120px] gap-3 items-end">
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_120px] gap-2 sm:gap-3 sm:items-end">
       <Label className="mb-2">{label}</Label>
       <Select
         value={form[typeKey] as string}

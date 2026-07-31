@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover lets env(safe-area-inset-*) report real values, so
+         the chat composer can clear the home indicator on notched phones.
+         Deliberately no maximum-scale/user-scalable=no: pinch-zoom is an
+         accessibility feature, and the input-zoom problem it is often used to
+         paper over is fixed properly by keeping font sizes at 16px. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     
     <!-- Brand icons -->
     <link rel="icon" href="/favicon.ico" sizes="any" />

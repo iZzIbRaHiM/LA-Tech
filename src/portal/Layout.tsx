@@ -295,7 +295,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="portal-scroll flex h-screen bg-[#09090B] text-[#FAFAFA]">
+    <div className="portal-scroll portal-shell flex bg-[#09090B] text-[#FAFAFA]">
       {/* Notion-style sidebar — desktop only; mobile gets the drawer below */}
       <aside className="hidden md:flex w-60 shrink-0 border-r border-[#1f1f23] flex-col">
         <div className="px-4 py-4 flex items-center gap-2 group cursor-default">

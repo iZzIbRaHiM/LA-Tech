@@ -60,6 +60,17 @@
 /* ---------- Portal design layer: depth, glow, and motion ---------- */
 
 @layer components {
+  /* The portal shell was h-screen (100vh). On mobile 100vh is the *large*
+     viewport: it does not shrink when the on-screen keyboard opens, so the
+     shell stayed full height while the visible area halved, pushing the chat
+     composer and everything anchored to the bottom off-screen. 100dvh tracks
+     the keyboard. 100vh stays first as the fallback for browsers without dvh —
+     a later declaration of the same property simply wins where supported. */
+  .portal-shell {
+    height: 100vh;
+    height: 100dvh;
+  }
+
   /* Card with layered depth that lifts and glows on hover. */
   .pcard {
     background-color: #0f0f12;
@@ -404,7 +415,32 @@
     resize: none;
     font-size: 15px;
     line-height: 1.45;
-    max-height: calc(5 * 1.45 * 15px);
+    /* em, not a hard 15px multiple, so the five-line cap follows whatever font
+       size actually applies — including the 16px touch size below. */
+    max-height: calc(5 * 1.45em);
+  }
+  /* iOS Safari zooms the whole page when focusing an input smaller than 16px,
+     and that zoom is what makes the layout jump and overflow sideways when the
+     keyboard appears. shadcn's Input/Textarea already avoid this with
+     text-base + md:text-sm; this override had reintroduced it for the composer
+     alone. Matched on pointer rather than width so it applies to touch devices
+     regardless of how wide they report. */
+  @media (pointer: coarse), (max-width: 767px) {
+    .chat-inputwrap textarea {
+      font-size: 16px;
+    }
+  }
+
+  /* Clears the home indicator / gesture bar. env() reports 0 on devices without
+     one, and needs viewport-fit=cover in the viewport meta to report anything
+     at all. */
+  .chat-composer {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+  @media (min-width: 640px) {
+    .chat-composer {
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
   }
 
   /* Send — a 40px gold circle that scales in only when there's text. */

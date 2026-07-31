@@ -464,6 +464,24 @@ export default function Chat() {
     if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messages, pending]);
 
+  // The on-screen keyboard shrinks the visual viewport without firing a scroll
+  // event. With the shell on 100dvh the layout does resize, but the scroll
+  // offset is left where it was — so the newest messages end up hidden behind
+  // the keyboard at the exact moment the user is about to type. Re-pin to the
+  // bottom whenever the viewport height changes and the reader was already
+  // there. Guarded because visualViewport is absent on older browsers.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (nearBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ block: 'end' });
+      }
+    };
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
+
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -1266,8 +1284,10 @@ export default function Chat() {
               </AnimatePresence>
             </div>
 
-            {/* ---------------- Composer ---------------- */}
-            <div className="px-4 pb-4 pt-1">
+            {/* ---------------- Composer ----------------
+                chat-composer adds the home-indicator inset on notched phones;
+                without it the send button sits under the system gesture bar. */}
+            <div className="chat-composer px-3 sm:px-4 pb-3 sm:pb-4 pt-1">
               <div className="mx-auto w-full max-w-[720px] flex items-end gap-2">
                 <div className="chat-inputwrap flex-1 flex items-end gap-1 px-2 py-1.5">
                   <input
