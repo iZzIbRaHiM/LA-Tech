@@ -174,13 +174,18 @@ extrasRouter.get('/audit', requireAuth, requireCeo, async (req, res) => {
 // Called hourly from index.ts: notifies assignees of tasks due within 24h,
 // once per task (due_notified flag).
 export async function sendDueReminders() {
+  // Horizon computed from the local date, not date('now'). The connection runs
+  // with TimeZone=UTC, so date('now') is the UTC day — for the five hours after
+  // Pakistan midnight it still reads as yesterday, and a task due today would
+  // not enter the window until the morning.
+  const horizon = localDatePlus(localToday(), 1);
   const rows = await db
     .prepare(
       `SELECT id, title, assigned_to, due_date FROM tasks
        WHERE status != 'done' AND due_notified = 0 AND assigned_to IS NOT NULL
-         AND due_date IS NOT NULL AND date(due_date) <= date('now', '+1 day')`
+         AND due_date IS NOT NULL AND due_date <= ?`
     )
-    .all() as Array<{ id: number; title: string; assigned_to: number; due_date: string }>;
+    .all(horizon) as Array<{ id: number; title: string; assigned_to: number; due_date: string }>;
   for (const t of rows) {
     await notify(t.assigned_to, 'due', `Task due ${t.due_date}: ${t.title}`, `/portal/tasks/${t.id}`);
     await db.prepare('UPDATE tasks SET due_notified = 1 WHERE id = ?').run(t.id);
