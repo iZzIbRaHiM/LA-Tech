@@ -239,10 +239,6 @@ export default function Chat() {
   const [showThread, setShowThread] = useState(false);
 
   // Opening a conversation means "show me the conversation" on a phone.
-  const openThread = useCallback((id: number) => {
-    setActiveId(id);
-    setShowThread(true);
-  }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -344,6 +340,55 @@ export default function Chat() {
   }, []);
   const newestIdRef = useRef(0);
 
+  // Which group the messages currently in state actually belong to. Compared
+  // against activeId to tell "loaded" apart from "not fetched yet", so the pane
+  // can show a skeleton instead of whatever the last chat left behind.
+  const [loadedGroupId, setLoadedGroupId] = useState<number | null>(null);
+  // Read inside async callbacks to check the user hasn't moved on since the
+  // request went out. Synced in an effect rather than assigned during render —
+  // a render that never commits must not leave the ref pointing at a chat the
+  // user is not on. Declared above the fetch effect so it commits first.
+  const activeIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
+
+  /**
+   * Switch chats.
+   *
+   * Every reset below is per-chat state that used to survive the switch: you
+   * opened a conversation and saw the previous one's messages, its typing
+   * indicator, its member list in the header, its unsent bubbles and its search
+   * term, until the new fetch came back a few hundred milliseconds later.
+   *
+   * Done here rather than in an effect on activeId so it lands in the same
+   * commit as the id change — an effect runs after render, which is one painted
+   * frame of the wrong chat, exactly the flash being fixed.
+   */
+  const openThread = useCallback((id: number) => {
+    setActiveId(id);
+    // Set immediately, not just via the effect above: an in-flight response for
+    // the previous chat could resolve before React commits, and the guard has
+    // to already know the user has moved.
+    activeIdRef.current = id;
+    setShowThread(true);
+    setLoadedGroupId(null);
+    setMessages([]);
+    setPending([]);
+    setTypingNames([]);
+    setActiveMembers([]);
+    setReadUpTo(0);
+    setMsgQuery('');
+    setHasNewBelow(false);
+    setEditingMessage(null);
+    setDeletingMessage(null);
+    // A fresh room starts at the bottom, and its newest id is not yet known —
+    // leaving the previous chat's value made the first poll look like new
+    // traffic and could raise the "new messages" chip on a chat just opened.
+    newestIdRef.current = 0;
+    nearBottomRef.current = true;
+  }, []);
+
   // Called whenever the user does something that implies they're engaged, so
   // the poll goes back to fast even if the room has been quiet.
   const markActive = useCallback(() => {
@@ -352,10 +397,17 @@ export default function Chat() {
   }, []);
 
   const loadMessages = useCallback(() => {
-    if (!activeId) return;
-    api<{ messages: Message[]; readUpTo: number; typing: string[] }>(`/chat/groups/${activeId}/messages`)
+    const gid = activeId;
+    if (!gid) return;
+    api<{ messages: Message[]; readUpTo: number; typing: string[] }>(`/chat/groups/${gid}/messages`)
       .then((r) => {
+        // Ignore a response for a chat the user has already left. Two requests
+        // can be in flight across a quick switch, and without this the slower
+        // one wins simply by finishing last — painting the wrong room's
+        // messages under the right room's header.
+        if (activeIdRef.current !== gid) return;
         setMessages(r.messages);
+        setLoadedGroupId(gid);
         setReadUpTo(r.readUpTo ?? 0);
         setTypingNames(r.typing ?? []);
         // Only treat *new* traffic as activity — a poll returning the same
@@ -372,7 +424,7 @@ export default function Chat() {
           // surface the floating "new messages" chip instead.
           if (!nearBottomRef.current) setHasNewBelow(true);
           // Anything new that arrived while this group is open counts as read.
-          api(`/chat/groups/${activeId}/read`, { method: 'POST' })
+          api(`/chat/groups/${gid}/read`, { method: 'POST' })
             .then(loadGroups)
             .catch(() => {});
         }
@@ -648,6 +700,11 @@ export default function Chat() {
       setBusy(false);
     }
   };
+
+  // True from the moment a chat is selected until its own messages arrive.
+  // Without it the pane fell through to the "say hello" empty state during the
+  // fetch, so every switch flashed "No messages yet" at a room full of them.
+  const messagesLoading = activeId !== null && loadedGroupId !== activeId;
 
   const activeGroup = groups.find((g) => g.id === activeId);
   const onlineCount = activeMembers.filter((m) => m.online).length;
@@ -935,20 +992,36 @@ export default function Chat() {
               onScroll={onScroll}
               className={`chat-scroll flex-1 overflow-auto px-2 sm:px-4 py-4 ${scrolling ? 'chat-scrolling' : ''}`}
             >
-              {/* Keyed on the group so switching chats crossfades with an 8px
-                  slide instead of hard-swapping the content. */}
-              <AnimatePresence mode="wait" initial={false}>
+              {/* Keyed on the group, so React drops the previous chat's subtree
+                  the instant the id changes and the new one plays its entrance.
+                  This was an AnimatePresence with mode="wait": the exiting pane
+                  stayed mounted for the length of its exit, still holding the
+                  old chat's rendered children, so every switch showed the
+                  previous conversation for ~150ms before the new one appeared.
+                  No exit animation here is the point — nothing outgoing should
+                  linger on screen. */}
               <motion.div
                 key={activeId}
                 initial={reduce ? { opacity: 0 } : { opacity: 0, x: 8 }}
                 animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
-                exit={reduce ? { opacity: 0 } : { opacity: 0, x: -8 }}
                 transition={{ duration: reduce ? 0.1 : 0.15 }}
                 className="mx-auto w-full max-w-[720px]"
               >
               <LayoutGroup>
+                {messagesLoading && (
+                  <div className="space-y-3" aria-busy="true" aria-label="Loading messages">
+                    {[62, 40, 74, 48, 56].map((w, i) => (
+                      <div key={i} className={`flex ${i % 2 ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className="chat-skel"
+                          style={{ width: `${w}%`, height: 34, borderRadius: 18 }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <AnimatePresence initial={false} mode="popLayout">
-                {visibleMessages.map((m, i) => {
+                {!messagesLoading && visibleMessages.map((m, i) => {
                   const mine = m.sender_id === user?.id;
                   const prev = visibleMessages[i - 1];
                   const next = visibleMessages[i + 1];
@@ -1136,16 +1209,15 @@ export default function Chat() {
                     </motion.div>
                   ))}
 
-                {visibleMessages.length === 0 && pending.length === 0 && !msgQuery.trim() && (
+                {!messagesLoading && visibleMessages.length === 0 && pending.length === 0 && !msgQuery.trim() && (
                   <EmptyState icon={MessageSquare} title="No messages yet — say hello 👋" />
                 )}
-                {visibleMessages.length === 0 && msgQuery.trim() && (
+                {!messagesLoading && visibleMessages.length === 0 && msgQuery.trim() && (
                   <EmptyState compact icon={Search} title={`No messages match "${msgQuery}"`} />
                 )}
                 <div ref={bottomRef} />
               </LayoutGroup>
               </motion.div>
-              </AnimatePresence>
             </div>
 
             {/* Floating jump-to-latest */}
