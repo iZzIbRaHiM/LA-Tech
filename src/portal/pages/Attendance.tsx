@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2, CalendarPlus } from 'lucide-react';
+import { LogIn, LogOut, Check, X, Clock, Download, BarChart3, PencilLine, Trash2, CalendarPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -99,6 +99,39 @@ function duration(a: string | null, b: string | null): string {
 const toInputValue = toLocalInputValue;
 const fromInputValue = fromLocalInputValue;
 
+// Inclusive 'YYYY-MM-DD' bounds for a 'YYYY-MM' month. The upper bound is the
+// real last day rather than a blunt '-31', so the displayed range never claims
+// a day February doesn't have.
+function monthRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+}
+
+/** A window of the last `days` days, ending today (Pakistan). */
+function recentRange(days: number): { from: string; to: string } {
+  const to = localToday();
+  const from = new Date(Date.parse(`${to}T00:00:00Z`) - (days - 1) * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  return { from, to };
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// Quick ranges. Kept module-level so the identity is stable and the active-state
+// comparison below is a plain string match on the built range.
+const PRESETS: Array<{ label: string; build: () => { from: string; to: string } }> = [
+  { label: 'Today', build: () => ({ from: localToday(), to: localToday() }) },
+  { label: 'Last 7 days', build: () => recentRange(7) },
+  { label: 'Last 30 days', build: () => recentRange(30) },
+  { label: 'This month', build: () => monthRange(localMonth()) },
+];
+
 const formatMinutes = (mins: number) => {
   const m = Math.round(mins);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
@@ -122,15 +155,39 @@ export default function Attendance() {
   const [logForm, setLogForm] = useState({ userId: '', date: '', checkInTime: '09:00', checkOutTime: '18:00', note: '' });
   const [loggingBusy, setLoggingBusy] = useState(false);
 
+  // Date window for the listings. Defaults to the current Pakistan month; the
+  // page used to fetch an unfiltered LIMIT 60/100 and simply grow until it was
+  // a wall of rows. The window is sent to the API, so a narrow range is a
+  // smaller query, not just a smaller render.
+  const [range, setRange] = useState<{ from: string; to: string }>(() => monthRange(localMonth()));
+  const [teamFilter, setTeamFilter] = useState<string>('all');
+
+  // A whole calendar month reads as its name; anything else shows the span.
+  const rangeLabel = (() => {
+    const month = range.from.slice(0, 7);
+    const whole = monthRange(month);
+    if (range.from === whole.from && range.to === whole.to) {
+      const [y, m] = month.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-PK', {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    }
+    return `${range.from} → ${range.to}`;
+  })();
+
   const load = useCallback(() => {
     api<{ open: AttendanceRecord | null }>('/attendance/status').then((r) => setOpen(r.open)).catch(() => {});
-    api<{ own: AttendanceRecord[]; team: AttendanceRecord[] }>('/attendance')
+    const params = new URLSearchParams({ from: range.from, to: range.to });
+    if (teamFilter !== 'all') params.set('teamUserId', teamFilter);
+    api<{ own: AttendanceRecord[]; team: AttendanceRecord[] }>(`/attendance?${params}`)
       .then((r) => {
         setOwn(r.own);
         setTeam(r.team);
       })
       .catch((e) => toast.error(e.message));
-  }, []);
+  }, [range.from, range.to, teamFilter]);
   useEffect(load, [load]);
 
   useEffect(() => {
@@ -335,6 +392,99 @@ export default function Attendance() {
           </div>
         </div>
       )}
+
+      {/* Date filter — drives the API query, not just the rendering, so a
+          narrow range is genuinely less data rather than the same payload
+          filtered client-side. */}
+      <section className="pcard mb-6 p-3 sm:p-4">
+        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
+          <div className="flex items-center gap-1 mr-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Previous month"
+              onClick={() => setRange(monthRange(shiftMonth(range.from.slice(0, 7), -1)))}
+            >
+              <ChevronLeft size={15} />
+            </Button>
+            <span className="text-sm tabular-nums min-w-24 text-center">{rangeLabel}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Next month"
+              onClick={() => setRange(monthRange(shiftMonth(range.from.slice(0, 7), 1)))}
+            >
+              <ChevronRight size={15} />
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            {PRESETS.map((p) => {
+              const r = p.build();
+              const active = r.from === range.from && r.to === range.to;
+              return (
+                <Button
+                  key={p.label}
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8"
+                  onClick={() => setRange(p.build())}
+                >
+                  {p.label}
+                </Button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-end gap-2 ml-auto">
+            <div className="space-y-1">
+              <Label className="text-[11px] text-[#71717A]">From</Label>
+              <Input
+                type="date"
+                className="h-8 w-[9.5rem]"
+                value={range.from}
+                max={range.to}
+                onChange={(e) => e.target.value && setRange({ ...range, from: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[11px] text-[#71717A]">To</Label>
+              <Input
+                type="date"
+                className="h-8 w-[9.5rem]"
+                value={range.to}
+                min={range.from}
+                onChange={(e) => e.target.value && setRange({ ...range, to: e.target.value })}
+              />
+            </div>
+            {isValidator && loggableMembers.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-[11px] text-[#71717A]">Employee</Label>
+                <Select value={teamFilter} onValueChange={setTeamFilter}>
+                  <SelectTrigger className="h-8 w-[11rem]">
+                    <SelectValue placeholder="Everyone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Everyone</SelectItem>
+                    {loggableMembers.map((m) => (
+                      <SelectItem key={m.id} value={String(m.id)}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        </div>
+        <p className="text-[11px] text-[#71717A] mt-2">
+          Showing {own.length} of your record{own.length === 1 ? '' : 's'}
+          {isValidator ? ` and ${team.length} team record${team.length === 1 ? '' : 's'}` : ''} for {range.from} to{' '}
+          {range.to}.
+        </p>
+      </section>
 
       {/* Validation queue for heads/CEO */}
       {isValidator && (

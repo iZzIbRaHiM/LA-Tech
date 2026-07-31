@@ -3,6 +3,7 @@ import { db, logActivity, notify } from './db.js';
 import { requireAuth } from './auth.js';
 import { canValidateAttendance } from './policy.js';
 import { computeCategory, nowUtcString, resolveShift, SESSION_BEAT_CAP_MINUTES } from './attendance.js';
+import { localMonth } from './timezone.js';
 import { resolveSchedule } from './routes-schedules.js';
 
 export const attendanceRouter = Router();
@@ -185,44 +186,88 @@ attendanceRouter.post('/attendance/manual', requireAuth, async (req, res) => {
 
 // Own history + (for validators) their team's records. Ordered by
 // record_date (not check_in) since absence rows have no check_in.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Hard ceiling per list, so a wide range can't return the whole table. */
+const ATTENDANCE_MAX_ROWS = 500;
+
+/**
+ * Date window for a listing request.
+ *
+ * record_date is the local (Pakistan) shift date, so `from`/`to` compare
+ * directly against it — no conversion, and the range the user picked is exactly
+ * the range they get.
+ *
+ * Defaults to the current local month rather than "everything". The list used
+ * to be an unfiltered LIMIT 60/100, so it simply accumulated until the page was
+ * a wall of rows with no way to narrow it.
+ */
+function dateWindow(query: Record<string, unknown>): { from: string; to: string } {
+  const raw = (k: string) => (DATE_RE.test(String(query[k] ?? '')) ? String(query[k]) : null);
+  const month = localMonth();
+  const from = raw('from') ?? `${month}-01`;
+  // '-31' is a safe upper bound for a string comparison against 'YYYY-MM-DD':
+  // no real date in the month sorts above it, and short months just match fewer.
+  const to = raw('to') ?? `${month}-31`;
+  // Tolerate a reversed range instead of silently returning nothing.
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
 attendanceRouter.get('/attendance', requireAuth, async (req, res) => {
   const user = req.user!;
+  const { from, to } = dateWindow(req.query as Record<string, unknown>);
 
-  // CEO-only profile-panel lookup for one specific employee's full history —
-  // the "team" branch below is capped at 100 rows company-wide, which can
-  // miss one person's older records once the company grows.
+  // CEO-only lookup for one specific employee — used by the org profile panel,
+  // and by the team filter on the attendance page.
   const queriedUserId = req.query.userId ? Number(req.query.userId) : null;
   if (queriedUserId) {
     if (!user.isCeo) return res.status(403).json({ error: 'CEO only' });
     const rows = await db
-      .prepare('SELECT * FROM attendance WHERE user_id = ? ORDER BY record_date DESC LIMIT 60')
-      .all(queriedUserId);
-    return res.json({ own: rows, team: [] });
+      .prepare(
+        `SELECT * FROM attendance WHERE user_id = ? AND record_date BETWEEN ? AND ?
+         ORDER BY record_date DESC LIMIT ${ATTENDANCE_MAX_ROWS}`
+      )
+      .all(queriedUserId, from, to);
+    return res.json({ own: rows, team: [], from, to });
   }
 
   const own = await db
-    .prepare('SELECT * FROM attendance WHERE user_id = ? ORDER BY record_date DESC LIMIT 60')
-    .all(user.id);
+    .prepare(
+      `SELECT * FROM attendance WHERE user_id = ? AND record_date BETWEEN ? AND ?
+       ORDER BY record_date DESC LIMIT ${ATTENDANCE_MAX_ROWS}`
+    )
+    .all(user.id, from, to);
+
+  // Validators can narrow the team list to one person. Scoping is still done by
+  // the queries below, so this only ever subtracts from what they may already
+  // see — it is a filter, not a way to reach someone else's records.
+  const teamMemberId = req.query.teamUserId ? Number(req.query.teamUserId) : null;
+  const memberFilter = teamMemberId ? 'AND a.user_id = ?' : '';
 
   let team: unknown[] = [];
   if (user.isCeo) {
+    const params: Array<string | number> = [user.id, from, to];
+    if (teamMemberId) params.push(teamMemberId);
     team = await db
       .prepare(
         `SELECT a.*, u.name AS user_name FROM attendance a JOIN users u ON u.id = a.user_id
-         WHERE a.user_id != ? ORDER BY a.record_date DESC LIMIT 100`
+         WHERE a.user_id != ? AND a.record_date BETWEEN ? AND ? ${memberFilter}
+         ORDER BY a.record_date DESC LIMIT ${ATTENDANCE_MAX_ROWS}`
       )
-      .all(user.id);
+      .all(...params);
   } else if (user.role === 'head') {
+    const params: Array<string | number> = [user.departmentId!, user.id, from, to];
+    if (teamMemberId) params.push(teamMemberId);
     team = await db
       .prepare(
         `SELECT a.*, u.name AS user_name FROM attendance a
          JOIN users u ON u.id = a.user_id
          JOIN memberships m ON m.user_id = a.user_id AND m.department_id = ?
-         WHERE a.user_id != ? ORDER BY a.record_date DESC LIMIT 100`
+         WHERE a.user_id != ? AND a.record_date BETWEEN ? AND ? ${memberFilter}
+         ORDER BY a.record_date DESC LIMIT ${ATTENDANCE_MAX_ROWS}`
       )
-      .all(user.departmentId, user.id);
+      .all(...params);
   }
-  res.json({ own, team });
+  res.json({ own, team, from, to });
 });
 
 attendanceRouter.post('/attendance/:id/validate', requireAuth, async (req, res) => {
