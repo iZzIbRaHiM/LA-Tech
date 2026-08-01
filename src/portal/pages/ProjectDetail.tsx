@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { PROJECT_STATUSES, projectStatusBadge, projectStatusLabel } from '../projectStatus';
 import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil, CheckSquare } from 'lucide-react';
+import { ArrowLeft, Eye, Wallet, Flag, Plus, Trash2, Pencil, CheckSquare, Check } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import DetailSkeleton from '../components/DetailSkeleton';
 import { Badge } from '@/components/ui/badge';
@@ -153,6 +154,19 @@ export default function ProjectDetail() {
 
   const canSaveEdit = editForm.name.trim() !== '' && editForm.startDate !== '' && editForm.endDate !== '';
 
+  // Marking a project finished previously meant opening the edit dialog and
+  // hunting for a Select, so in practice status was set once at creation and
+  // never updated. This flips it in one click from the header.
+  const setStatus = async (status: string) => {
+    try {
+      await api(`/projects/${project!.id}`, { method: 'PATCH', body: { status } });
+      load();
+      toast.success(`Marked ${projectStatusLabel(status).toLowerCase()}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
   const saveEdit = async () => {
     if (!canSaveEdit) return;
     try {
@@ -182,9 +196,32 @@ export default function ProjectDetail() {
 
       <div className="flex items-center gap-3 mb-2">
         <h1 className="ptitle font-display font-bold text-2xl">{project.name}</h1>
-        <Badge variant="outline" className="capitalize">{project.status.replace('_', ' ')}</Badge>
+        <Badge variant="outline" className={projectStatusBadge(project.status)}>
+          {projectStatusLabel(project.status)}
+        </Badge>
         {user?.isCeo && (
           <>
+            {/* The two transitions that actually get used day to day. Anything
+                else (on hold, archived) stays in the edit dialog. */}
+            {project.status !== 'completed' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStatus('completed')}
+                className="text-emerald-400 border-emerald-900 hover:text-emerald-300"
+              >
+                <Check size={13} className="mr-1" /> Mark completed
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStatus('active')}
+                className="text-[#A1A1AA]"
+              >
+                Reopen
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={openEdit} className="text-[#A1A1AA] hover:text-[#FAFAFA]">
               <Pencil size={13} className="mr-1" /> Edit
             </Button>
@@ -458,9 +495,9 @@ export default function ProjectDetail() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {['active', 'on_hold', 'completed', 'archived'].map((s) => (
-                    <SelectItem key={s} value={s} className="capitalize">
-                      {s.replace('_', ' ')}
+                  {PROJECT_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {projectStatusLabel(s)}
                     </SelectItem>
                   ))}
                 </SelectContent>

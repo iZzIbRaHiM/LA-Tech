@@ -19,6 +19,8 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '../AuthContext';
 import { api, type Project, type Department } from '../api';
+import { PROJECT_STATUSES, projectStatusBadge, projectStatusLabel } from '../projectStatus';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function Projects() {
   const { user } = useAuth();
@@ -29,6 +31,15 @@ export default function Projects() {
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', startDate: '', endDate: '' });
   const [visibleTo, setVisibleTo] = useState<number[]>([]);
+  // Status was only visible as a per-card badge and only changeable from inside
+  // a project's edit dialog, so there was no way to answer "what is still
+  // running and what is finished" from this page.
+  //
+  // Defaults to All rather than Ongoing on purpose: this page previously showed
+  // every project, and silently hiding completed ones would look like they had
+  // disappeared. The counts on each tab make the split visible without changing
+  // what lands on screen first.
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const load = useCallback(() => {
     api<{ projects: Project[] }>('/projects').then((r) => setProjects(r.projects)).catch((e) => toast.error(e.message));
@@ -41,6 +52,11 @@ export default function Projects() {
   }, [user]);
 
   const canCreate = form.name.trim() !== '' && form.startDate !== '' && form.endDate !== '';
+
+  const countFor = (status: string) =>
+    status === 'all' ? projects.length : projects.filter((p) => p.status === status).length;
+  const visibleProjects =
+    statusFilter === 'all' ? projects : projects.filter((p) => p.status === statusFilter);
 
   // Ref-based in-flight guard: blocks a duplicate submit synchronously, before
   // React re-renders to disable the button. A state-only check is too late —
@@ -84,8 +100,19 @@ export default function Projects() {
         )}
       </div>
 
+      <Tabs value={statusFilter} onValueChange={setStatusFilter} className="mb-5">
+        <TabsList className="flex-wrap h-auto">
+          {['all', ...PROJECT_STATUSES].map((s) => (
+            <TabsTrigger key={s} value={s} className="capitalize">
+              {s === 'all' ? 'All' : projectStatusLabel(s)}
+              <span className="ml-1.5 text-[11px] text-[#71717A] tabular-nums">{countFor(s)}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 stagger">
-        {projects.map((p) => (
+        {visibleProjects.map((p) => (
           <Link
             key={p.id}
             to={`/portal/projects/${p.id}`}
@@ -93,8 +120,8 @@ export default function Projects() {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-medium">{p.name}</span>
-              <Badge variant="outline" className="capitalize text-xs">
-                {p.status.replace('_', ' ')}
+              <Badge variant="outline" className={`text-xs shrink-0 ${projectStatusBadge(p.status)}`}>
+                {projectStatusLabel(p.status)}
               </Badge>
             </div>
             {p.description && <p className="text-sm text-[#A1A1AA] line-clamp-2">{p.description}</p>}
@@ -106,11 +133,22 @@ export default function Projects() {
           </Link>
         ))}
       </div>
-      {projects.length === 0 && (
+      {/* "None at all" and "none in this filter" are different situations —
+          saying "create one" to someone who simply has no completed projects
+          yet would be wrong. */}
+      {projects.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
           title={user?.isCeo ? 'No projects yet — create one.' : 'No projects shared with your department yet.'}
         />
+      ) : (
+        visibleProjects.length === 0 && (
+          <EmptyState
+            compact
+            icon={FolderKanban}
+            title={`No ${projectStatusLabel(statusFilter).toLowerCase()} projects.`}
+          />
+        )
       )}
 
       <Dialog open={creating} onOpenChange={setCreating}>
